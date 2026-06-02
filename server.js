@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = join(__dirname, "data.json");
+const DATA_FILE = process.env.DATA_PATH || join(__dirname, "data.json");
 const PORT = process.env.PORT || 3001;
 
 function readData() {
