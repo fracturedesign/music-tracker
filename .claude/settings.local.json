@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(which node *)",
+      "Read(//Users/egortuchin/**)",
+      "Bash('/Users/egortuchin/Library/Application Support/com.raycast.macos/NodeJS/runtime/22.22.2/bin/npm' --version)",
+      "Bash('/Users/egortuchin/Library/Application Support/com.raycast.macos/NodeJS/runtime/22.22.2/bin/npm' install)",
+      "Bash(find \"/Users/egortuchin/Library/Application Support/com.raycast.macos/NodeJS\" -name \"npm\" 2>/dev/null *)",
+      "Bash('/Users/egortuchin/Library/Application Support/com.raycast.macos/NodeJS/runtime/22.22.2/bin/node' -e 'const {execSync}=require\\('\\\\''child_process'\\\\''\\);console.log\\(execSync\\('\\\\''which npm 2>/dev/null || echo none'\\\\''\\).toString\\(\\)\\)')",
+      "Bash('/Users/egortuchin/Library/Application Support/com.raycast.macos/NodeJS/runtime/22.22.2/bin/node' -e 'console.log\\(process.execPath, process.version\\)')",
+      "Bash('/Users/egortuchin/Library/Application Support/com.raycast.macos/NodeJS/runtime/22.22.2/bin/node' -e 'const p=require\\('\\\\''path'\\\\''\\);const e=process.execPath;console.log\\(p.dirname\\(e\\)\\);const fs=require\\('\\\\''fs'\\\\''\\);fs.readdirSync\\(p.dirname\\(e\\)\\).forEach\\(f=>console.log\\(f\\)\\)')",
+      "Bash(brew --version)",
+      "Bash(/opt/homebrew/bin/node --version)",
+      "Bash(/opt/homebrew/bin/npm --version)",
+      "Bash(/opt/homebrew/bin/npm install *)",
+      "Bash(/opt/homebrew/bin/npm run *)",
+      "Bash(/opt/homebrew/bin/node server.js)",
+      "Bash(curl -s http://localhost:3001/api/data/music_sessions)",
+      "Bash(curl -s -X POST http://localhost:3001/api/data/test_key -H \"Content-Type: application/json\" -d '{\"value\":\"hello\"}')",
+      "Bash(curl -s http://localhost:3001/api/data/test_key)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Initial commit: Music Production Tracker *)"
+    ]
+  }
+}
