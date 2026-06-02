@@ -10,7 +10,7 @@ const DAYS_MON = ["M","T","W","T","F","S","S"];
 const DAYS_FULL = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-function toDateStr(d) { return d.toISOString().slice(0,10); }
+function toDateStr(d) { return d.toLocaleDateString("en-CA", { timeZone: "Europe/Budapest" }); }
 function parseDate(str) { const [y,m,d]=str.split("-").map(Number); return new Date(y,m-1,d); }
 function daysBetween(a,b) { return Math.round((parseDate(b)-parseDate(a))/86400000); }
 function getPhaseByWeek(w) { return PHASES.find(p=>w>=p.weeks[0]&&w<=p.weeks[1])||PHASES[2]; }
