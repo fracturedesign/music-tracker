@@ -227,6 +227,7 @@ app.post("/api/audio/:project/scan", async (req, res) => {
       format:     ext === ".wav" ? "WAV" : "MP3",
       size:       parseFloat((stat.size / (1024 * 1024)).toFixed(2)),
       ...analysis,
+      isNew:      true,
       scannedAt:  new Date().toISOString(),
     };
     existing.push(meta);
@@ -239,16 +240,17 @@ app.post("/api/audio/:project/scan", async (req, res) => {
   res.json({ added: added.length, files: existing });
 });
 
-// Rename
+// Rename / update metadata fields
 app.patch("/api/audio/:project/:id", (req, res) => {
   const { project, id } = req.params;
-  const { name } = req.body;
+  const { name, isNew } = req.body;
   const data  = readData();
   const files = (data.music_audio_files || {})[project];
   if (!files) return res.status(404).json({ error: "Project not found" });
   const idx = files.findIndex(f => f.id === id);
   if (idx === -1) return res.status(404).json({ error: "File not found" });
-  files[idx] = { ...files[idx], name };
+  if (name  !== undefined) files[idx] = { ...files[idx], name };
+  if (isNew !== undefined) files[idx] = { ...files[idx], isNew };
   writeData(data);
   res.json({ ok: true });
 });

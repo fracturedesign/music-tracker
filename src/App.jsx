@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import WaveSurfer from "wavesurfer.js";
 
+/* ─── global audio event bus (one-playing-at-a-time) ─── */
+const audioEventBus = new EventTarget();
+
 /* ─── theme system ─── */
 const ThemeCtx = createContext(null);
 const useTheme = () => useContext(ThemeCtx);
@@ -285,16 +288,16 @@ function extractVersion(name) {
 function MetricTile({icon,primary,primarySuffix,secondary,secondarySuffix,warn,C}) {
   const warnCol="#fb923c";
   return (
-    <div style={{background:C.surf2,borderRadius:11,padding:"10px 10px 9px",display:"flex",flexDirection:"column",alignItems:"center",gap:5,minWidth:0}}>
-      <div style={{opacity:.65}}>{icon}</div>
-      <div style={{textAlign:"center",lineHeight:1.15}}>
-        <span style={{fontSize:17,fontWeight:700,color:warn?warnCol:C.text}}>{primary??<span style={{color:C.dim}}>—</span>}</span>
-        {primarySuffix&&<span style={{fontSize:10,fontWeight:600,color:warn?warnCol:C.faint,marginLeft:2}}>{primarySuffix}</span>}
+    <div style={{background:C.surf2,borderRadius:10,padding:"8px 8px 7px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:0}}>
+      <div style={{opacity:.55,lineHeight:0}}>{icon}</div>
+      <div style={{textAlign:"center",lineHeight:1.2,marginTop:1}}>
+        <span style={{fontSize:14,fontWeight:700,color:warn?warnCol:C.text,letterSpacing:"-0.01em"}}>{primary??<span style={{color:C.dim,fontSize:13}}>—</span>}</span>
+        {primarySuffix&&<span style={{fontSize:9,fontWeight:700,color:warn?warnCol:C.dim,marginLeft:2,letterSpacing:"0.04em"}}>{primarySuffix}</span>}
       </div>
       {secondary!=null&&(
-        <div style={{textAlign:"center",lineHeight:1.15}}>
-          <span style={{fontSize:13,fontWeight:600,color:C.muted}}>{secondary}</span>
-          {secondarySuffix&&<span style={{fontSize:10,fontWeight:600,color:C.faint,marginLeft:2}}>{secondarySuffix}</span>}
+        <div style={{textAlign:"center",lineHeight:1.2}}>
+          <span style={{fontSize:11.5,fontWeight:600,color:C.muted}}>{secondary}</span>
+          {secondarySuffix&&<span style={{fontSize:9,fontWeight:700,color:C.dim,marginLeft:2,letterSpacing:"0.04em"}}>{secondarySuffix}</span>}
         </div>
       )}
     </div>
@@ -302,88 +305,89 @@ function MetricTile({icon,primary,primarySuffix,secondary,secondarySuffix,warn,C
 }
 
 /* ─── audio file card ─── */
-function AudioFileCard({file,projectName,onDelete,onRename}) {
+function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const waveRef=useRef(null);
   const wsRef=useRef(null);
   const [playing,setPlaying]=useState(false);
-  const [currentTime,setCurrentTime]=useState(0);
+  const [currentTime,setCurrentTime]=useState(false);
   const [wsReady,setWsReady]=useState(false);
   const [editing,setEditing]=useState(false);
   const [nameVal,setNameVal]=useState(file.name);
+  const markedRef=useRef(false);
 
   const audioUrl=file.linkedPath
     ?`/api/audio/${encodeURIComponent(projectName)}/stream/${file.id}`
     :`/api/audio/files/${encodeURIComponent(file.filename)}`;
 
+  // Stop this card when another card starts playing
+  useEffect(()=>{
+    const handler=e=>{if(e.detail.id!==file.id)wsRef.current?.pause();};
+    audioEventBus.addEventListener("audioplay",handler);
+    return()=>audioEventBus.removeEventListener("audioplay",handler);
+  },[file.id]);
+
   useEffect(()=>{
     const container=waveRef.current;
     if(!container)return;
     const ws=WaveSurfer.create({
-      container,
-      waveColor:C.dim,
-      progressColor:C.indigo,
-      height:48,
-      barWidth:2,
-      barGap:1,
-      barRadius:2,
-      cursorWidth:1,
-      cursorColor:C.muted,
+      container,waveColor:C.dim,progressColor:C.indigo,
+      height:46,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,
     });
     wsRef.current=ws;
     ws.load(audioUrl);
     ws.on("ready",()=>setWsReady(true));
     ws.on("timeupdate",t=>setCurrentTime(t));
-    ws.on("play",()=>setPlaying(true));
+    ws.on("play",()=>{
+      setPlaying(true);
+      audioEventBus.dispatchEvent(new CustomEvent("audioplay",{detail:{id:file.id}}));
+      if(file.isNew&&!markedRef.current){markedRef.current=true;onMarkSeen?.(file.id);}
+    });
     ws.on("pause",()=>setPlaying(false));
     ws.on("finish",()=>{setPlaying(false);setCurrentTime(0);});
     return()=>{ws.destroy();wsRef.current=null;};
   },[]);// eslint-disable-line
 
   const saveRename=()=>{
-    const trimmed=nameVal.trim();
-    if(trimmed&&trimmed!==file.name)onRename(file.id,trimmed);
-    else setNameVal(file.name);
+    const t=nameVal.trim();
+    if(t&&t!==file.name)onRename(file.id,t); else setNameVal(file.name);
     setEditing(false);
   };
 
   const version=extractVersion(file.name);
-  const badgeLabel=version||file.format;
   const peakWarn=file.truePeak!=null&&file.truePeak>-1;
 
-  // Icons for metric tiles
-  const speakerIcon=<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 9v6h4l5 5V4L7 9H3z" stroke={C.indigo} strokeWidth="1.7" strokeLinejoin="round"/><path d="M16.5 7.5a5 5 0 0 1 0 9M19.5 5a9 9 0 0 1 0 14" stroke={C.indigo} strokeWidth="1.7" strokeLinecap="round"/></svg>;
-  const peakIcon=<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M2 12h3M5 12l2-5 3 10 3-14 3 12 2-5 2 2h2" stroke={peakWarn?"#fb923c":C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-  const drIcon=<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="14" width="3" height="7" rx="1" fill={C.muted} opacity=".5"/><rect x="8" y="9" width="3" height="12" rx="1" fill={C.muted} opacity=".7"/><rect x="13" y="5" width="3" height="16" rx="1" fill={C.muted}/><rect x="18" y="11" width="3" height="10" rx="1" fill={C.muted} opacity=".6"/></svg>;
+  // Compact 14px icons
+  const speakerIcon=<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 9v6h4l5 5V4L7 9H3z" stroke={C.indigo} strokeWidth="1.8" strokeLinejoin="round"/><path d="M16.5 7.5a5 5 0 0 1 0 9" stroke={C.indigo} strokeWidth="1.8" strokeLinecap="round"/></svg>;
+  const peakIcon=<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M2 12h3M5 12l2-5 3 10 3-14 3 12 2-5 2 2h2" stroke={peakWarn?"#fb923c":C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const drIcon=<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="15" width="2.5" height="6" rx=".8" fill={C.muted} opacity=".45"/><rect x="7.5" y="10" width="2.5" height="11" rx=".8" fill={C.muted} opacity=".65"/><rect x="12" y="6" width="2.5" height="15" rx=".8" fill={C.muted}/><rect x="16.5" y="12" width="2.5" height="9" rx=".8" fill={C.muted} opacity=".55"/></svg>;
 
   return (
-    <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:14,padding:"14px 15px",marginBottom:10}}>
+    <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:14,padding:"13px 14px",marginBottom:10}}>
       {/* Name row */}
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-        <span style={{flexShrink:0,fontSize:10.5,fontWeight:700,
-          color:version?C.indigo:C.faint,
-          background:version?C.accentAlpha:C.surf2,
-          border:`1px solid ${version?C.accentBorder:C.line}`,
-          borderRadius:6,padding:"3px 8px",textTransform:"uppercase",letterSpacing:"0.04em"}}>
-          {badgeLabel}
-        </span>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+        {/* Version badge */}
+        {version&&<span style={{flexShrink:0,fontSize:10,fontWeight:700,color:C.indigo,background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:5,padding:"2px 7px",textTransform:"uppercase",letterSpacing:"0.05em"}}>{version}</span>}
+        {/* Format badge */}
+        <span style={{flexShrink:0,fontSize:10,fontWeight:700,color:C.faint,background:C.surf2,border:`1px solid ${C.line}`,borderRadius:5,padding:"2px 7px",letterSpacing:"0.05em"}}>{file.format}</span>
+        {/* New badge */}
+        {file.isNew&&<span style={{flexShrink:0,fontSize:10,fontWeight:700,color:C.green,background:"rgba(52,211,153,0.12)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:5,padding:"2px 7px",letterSpacing:"0.05em"}}>NEW</span>}
         {editing?(
           <input autoFocus value={nameVal} onChange={e=>setNameVal(e.target.value)}
-            onBlur={saveRename}
-            onKeyDown={e=>{if(e.key==="Enter")saveRename();if(e.key==="Escape"){setNameVal(file.name);setEditing(false);}}}
-            className="mt-text" style={{flex:1,padding:"4px 10px",fontSize:13,height:"auto"}}/>
+            onBlur={saveRename} onKeyDown={e=>{if(e.key==="Enter")saveRename();if(e.key==="Escape"){setNameVal(file.name);setEditing(false);}}}
+            className="mt-text" style={{flex:1,padding:"3px 9px",fontSize:13,height:"auto"}}/>
         ):(
           <span onClick={()=>setEditing(true)} title="Click to rename"
-            style={{flex:1,fontSize:13.5,fontWeight:600,color:C.text,cursor:"text",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file.name}</span>
+            style={{flex:1,fontSize:13,fontWeight:600,color:C.text,cursor:"text",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file.name}</span>
         )}
-        <span style={{fontSize:11,color:C.dim,flexShrink:0,whiteSpace:"nowrap"}}>
+        <span style={{fontSize:10.5,color:C.dim,flexShrink:0,whiteSpace:"nowrap"}}>
           {file.size!=null&&`${file.size} MB`}{file.duration?` · ${fmtSeconds(file.duration)}`:""}
         </span>
-        <button onClick={()=>onDelete(file.id)} style={{...iconBtn,flexShrink:0}}>{Icon.trash()}</button>
+        <button onClick={()=>onDelete(file.id)} style={{...iconBtn,flexShrink:0,width:28,height:28,borderRadius:8}}>{Icon.trash()}</button>
       </div>
 
       {/* Metric tiles */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:10}}>
         <MetricTile C={C} icon={speakerIcon}
           primary={file.lufsIntegrated!=null?file.lufsIntegrated.toFixed(1):null} primarySuffix="INT"
           secondary={file.lufsShort!=null?file.lufsShort.toFixed(1):null} secondarySuffix="ST"/>
@@ -391,36 +395,32 @@ function AudioFileCard({file,projectName,onDelete,onRename}) {
           primary={file.truePeak!=null?file.truePeak.toFixed(1):null} primarySuffix="dBTP"
           warn={peakWarn}/>
         <MetricTile C={C} icon={drIcon}
-          primary={file.dr!=null?file.dr.toFixed(1):null} primarySuffix="LRA"
-          secondary={null}/>
+          primary={file.dr!=null?file.dr.toFixed(1):null} primarySuffix="LRA"/>
       </div>
 
       {/* Waveform */}
-      <div ref={waveRef} style={{marginBottom:9,opacity:wsReady?1:0.2,transition:"opacity .3s"}}/>
+      <div ref={waveRef} style={{marginBottom:8,opacity:wsReady?1:0.18,transition:"opacity .3s"}}/>
 
       {/* Transport */}
-      <div style={{display:"flex",alignItems:"center",gap:9}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
         <button onClick={()=>wsRef.current?.playPause()} disabled={!wsReady}
-          style={{width:32,height:32,borderRadius:9,border:`1px solid ${C.lineS}`,background:C.surf2,
-            cursor:wsReady?"pointer":"default",display:"grid",placeItems:"center",flexShrink:0,padding:0,
-            opacity:wsReady?1:0.45}}>
+          style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.lineS}`,background:C.surf2,
+            cursor:wsReady?"pointer":"default",display:"grid",placeItems:"center",flexShrink:0,padding:0,opacity:wsReady?1:0.4}}>
           {playing
-            ?<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
-            :<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+            ?<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+            :<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
           }
         </button>
-        <span className="mono" style={{fontSize:11.5,color:C.faint}}>
-          {fmtSeconds(currentTime)} / {fmtSeconds(file.duration)}
-        </span>
-        {!wsReady&&<span style={{fontSize:11,color:C.dim,marginLeft:2}}>Loading…</span>}
-        {file.linkedPath&&<span style={{marginLeft:"auto",fontSize:10,color:C.dim,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}} title={file.linkedPath}>📂 linked</span>}
+        <span className="mono" style={{fontSize:11,color:C.faint}}>{fmtSeconds(currentTime)} / {fmtSeconds(file.duration)}</span>
+        {!wsReady&&<span style={{fontSize:10.5,color:C.dim}}>Loading…</span>}
+        {file.linkedPath&&<span style={{marginLeft:"auto",fontSize:9.5,color:C.dim}} title={file.linkedPath}>linked</span>}
       </div>
     </div>
   );
 }
 
 /* ─── versions tab ─── */
-function VersionsTab({projectName}) {
+function VersionsTab({projectName,onCountChange}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [files,setFiles]=useState([]);
   const [uploading,setUploading]=useState(false);
@@ -431,17 +431,41 @@ function VersionsTab({projectName}) {
   const [showScan,setShowScan]=useState(false);
   const fileInputRef=useRef(null);
 
+  // Report count up whenever files change
+  useEffect(()=>{onCountChange?.(files.length);},[files.length]);// eslint-disable-line
+
+  // Load files + saved scan path, then auto-scan if path is set
   useEffect(()=>{
     (async()=>{
-      try{const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}`);const d=await r.json();setFiles(d.files||[]);}catch{}
+      try{
+        const[fr,pr]=await Promise.all([
+          fetch(`/api/audio/${encodeURIComponent(projectName)}`).then(r=>r.json()),
+          fetch(`/api/data/music_scan_folders`).then(r=>r.json()),
+        ]);
+        setFiles(fr.files||[]);
+        const savedPath=pr?.value?JSON.parse(pr.value)?.[projectName]:"";
+        if(savedPath){
+          setScanPath(savedPath);
+          // auto-scan silently
+          const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
+          if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
+        }
+      }catch{}
       setLoading(false);
     })();
-  },[projectName]);
+  },[projectName]);// eslint-disable-line
+
+  const saveScanPath=async path=>{
+    try{
+      const r=await fetch(`/api/data/music_scan_folders`).then(x=>x.json());
+      const existing=r?.value?JSON.parse(r.value):{};
+      if(path)existing[projectName]=path; else delete existing[projectName];
+      await fetch(`/api/data/music_scan_folders`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(existing)})});
+    }catch{}
+  };
 
   const handleUpload=async e=>{
-    const file=e.target.files?.[0];
-    if(!file)return;
-    e.target.value="";
+    const file=e.target.files?.[0];if(!file)return;e.target.value="";
     setUploading(true);
     try{
       const fd=new FormData();fd.append("file",file);
@@ -452,10 +476,11 @@ function VersionsTab({projectName}) {
   };
 
   const handleScan=async()=>{
-    if(!scanPath.trim())return;
+    const path=scanPath.trim();if(!path)return;
     setScanning(true);setScanMsg("");
     try{
-      const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:scanPath.trim()})});
+      await saveScanPath(path);
+      const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:path})});
       const d=await r.json();
       if(r.ok){setFiles(d.files||[]);setScanMsg(d.added===0?"No new files found.":`Found ${d.added} new file${d.added!==1?"s":""}`);}
       else setScanMsg(d.error||"Scan failed");
@@ -477,42 +502,53 @@ function VersionsTab({projectName}) {
     }catch{}
   };
 
-  const Spinner=()=><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite",flexShrink:0}}><circle cx="12" cy="12" r="9" stroke={C.dim} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="28 56"/></svg>;
+  const handleMarkSeen=async id=>{
+    try{
+      await fetch(`/api/audio/${encodeURIComponent(projectName)}/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({isNew:false})});
+      setFiles(f=>f.map(x=>x.id===id?{...x,isNew:false}:x));
+    }catch{}
+  };
+
+  const Spinner=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite",flexShrink:0}}><circle cx="12" cy="12" r="9" stroke={C.dim} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="28 56"/></svg>;
 
   return (
-    <div style={{padding:"16px 20px 20px"}}>
-      {/* Upload row */}
+    <div style={{padding:"14px 18px 20px"}}>
+      {/* Action row */}
       <input ref={fileInputRef} type="file" accept=".wav,.mp3" onChange={handleUpload} style={{display:"none"}}/>
-      <div style={{display:"flex",gap:8,marginBottom:10}}>
+      <div style={{display:"flex",gap:7,marginBottom:10}}>
         <button onClick={()=>fileInputRef.current?.click()} disabled={uploading}
-          style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-            padding:"11px 0",borderRadius:10,cursor:uploading?"default":"pointer",
+          style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+            padding:"10px 0",borderRadius:10,cursor:uploading?"default":"pointer",
             border:`1.5px dashed ${C.lineS}`,background:"transparent",
-            color:uploading?C.dim:C.faint,fontSize:13,fontWeight:600,fontFamily:"var(--font-sans)"}}>
-          {uploading?<><Spinner/>Analyzing…</>:<><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>Upload file</>}
+            color:uploading?C.dim:C.faint,fontSize:12.5,fontWeight:600,fontFamily:"var(--font-sans)"}}>
+          {uploading?<><Spinner/>Analyzing…</>:<><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>Upload file</>}
         </button>
         <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
-          style={{...iconBtn,width:"auto",padding:"0 12px",fontSize:12.5,fontWeight:600,color:showScan?C.indigo:C.faint,gap:5,display:"flex",borderColor:showScan?C.accentBorder:C.lineS,background:showScan?C.accentAlpha:C.surf2}}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,
+            color:showScan?C.indigo:C.faint,gap:5,display:"flex",
+            borderColor:showScan?C.accentBorder:C.lineS,background:showScan?C.accentAlpha:C.surf2}}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
           Scan folder
         </button>
       </div>
 
-      {/* Scan folder panel */}
+      {/* Scan panel */}
       {showScan&&(
-        <div style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:11,padding:"12px 14px",marginBottom:14}}>
-          <div style={{fontSize:11.5,color:C.faint,marginBottom:8}}>Enter the absolute folder path on the server — files already registered won't be duplicated.</div>
-          <div style={{display:"flex",gap:8}}>
+        <div style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:10,padding:"11px 13px",marginBottom:12}}>
+          <div style={{fontSize:11,color:C.faint,marginBottom:7}}>Absolute folder path on the server · saved path auto-scans on open · no duplicates</div>
+          <div style={{display:"flex",gap:7}}>
             <input className="mt-text" value={scanPath} onChange={e=>setScanPath(e.target.value)}
               placeholder="/mnt/user/data/music/my-track"
               onKeyDown={e=>e.key==="Enter"&&handleScan()}
-              style={{flex:1,padding:"9px 12px",fontSize:12.5}}/>
+              style={{flex:1,padding:"8px 11px",fontSize:12}}/>
             <button onClick={handleScan} disabled={scanning||!scanPath.trim()}
-              style={{border:"none",borderRadius:9,padding:"0 16px",background:C.accentGrad,color:"#fff",fontSize:13,fontWeight:600,cursor:scanning?"default":"pointer",opacity:scanning||!scanPath.trim()?0.5:1,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:7,fontFamily:"var(--font-sans)"}}>
+              style={{border:"none",borderRadius:8,padding:"0 14px",background:C.accentGrad,color:"#fff",fontSize:12.5,fontWeight:600,
+                cursor:scanning?"default":"pointer",opacity:scanning||!scanPath.trim()?0.5:1,
+                whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6,fontFamily:"var(--font-sans)"}}>
               {scanning?<><Spinner/>Scanning…</>:"Scan"}
             </button>
           </div>
-          {scanMsg&&<div style={{fontSize:12,marginTop:8,color:scanMsg.startsWith("No new")||scanMsg.startsWith("Found")?C.green:C.flame}}>{scanMsg}</div>}
+          {scanMsg&&<div style={{fontSize:11.5,marginTop:7,color:scanMsg.startsWith("No new")||scanMsg.startsWith("Found")?C.green:C.flame}}>{scanMsg}</div>}
         </div>
       )}
 
@@ -522,7 +558,8 @@ function VersionsTab({projectName}) {
       ):files.length===0?(
         <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a file or scan a folder.</div>
       ):(
-        files.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName} onDelete={handleDelete} onRename={handleRename}/>)
+        files.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName}
+          onDelete={handleDelete} onRename={handleRename} onMarkSeen={handleMarkSeen}/>)
       )}
     </div>
   );
@@ -541,6 +578,7 @@ function serializeLines(lines){return lines.map(l=>l.type==="check"?(l.checked?"
 function ProjectPanel({name,notes,onSave,onClose}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [tab,setTab]=useState("open");
+  const [versionsCount,setVersionsCount]=useState(null);
   const [text,setText]=useState(notes||"");
   const [lines,setLines]=useState(()=>parseLines(notes));
   const [mode,setMode]=useState("preview");
@@ -561,7 +599,7 @@ function ProjectPanel({name,notes,onSave,onClose}) {
 
         {/* Tab bar */}
         <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
-          {[["open","Notes"],["versions","Versions"]].map(([t,l])=>(
+          {[["open","Notes"],["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"]].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
               padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
               borderBottom:`2px solid ${tab===t?C.indigo:"transparent"}`,background:"transparent",
@@ -615,7 +653,7 @@ function ProjectPanel({name,notes,onSave,onClose}) {
         {/* Versions tab */}
         {tab==="versions"&&(
           <div style={{flex:1,overflowY:"auto"}}>
-            <VersionsTab projectName={name}/>
+            <VersionsTab projectName={name} onCountChange={setVersionsCount}/>
           </div>
         )}
       </div>
@@ -1024,6 +1062,25 @@ export default function App() {
       setLoaded(true);
     })();
   },[]);
+
+  /* background auto-scan all saved project folders on launch */
+  useEffect(()=>{
+    if(!loaded)return;
+    (async()=>{
+      try{
+        const r=await storage.get("music_scan_folders");
+        if(!r?.value)return;
+        const folders=JSON.parse(r.value);
+        for(const[proj,path]of Object.entries(folders)){
+          if(!path)continue;
+          fetch(`/api/audio/${encodeURIComponent(proj)}/scan`,{
+            method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({folderPath:path}),
+          }).catch(()=>{});
+        }
+      }catch{}
+    })();
+  },[loaded]);
 
   /* auto backup — once per day */
   useEffect(()=>{
