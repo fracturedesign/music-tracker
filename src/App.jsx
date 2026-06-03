@@ -668,7 +668,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
 
       {/* Filter badges */}
       {!loading&&files.length>0&&(()=>{
-        const fmts=[...new Set(files.map(f=>(f.name||"").split(".").pop().toUpperCase()))].filter(f=>["WAV","MP3"].includes(f));
+        const fmts=[...new Set(files.map(f=>(f.format||"").toUpperCase()))].filter(f=>["WAV","MP3"].includes(f));
         const verLabels=[...new Set(files.map(f=>extractVersion(f.name)).filter(Boolean))];
         const hasFinal=verLabels.includes("final");
         const vTagLabels=verLabels.filter(v=>v!=="final"&&!/^v\d/.test(v)); // master,demo,draft
@@ -709,8 +709,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
         const verF=activeFilters.versions||[];
         const visible=sortAudioFiles(files).filter(f=>{
           if(fmtF.length>0){
-            const ext=(f.name||"").split(".").pop().toUpperCase();
-            if(!fmtF.includes(ext))return false;
+            if(!fmtF.includes((f.format||"").toUpperCase()))return false;
           }
           if(verF.length>0){
             const ver=extractVersion(f.name);
