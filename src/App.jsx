@@ -417,7 +417,7 @@ function sortAudioFiles(files) {
 }
 
 /* ─── versions tab ─── */
-function VersionsTab({projectName,onCountChange}) {
+function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [files,setFiles]=useState([]);
   const [uploading,setUploading]=useState(false);
@@ -504,7 +504,17 @@ function VersionsTab({projectName,onCountChange}) {
     }catch{}
   };
 
+  const handleUnlink=async()=>{
+    await saveScanPath("");
+    setScanPath("");
+    setScanMsg("");
+    setShowScan(false);
+  };
+
   const Spinner=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite",flexShrink:0}}><circle cx="12" cy="12" r="9" stroke={C.dim} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="28 56"/></svg>;
+
+  const hasPerProjectPath=!!scanPath;
+  const hasGlobalFolder=!!globalAudioFolder;
 
   return (
     <div style={{padding:"14px 18px 20px"}}>
@@ -520,17 +530,20 @@ function VersionsTab({projectName,onCountChange}) {
         </button>
         <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
           style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,
-            color:showScan?C.indigo:C.faint,gap:5,display:"flex",
-            borderColor:showScan?C.accentBorder:C.lineS,background:showScan?C.accentAlpha:C.surf2}}>
+            color:showScan||hasPerProjectPath?C.indigo:C.faint,gap:5,display:"flex",
+            borderColor:showScan||hasPerProjectPath?C.accentBorder:C.lineS,
+            background:showScan||hasPerProjectPath?C.accentAlpha:C.surf2}}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          Scan folder
+          {hasPerProjectPath?"Folder set":"Scan folder"}
         </button>
       </div>
 
       {/* Scan panel */}
       {showScan&&(
-        <div style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:10,padding:"11px 13px",marginBottom:12}}>
-          <div style={{fontSize:11,color:C.faint,marginBottom:7}}>Absolute folder path on the server · saved path auto-scans on open · no duplicates</div>
+        <div style={{background:C.surf2,border:`1px solid ${hasPerProjectPath?C.accentBorder:C.line}`,borderRadius:10,padding:"11px 13px",marginBottom:12}}>
+          <div style={{fontSize:11,color:C.faint,marginBottom:7}}>
+            {hasPerProjectPath?"Saved path · auto-scans on open · no duplicates":"Absolute folder path on the server"}
+          </div>
           <div style={{display:"flex",gap:7}}>
             <input className="mt-text" value={scanPath} onChange={e=>setScanPath(e.target.value)}
               placeholder="/mnt/user/data/music/my-track"
@@ -542,8 +555,21 @@ function VersionsTab({projectName,onCountChange}) {
                 whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6,fontFamily:"var(--font-sans)"}}>
               {scanning?<><Spinner/>Scanning…</>:"Scan"}
             </button>
+            {hasPerProjectPath&&(
+              <button onClick={handleUnlink} title="Unlink folder" style={{...iconBtn,flexShrink:0,borderColor:"rgba(192,138,138,0.3)",background:"rgba(192,138,138,0.08)"}}>
+                {Icon.trash("c08a8a")}
+              </button>
+            )}
           </div>
           {scanMsg&&<div style={{fontSize:11.5,marginTop:7,color:scanMsg.startsWith("No new")||scanMsg.startsWith("Found")?C.green:C.flame}}>{scanMsg}</div>}
+        </div>
+      )}
+
+      {/* Global folder notice — only show if no per-project path is set */}
+      {!hasPerProjectPath&&hasGlobalFolder&&!showScan&&(
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"7px 10px",background:C.surf2,border:`1px solid ${C.line}`,borderRadius:8}}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={C.faint} strokeWidth="1.7"/><path d="M12 8v4M12 16h.01" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+          <span style={{fontSize:11,color:C.faint,flex:1}}>Using global folder from Settings</span>
         </div>
       )}
 
@@ -570,7 +596,7 @@ function parseLines(text) {
 }
 function serializeLines(lines){return lines.map(l=>l.type==="check"?(l.checked?"-x ":"- ")+l.content:l.content).join("\n");}
 
-function ProjectPanel({name,notes,onSave,onClose}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [tab,setTab]=useState("open");
   const [versionsCount,setVersionsCount]=useState(null);
@@ -652,7 +678,7 @@ function ProjectPanel({name,notes,onSave,onClose}) {
         {/* Versions tab */}
         {tab==="versions"&&(
           <div style={{flex:1,overflowY:"auto"}}>
-            <VersionsTab projectName={name} onCountChange={setVersionsCount}/>
+            <VersionsTab projectName={name} onCountChange={setVersionsCount} globalAudioFolder={globalAudioFolder}/>
           </div>
         )}
       </div>
@@ -908,11 +934,15 @@ function AllSessions({sessions,projects,projectMap,onEdit,onDelete,onClose}) {
 }
 
 /* ─── settings sheet ─── */
-function SettingsSheet({currentTheme,onThemeChange,goalHours,onGoalChange,onDownloadBackup,onClose}) {
+function SettingsSheet({currentTheme,onThemeChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [editingGoal,setEditingGoal]=useState(false);
   const [goalInput,setGoalInput]=useState(String(goalHours));
+  const [editingFolder,setEditingFolder]=useState(false);
+  const [folderInput,setFolderInput]=useState(globalAudioFolder||"");
   const saveGoal=()=>{const v=Number(goalInput);if(v>0&&v<=168){onGoalChange(v);setEditingGoal(false);}};
+  const saveFolder=()=>{onGlobalFolderChange(folderInput.trim());setEditingFolder(false);};
+  const clearFolder=()=>{setFolderInput("");onGlobalFolderChange("");setEditingFolder(false);};
   return (
     <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
@@ -957,6 +987,38 @@ function SettingsSheet({currentTheme,onThemeChange,goalHours,onGoalChange,onDown
             <div style={{fontSize:12,color:C.faint,marginTop:2}}>Export all sessions &amp; projects as JSON</div>
           </div>
         </button>
+
+        {/* Global audio folder */}
+        <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:12}}>Global audio folder</div>
+        <div style={{background:C.surf2,borderRadius:14,padding:"14px 16px",marginBottom:6}}>
+          {editingFolder?(
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <input value={folderInput} onChange={e=>setFolderInput(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&saveFolder()}
+                placeholder="/mnt/user/Music/Vault"
+                className="mt-text" style={{flex:1,minWidth:0,padding:"9px 12px",fontSize:12.5}} autoFocus/>
+              <button onClick={saveFolder} style={{background:C.accentGrad,border:"none",borderRadius:10,color:"#fff",padding:"10px 14px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Save</button>
+              <button onClick={()=>setEditingFolder(false)} style={iconBtn}>{Icon.close()}</button>
+            </div>
+          ):(
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+              <div style={{flex:1,minWidth:0}}>
+                {globalAudioFolder
+                  ?<div className="mono" style={{fontSize:12,color:C.text,wordBreak:"break-all",lineHeight:1.5}}>{globalAudioFolder}</div>
+                  :<div style={{fontSize:13,color:C.dim}}>Not set</div>
+                }
+                <div style={{fontSize:11.5,color:C.faint,marginTop:4}}>Files are matched to projects by name. Per-project folders override this.</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={()=>{setFolderInput(globalAudioFolder||"");setEditingFolder(true);}} style={iconBtn}>{Icon.pencil()}</button>
+                {globalAudioFolder&&<button onClick={clearFolder} style={iconBtn}>{Icon.close()}</button>}
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:11,color:C.dim,marginBottom:22,padding:"0 2px"}}>
+          On each launch, files matching a project name are auto-registered. Filenames must <em>contain</em> the project name.
+        </div>
 
         {/* Theme */}
         <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:14}}>Theme</div>
@@ -1047,6 +1109,7 @@ export default function App() {
   const [showDone,setShowDone]=useState(false);
   const [showReleased,setShowReleased]=useState(false);
   const [audioFileCounts,setAudioFileCounts]=useState({});
+  const [globalAudioFolder,setGlobalAudioFolder]=useState("");
   const [toast,setToast]=useState("");
   const toastTimer=useRef(null);
   const toastQueue=useRef([]);
@@ -1060,28 +1123,37 @@ export default function App() {
       try{const m=await storage.get("music_milestones");if(m?.value)setUnlockedMilestones(JSON.parse(m.value));}catch{}
       try{const t=await storage.get("music_timer");if(t?.value)setTimer(JSON.parse(t.value));}catch{}
       try{const af=await storage.get("music_audio_files");if(af?.value&&typeof af.value==="object"){setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}}catch{}
+      try{const gf=await storage.get("music_global_audio_folder");if(gf?.value)setGlobalAudioFolder(gf.value);}catch{}
       setLoaded(true);
     })();
   },[]);
 
-  /* background auto-scan all saved project folders on launch */
+  /* background auto-scan all saved project folders + global folder on launch */
   useEffect(()=>{
     if(!loaded)return;
     (async()=>{
       try{
-        const r=await storage.get("music_scan_folders");
-        if(!r?.value)return;
-        const folders=JSON.parse(r.value);
+        const[sr,gf]=await Promise.all([
+          storage.get("music_scan_folders"),
+          storage.get("music_global_audio_folder"),
+        ]);
+        const folders=sr?.value?JSON.parse(sr.value):{};
+        const globalFolder=gf?.value||"";
+        // fire per-project scans
         for(const[proj,path]of Object.entries(folders)){
           if(!path)continue;
-          fetch(`/api/audio/${encodeURIComponent(proj)}/scan`,{
-            method:"POST",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({folderPath:path}),
-          }).catch(()=>{});
+          fetch(`/api/audio/${encodeURIComponent(proj)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:path})}).catch(()=>{});
+        }
+        // fire global-folder scans for projects that have no per-project folder
+        if(globalFolder){
+          for(const p of projects){
+            if(folders[p.name])continue; // has its own folder — skip
+            fetch(`/api/audio/${encodeURIComponent(p.name)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:globalFolder,nameFilter:p.name})}).catch(()=>{});
+          }
         }
       }catch{}
     })();
-  },[loaded]);
+  },[loaded]);// eslint-disable-line
 
   /* auto backup — once per day */
   useEffect(()=>{
@@ -1229,6 +1301,7 @@ export default function App() {
   const saveNotes=async(name,notes)=>{const next=projects.map(p=>p.name===name?{...p,notes}:p);setProjects(next);await persistProjects(next);};
 
   const saveGoal=async v=>{setGoalHours(v);await persistGoal(v);setGoalEditOpen(false);};
+  const saveGlobalFolder=async v=>{setGlobalAudioFolder(v);try{await storage.set("music_global_audio_folder",v);}catch{}};
 
   const downloadBackup=async()=>{
     const data={exportDate:new Date().toISOString(),sessions,projects};
@@ -1321,10 +1394,10 @@ export default function App() {
     <ThemeCtx.Provider value={C}>
     <div className="app" style={{background:C.bg}}>
 
-      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)}/>}
+      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder}/>}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
-      {settingsOpen&&<SettingsSheet currentTheme={themeKey} onThemeChange={changeTheme} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)}/>}
+      {settingsOpen&&<SettingsSheet currentTheme={themeKey} onThemeChange={changeTheme} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
       {toast&&<div className="toast">{toast}</div>}
 

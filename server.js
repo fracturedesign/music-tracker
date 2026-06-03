@@ -206,9 +206,11 @@ app.post("/api/audio/:project/scan", async (req, res) => {
   const existing = data.music_audio_files[req.params.project];
   const existingPaths = new Set(existing.map(f => f.linkedPath).filter(Boolean));
 
+  const { nameFilter } = req.body; // optional: only register files whose basename contains this string
   const audioExts = [".wav", ".mp3"];
   const toAdd = entries
     .filter(e => audioExts.includes(extname(e).toLowerCase()))
+    .filter(e => !nameFilter || basename(e, extname(e)).toLowerCase().includes(nameFilter.toLowerCase()))
     .map(e => join(folderPath, e))
     .filter(p => !existingPaths.has(p));
 
