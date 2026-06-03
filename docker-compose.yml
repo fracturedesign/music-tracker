@@ -7,5 +7,6 @@ services:
       - "3001:3001"
     volumes:
       - /mnt/user/appdata/music-tracker:/data
+      - /mnt/user:/mnt/user:ro
     environment:
       - DATA_PATH=/data/data.json
