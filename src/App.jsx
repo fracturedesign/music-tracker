@@ -274,6 +274,33 @@ function AnalyticsCard({sessions}) {
   );
 }
 
+/* ─── version badge helper ─── */
+function extractVersion(name) {
+  // Match: v1, v2, v1.3, v2.1.0, final, master, demo, draft (case-insensitive)
+  const m = (name||"").match(/\b(v\d+(?:[._]\d+)*|final|master|demo|draft)\b/i);
+  return m ? m[0].toLowerCase() : null;
+}
+
+/* ─── audio metric tile ─── */
+function MetricTile({icon,primary,primarySuffix,secondary,secondarySuffix,warn,C}) {
+  const warnCol="#fb923c";
+  return (
+    <div style={{background:C.surf2,borderRadius:11,padding:"10px 10px 9px",display:"flex",flexDirection:"column",alignItems:"center",gap:5,minWidth:0}}>
+      <div style={{opacity:.65}}>{icon}</div>
+      <div style={{textAlign:"center",lineHeight:1.15}}>
+        <span style={{fontSize:17,fontWeight:700,color:warn?warnCol:C.text}}>{primary??<span style={{color:C.dim}}>—</span>}</span>
+        {primarySuffix&&<span style={{fontSize:10,fontWeight:600,color:warn?warnCol:C.faint,marginLeft:2}}>{primarySuffix}</span>}
+      </div>
+      {secondary!=null&&(
+        <div style={{textAlign:"center",lineHeight:1.15}}>
+          <span style={{fontSize:13,fontWeight:600,color:C.muted}}>{secondary}</span>
+          {secondarySuffix&&<span style={{fontSize:10,fontWeight:600,color:C.faint,marginLeft:2}}>{secondarySuffix}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── audio file card ─── */
 function AudioFileCard({file,projectName,onDelete,onRename}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
@@ -285,18 +312,18 @@ function AudioFileCard({file,projectName,onDelete,onRename}) {
   const [editing,setEditing]=useState(false);
   const [nameVal,setNameVal]=useState(file.name);
 
-  // Capture theme colors at mount (WaveSurfer doesn't react to prop changes)
-  const waveColor=C.dim;
-  const progressColor=C.indigo;
+  const audioUrl=file.linkedPath
+    ?`/api/audio/${encodeURIComponent(projectName)}/stream/${file.id}`
+    :`/api/audio/files/${encodeURIComponent(file.filename)}`;
 
   useEffect(()=>{
     const container=waveRef.current;
     if(!container)return;
     const ws=WaveSurfer.create({
       container,
-      waveColor,
-      progressColor,
-      height:52,
+      waveColor:C.dim,
+      progressColor:C.indigo,
+      height:48,
       barWidth:2,
       barGap:1,
       barRadius:2,
@@ -304,7 +331,7 @@ function AudioFileCard({file,projectName,onDelete,onRename}) {
       cursorColor:C.muted,
     });
     wsRef.current=ws;
-    ws.load(`/api/audio/files/${encodeURIComponent(file.filename)}`);
+    ws.load(audioUrl);
     ws.on("ready",()=>setWsReady(true));
     ws.on("timeupdate",t=>setCurrentTime(t));
     ws.on("play",()=>setPlaying(true));
@@ -320,57 +347,73 @@ function AudioFileCard({file,projectName,onDelete,onRename}) {
     setEditing(false);
   };
 
-  const metaItems=[
-    file.size!=null&&`${file.size} MB`,
-    file.duration&&fmtSeconds(file.duration),
-    file.lufsIntegrated!=null&&`${file.lufsIntegrated.toFixed(1)} LUFS Int`,
-    file.lufsShort!=null&&`${file.lufsShort.toFixed(1)} LUFS ST`,
-    file.dr!=null&&`LRA ${file.dr.toFixed(1)} LU`,
-    file.truePeak!=null&&`${file.truePeak.toFixed(1)} dBTP`,
-  ].filter(Boolean);
+  const version=extractVersion(file.name);
+  const badgeLabel=version||file.format;
+  const peakWarn=file.truePeak!=null&&file.truePeak>-1;
+
+  // Icons for metric tiles
+  const speakerIcon=<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 9v6h4l5 5V4L7 9H3z" stroke={C.indigo} strokeWidth="1.7" strokeLinejoin="round"/><path d="M16.5 7.5a5 5 0 0 1 0 9M19.5 5a9 9 0 0 1 0 14" stroke={C.indigo} strokeWidth="1.7" strokeLinecap="round"/></svg>;
+  const peakIcon=<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M2 12h3M5 12l2-5 3 10 3-14 3 12 2-5 2 2h2" stroke={peakWarn?"#fb923c":C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const drIcon=<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="14" width="3" height="7" rx="1" fill={C.muted} opacity=".5"/><rect x="8" y="9" width="3" height="12" rx="1" fill={C.muted} opacity=".7"/><rect x="13" y="5" width="3" height="16" rx="1" fill={C.muted}/><rect x="18" y="11" width="3" height="10" rx="1" fill={C.muted} opacity=".6"/></svg>;
 
   return (
-    <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:14,padding:"14px 16px",marginBottom:10}}>
-      {/* Name + format + delete */}
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-        <span style={{flexShrink:0,fontSize:11,fontWeight:700,color:C.indigo,background:C.accentAlpha,borderRadius:6,padding:"3px 8px"}}>{file.format}</span>
+    <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:14,padding:"14px 15px",marginBottom:10}}>
+      {/* Name row */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <span style={{flexShrink:0,fontSize:10.5,fontWeight:700,
+          color:version?C.indigo:C.faint,
+          background:version?C.accentAlpha:C.surf2,
+          border:`1px solid ${version?C.accentBorder:C.line}`,
+          borderRadius:6,padding:"3px 8px",textTransform:"uppercase",letterSpacing:"0.04em"}}>
+          {badgeLabel}
+        </span>
         {editing?(
           <input autoFocus value={nameVal} onChange={e=>setNameVal(e.target.value)}
             onBlur={saveRename}
             onKeyDown={e=>{if(e.key==="Enter")saveRename();if(e.key==="Escape"){setNameVal(file.name);setEditing(false);}}}
-            className="mt-text" style={{flex:1,padding:"5px 10px",fontSize:13,height:"auto"}}/>
+            className="mt-text" style={{flex:1,padding:"4px 10px",fontSize:13,height:"auto"}}/>
         ):(
           <span onClick={()=>setEditing(true)} title="Click to rename"
-            style={{flex:1,fontSize:14,fontWeight:600,color:C.text,cursor:"text",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file.name}</span>
+            style={{flex:1,fontSize:13.5,fontWeight:600,color:C.text,cursor:"text",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file.name}</span>
         )}
+        <span style={{fontSize:11,color:C.dim,flexShrink:0,whiteSpace:"nowrap"}}>
+          {file.size!=null&&`${file.size} MB`}{file.duration?` · ${fmtSeconds(file.duration)}`:""}
+        </span>
         <button onClick={()=>onDelete(file.id)} style={{...iconBtn,flexShrink:0}}>{Icon.trash()}</button>
       </div>
 
-      {/* Metadata chips */}
-      {metaItems.length>0&&(
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-          {metaItems.map((item,i)=>(
-            <span key={i} style={{fontSize:11,color:C.faint,background:C.surf2,border:`1px solid ${C.line}`,borderRadius:6,padding:"3px 8px"}}>{item}</span>
-          ))}
-        </div>
-      )}
+      {/* Metric tiles */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7,marginBottom:12}}>
+        <MetricTile C={C} icon={speakerIcon}
+          primary={file.lufsIntegrated!=null?file.lufsIntegrated.toFixed(1):null} primarySuffix="INT"
+          secondary={file.lufsShort!=null?file.lufsShort.toFixed(1):null} secondarySuffix="ST"/>
+        <MetricTile C={C} icon={peakIcon}
+          primary={file.truePeak!=null?file.truePeak.toFixed(1):null} primarySuffix="dBTP"
+          warn={peakWarn}/>
+        <MetricTile C={C} icon={drIcon}
+          primary={file.dr!=null?file.dr.toFixed(1):null} primarySuffix="LRA"
+          secondary={null}/>
+      </div>
 
       {/* Waveform */}
-      <div ref={waveRef} style={{marginBottom:10,opacity:wsReady?1:0.25,transition:"opacity .3s"}}/>
+      <div ref={waveRef} style={{marginBottom:9,opacity:wsReady?1:0.2,transition:"opacity .3s"}}/>
 
       {/* Transport */}
-      <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:9}}>
         <button onClick={()=>wsRef.current?.playPause()} disabled={!wsReady}
-          style={{width:34,height:34,borderRadius:10,border:`1px solid ${C.lineS}`,background:C.surf2,
+          style={{width:32,height:32,borderRadius:9,border:`1px solid ${C.lineS}`,background:C.surf2,
             cursor:wsReady?"pointer":"default",display:"grid",placeItems:"center",flexShrink:0,padding:0,
             opacity:wsReady?1:0.45}}>
           {playing
-            ?<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
-            :<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+            ?<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+            :<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
           }
         </button>
-        <span className="mono" style={{fontSize:12,color:C.faint}}>{fmtSeconds(currentTime)} / {fmtSeconds(file.duration)}</span>
-        {!wsReady&&<span style={{fontSize:11,color:C.dim}}>Loading…</span>}
+        <span className="mono" style={{fontSize:11.5,color:C.faint}}>
+          {fmtSeconds(currentTime)} / {fmtSeconds(file.duration)}
+        </span>
+        {!wsReady&&<span style={{fontSize:11,color:C.dim,marginLeft:2}}>Loading…</span>}
+        {file.linkedPath&&<span style={{marginLeft:"auto",fontSize:10,color:C.dim,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}} title={file.linkedPath}>📂 linked</span>}
       </div>
     </div>
   );
@@ -378,10 +421,14 @@ function AudioFileCard({file,projectName,onDelete,onRename}) {
 
 /* ─── versions tab ─── */
 function VersionsTab({projectName}) {
-  const C=useTheme();
+  const C=useTheme(); const {iconBtn}=getStyles(C);
   const [files,setFiles]=useState([]);
   const [uploading,setUploading]=useState(false);
+  const [scanning,setScanning]=useState(false);
   const [loading,setLoading]=useState(true);
+  const [scanPath,setScanPath]=useState("");
+  const [scanMsg,setScanMsg]=useState("");
+  const [showScan,setShowScan]=useState(false);
   const fileInputRef=useRef(null);
 
   useEffect(()=>{
@@ -404,6 +451,18 @@ function VersionsTab({projectName}) {
     setUploading(false);
   };
 
+  const handleScan=async()=>{
+    if(!scanPath.trim())return;
+    setScanning(true);setScanMsg("");
+    try{
+      const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:scanPath.trim()})});
+      const d=await r.json();
+      if(r.ok){setFiles(d.files||[]);setScanMsg(d.added===0?"No new files found.":`Found ${d.added} new file${d.added!==1?"s":""}`);}
+      else setScanMsg(d.error||"Scan failed");
+    }catch(e){setScanMsg("Scan failed: "+e.message);}
+    setScanning(false);
+  };
+
   const handleDelete=async id=>{
     try{
       await fetch(`/api/audio/${encodeURIComponent(projectName)}/${id}`,{method:"DELETE"});
@@ -418,33 +477,50 @@ function VersionsTab({projectName}) {
     }catch{}
   };
 
+  const Spinner=()=><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite",flexShrink:0}}><circle cx="12" cy="12" r="9" stroke={C.dim} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="28 56"/></svg>;
+
   return (
     <div style={{padding:"16px 20px 20px"}}>
+      {/* Upload row */}
       <input ref={fileInputRef} type="file" accept=".wav,.mp3" onChange={handleUpload} style={{display:"none"}}/>
-      <button onClick={()=>fileInputRef.current?.click()} disabled={uploading}
-        style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,
-          padding:"14px 0",borderRadius:12,cursor:uploading?"default":"pointer",
-          border:`1.5px dashed ${C.lineS}`,background:"transparent",
-          color:uploading?C.dim:C.faint,fontSize:13.5,fontWeight:600,
-          marginBottom:16,fontFamily:"var(--font-sans)"}}>
-        {uploading?(
-          <>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite"}}>
-              <circle cx="12" cy="12" r="9" stroke={C.dim} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="28 56"/>
-            </svg>
-            Uploading &amp; analyzing…
-          </>
-        ):(
-          <>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Upload WAV or MP3
-          </>
-        )}
-      </button>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <button onClick={()=>fileInputRef.current?.click()} disabled={uploading}
+          style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+            padding:"11px 0",borderRadius:10,cursor:uploading?"default":"pointer",
+            border:`1.5px dashed ${C.lineS}`,background:"transparent",
+            color:uploading?C.dim:C.faint,fontSize:13,fontWeight:600,fontFamily:"var(--font-sans)"}}>
+          {uploading?<><Spinner/>Analyzing…</>:<><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>Upload file</>}
+        </button>
+        <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
+          style={{...iconBtn,width:"auto",padding:"0 12px",fontSize:12.5,fontWeight:600,color:showScan?C.indigo:C.faint,gap:5,display:"flex",borderColor:showScan?C.accentBorder:C.lineS,background:showScan?C.accentAlpha:C.surf2}}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Scan folder
+        </button>
+      </div>
+
+      {/* Scan folder panel */}
+      {showScan&&(
+        <div style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:11,padding:"12px 14px",marginBottom:14}}>
+          <div style={{fontSize:11.5,color:C.faint,marginBottom:8}}>Enter the absolute folder path on the server — files already registered won't be duplicated.</div>
+          <div style={{display:"flex",gap:8}}>
+            <input className="mt-text" value={scanPath} onChange={e=>setScanPath(e.target.value)}
+              placeholder="/mnt/user/data/music/my-track"
+              onKeyDown={e=>e.key==="Enter"&&handleScan()}
+              style={{flex:1,padding:"9px 12px",fontSize:12.5}}/>
+            <button onClick={handleScan} disabled={scanning||!scanPath.trim()}
+              style={{border:"none",borderRadius:9,padding:"0 16px",background:C.accentGrad,color:"#fff",fontSize:13,fontWeight:600,cursor:scanning?"default":"pointer",opacity:scanning||!scanPath.trim()?0.5:1,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:7,fontFamily:"var(--font-sans)"}}>
+              {scanning?<><Spinner/>Scanning…</>:"Scan"}
+            </button>
+          </div>
+          {scanMsg&&<div style={{fontSize:12,marginTop:8,color:scanMsg.startsWith("No new")||scanMsg.startsWith("Found")?C.green:C.flame}}>{scanMsg}</div>}
+        </div>
+      )}
+
+      {/* File list */}
       {loading?(
         <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>Loading…</div>
       ):files.length===0?(
-        <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a WAV or MP3 to get started.</div>
+        <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a file or scan a folder.</div>
       ):(
         files.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName} onDelete={handleDelete} onRename={handleRename}/>)
       )}
@@ -485,7 +561,7 @@ function ProjectPanel({name,notes,onSave,onClose}) {
 
         {/* Tab bar */}
         <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
-          {[["open","Open"],["versions","Versions"]].map(([t,l])=>(
+          {[["open","Notes"],["versions","Versions"]].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
               padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
               borderBottom:`2px solid ${tab===t?C.indigo:"transparent"}`,background:"transparent",

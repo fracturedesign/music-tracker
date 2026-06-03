@@ -1,7 +1,7 @@
 import express from "express";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, createReadStream, statSync } from "fs";
 import { fileURLToPath } from "url";
-import { dirname, join, extname } from "path";
+import { dirname, join, extname, basename } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 import multer from "multer";
@@ -25,7 +25,9 @@ function writeData(data) {
   writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-/* ── audio analysis via ffmpeg ── */
+/* ── audio analysis via ffmpeg ──
+   Parse only the Summary block so we never pick up a per-frame I: value
+   (per-frame values start near -70 LUFS and converge; the Summary is final). */
 async function analyzeAudio(filePath) {
   let duration = 0, lufsIntegrated = null, lufsShort = null, dr = null, truePeak = null;
 
@@ -41,7 +43,7 @@ async function analyzeAudio(filePath) {
     console.error("ffprobe error:", e.message);
   }
 
-  // Loudness via ebur128 filter
+  // Loudness via ebur128 filter — parse Summary section only
   try {
     let out = "";
     try {
@@ -55,15 +57,21 @@ async function analyzeAudio(filePath) {
       out = e.stderr || "";
     }
 
-    const intMatch     = out.match(/\bI:\s*([-\d.]+)\s*LUFS/);
-    const lraMatch     = out.match(/\bLRA:\s*([\d.]+)\s*LU/);
-    const peakMatch    = out.match(/\bPeak:\s*([-\d.]+)\s*dBFS/);
-    const lraHighMatch = out.match(/LRA high:\s*([-\d.]+)\s*LUFS/);
+    // Scope all regexes to the Summary block at the end of the output
+    const summaryMatch = out.match(/Summary:([\s\S]*)$/);
+    const s = summaryMatch ? summaryMatch[1] : "";
 
-    if (intMatch)     lufsIntegrated = parseFloat(intMatch[1]);
-    if (lraHighMatch) lufsShort      = parseFloat(lraHighMatch[1]);
-    if (lraMatch)     dr             = parseFloat(lraMatch[1]);
-    if (peakMatch)    truePeak       = parseFloat(peakMatch[1]);
+    if (s) {
+      const intMatch     = s.match(/I:\s*([-\d.]+)\s*LUFS/);
+      const lraMatch     = s.match(/LRA:\s*([\d.]+)\s*LU/);
+      const peakMatch    = s.match(/Peak:\s*([-\d.]+)\s*dBFS/);
+      const lraHighMatch = s.match(/LRA high:\s*([-\d.]+)\s*LUFS/);
+
+      if (intMatch)     lufsIntegrated = parseFloat(intMatch[1]);
+      if (lraHighMatch) lufsShort      = parseFloat(lraHighMatch[1]);
+      if (lraMatch)     dr             = parseFloat(lraMatch[1]);
+      if (peakMatch)    truePeak       = parseFloat(peakMatch[1]);
+    }
   } catch (e) {
     console.error("ffmpeg analysis error:", e.message);
   }
@@ -125,6 +133,36 @@ app.get("/api/audio/:project", (req, res) => {
   res.json({ files });
 });
 
+// Stream a linked (scanned) file by project + id
+app.get("/api/audio/:project/stream/:id", (req, res) => {
+  const { project, id } = req.params;
+  const data  = readData();
+  const files = (data.music_audio_files || {})[project] || [];
+  const file  = files.find(f => f.id === id);
+  if (!file?.linkedPath || !existsSync(file.linkedPath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+  const stat = statSync(file.linkedPath);
+  const ext  = extname(file.linkedPath).toLowerCase();
+  const mime = ext === ".wav" ? "audio/wav" : "audio/mpeg";
+  const range = req.headers.range;
+  if (range) {
+    const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(startStr, 10);
+    const end   = endStr ? parseInt(endStr, 10) : stat.size - 1;
+    res.writeHead(206, {
+      "Content-Range":  `bytes ${start}-${end}/${stat.size}`,
+      "Accept-Ranges":  "bytes",
+      "Content-Length": end - start + 1,
+      "Content-Type":   mime,
+    });
+    createReadStream(file.linkedPath, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, { "Content-Length": stat.size, "Content-Type": mime });
+    createReadStream(file.linkedPath).pipe(res);
+  }
+});
+
 // Upload + analyse
 app.post("/api/audio/:project/upload", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -149,6 +187,58 @@ app.post("/api/audio/:project/upload", upload.single("file"), async (req, res) =
   res.json({ file: meta });
 });
 
+// Scan a folder — finds .wav/.mp3 files and registers them without copying
+app.post("/api/audio/:project/scan", async (req, res) => {
+  const { folderPath } = req.body;
+  if (!folderPath) return res.status(400).json({ error: "folderPath required" });
+  if (!existsSync(folderPath)) return res.status(404).json({ error: "Folder not found" });
+
+  let entries;
+  try {
+    entries = readdirSync(folderPath);
+  } catch (e) {
+    return res.status(500).json({ error: `Cannot read folder: ${e.message}` });
+  }
+
+  const data = readData();
+  if (!data.music_audio_files) data.music_audio_files = {};
+  if (!data.music_audio_files[req.params.project]) data.music_audio_files[req.params.project] = [];
+  const existing = data.music_audio_files[req.params.project];
+  const existingPaths = new Set(existing.map(f => f.linkedPath).filter(Boolean));
+
+  const audioExts = [".wav", ".mp3"];
+  const toAdd = entries
+    .filter(e => audioExts.includes(extname(e).toLowerCase()))
+    .map(e => join(folderPath, e))
+    .filter(p => !existingPaths.has(p));
+
+  const added = [];
+  for (const filePath of toAdd) {
+    const ext     = extname(filePath).toLowerCase();
+    const id      = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+    const rawName = basename(filePath, ext);
+    let   stat;
+    try { stat = statSync(filePath); } catch { continue; }
+    const analysis = await analyzeAudio(filePath);
+    const meta = {
+      id,
+      name:       rawName,
+      linkedPath: filePath,
+      format:     ext === ".wav" ? "WAV" : "MP3",
+      size:       parseFloat((stat.size / (1024 * 1024)).toFixed(2)),
+      ...analysis,
+      scannedAt:  new Date().toISOString(),
+    };
+    existing.push(meta);
+    added.push(meta);
+    // small delay so IDs are unique when folder has many files
+    await new Promise(r => setTimeout(r, 2));
+  }
+
+  writeData(data);
+  res.json({ added: added.length, files: existing });
+});
+
 // Rename
 app.patch("/api/audio/:project/:id", (req, res) => {
   const { project, id } = req.params;
@@ -171,7 +261,10 @@ app.delete("/api/audio/:project/:id", (req, res) => {
   if (!files) return res.status(404).json({ error: "Project not found" });
   const file = files.find(f => f.id === id);
   if (!file) return res.status(404).json({ error: "File not found" });
-  try { unlinkSync(join(AUDIO_DIR, file.filename)); } catch {}
+  // Only delete from disk if it was uploaded (not linked)
+  if (!file.linkedPath) {
+    try { unlinkSync(join(AUDIO_DIR, file.filename)); } catch {}
+  }
   data.music_audio_files[project] = files.filter(f => f.id !== id);
   writeData(data);
   res.json({ ok: true });
