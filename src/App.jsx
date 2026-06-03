@@ -292,16 +292,27 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
   const [playing,setPlaying]=useState(false);
   const [currentTime,setCurrentTime]=useState(0);
   const [wsReady,setWsReady]=useState(false);
+  const [loadProgress,setLoadProgress]=useState(0);    // 0-100 during initial download
+  const [buffering,setBuffering]=useState(false);      // stall during playback
+  const [pendingPlay,setPendingPlay]=useState(false);  // play was clicked before ready
   const [editing,setEditing]=useState(false);
   const [nameVal,setNameVal]=useState(file.name);
   const markedRef=useRef(false);
+  const bufferingTimer=useRef(null);
 
   const audioUrl=file.linkedPath
     ?`/api/audio/${encodeURIComponent(projectName)}/stream/${file.id}`
     :`/api/audio/files/${encodeURIComponent(file.filename)}`;
 
+  // Stop this card when another card starts playing
   useEffect(()=>{
-    const handler=e=>{if(e.detail.id!==file.id)wsRef.current?.pause();};
+    const handler=e=>{
+      if(e.detail.id!==file.id){
+        wsRef.current?.pause();
+        setPendingPlay(false);
+        setBuffering(false);
+      }
+    };
     audioEventBus.addEventListener("audioplay",handler);
     return()=>audioEventBus.removeEventListener("audioplay",handler);
   },[file.id]);
@@ -315,17 +326,65 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
     });
     wsRef.current=ws;
     ws.load(audioUrl);
-    ws.on("ready",()=>setWsReady(true));
+
+    // Download progress
+    ws.on("loading",pct=>setLoadProgress(pct));
+
+    ws.on("ready",()=>{
+      setWsReady(true);
+      setLoadProgress(100);
+      setBuffering(false);
+      // If user clicked play while loading, start now
+      if(pendingPlayRef.current){
+        pendingPlayRef.current=false;
+        setPendingPlay(false);
+        ws.play();
+      }
+      // Hook into media element for buffering stalls during playback
+      try{
+        const media=ws.getMediaElement?.();
+        if(media){
+          const onWaiting=()=>{
+            setBuffering(true);
+            // Auto-resume after short delay if still stalled
+            clearTimeout(bufferingTimer.current);
+            bufferingTimer.current=setTimeout(()=>{
+              if(wsRef.current&&!wsRef.current.isPlaying?.())wsRef.current.play().catch(()=>{});
+            },1500);
+          };
+          const onResume=()=>{clearTimeout(bufferingTimer.current);setBuffering(false);};
+          media.addEventListener("waiting",onWaiting);
+          media.addEventListener("stalled",onWaiting);
+          media.addEventListener("playing",onResume);
+          media.addEventListener("canplay",onResume);
+        }
+      }catch{}
+    });
+
     ws.on("timeupdate",t=>setCurrentTime(t));
     ws.on("play",()=>{
       setPlaying(true);
+      setBuffering(false);
       audioEventBus.dispatchEvent(new CustomEvent("audioplay",{detail:{id:file.id}}));
       if(file.isNew&&!markedRef.current){markedRef.current=true;onMarkSeen?.(file.id);}
     });
     ws.on("pause",()=>setPlaying(false));
-    ws.on("finish",()=>{setPlaying(false);setCurrentTime(0);});
-    return()=>{ws.destroy();wsRef.current=null;};
+    ws.on("finish",()=>{setPlaying(false);setCurrentTime(0);setBuffering(false);});
+
+    return()=>{clearTimeout(bufferingTimer.current);ws.destroy();wsRef.current=null;};
   },[]);// eslint-disable-line
+
+  // Ref mirror for pendingPlay (accessible inside the ready callback closure)
+  const pendingPlayRef=useRef(false);
+  const handlePlayPause=()=>{
+    if(wsReady){
+      wsRef.current?.playPause();
+    } else {
+      // Queue play for when ready
+      pendingPlayRef.current=!pendingPlayRef.current;
+      setPendingPlay(pendingPlayRef.current);
+    }
+  };
 
   const saveRename=()=>{
     const t=nameVal.trim();
@@ -335,14 +394,14 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
 
   const version=extractVersion(file.name);
   const peakWarn=file.truePeak!=null&&file.truePeak>-1;
-
-  // Which analysis values are present
   const metrics=[
     file.lufsIntegrated!=null&&{v:file.lufsIntegrated.toFixed(1),l:"INT"},
     file.lufsShort!=null&&{v:file.lufsShort.toFixed(1),l:"ST"},
     file.truePeak!=null&&{v:file.truePeak.toFixed(1),l:"dBTP",warn:peakWarn},
     file.dr!=null&&{v:file.dr.toFixed(1),l:"LRA"},
   ].filter(Boolean);
+
+  const showSpinner=(!wsReady&&pendingPlay)||buffering;
 
   return (
     <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
@@ -365,7 +424,7 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
         <button onClick={()=>onDelete(file.id)} style={{...iconBtn,flexShrink:0,width:26,height:26,borderRadius:7}}>{Icon.trash()}</button>
       </div>
 
-      {/* Inline analysis strip — no cards, just clean values */}
+      {/* Inline analysis strip */}
       {metrics.length>0&&(
         <div style={{display:"flex",alignItems:"center",borderTop:`1px solid ${C.line}`,borderBottom:`1px solid ${C.line}`,margin:"0 0 10px",padding:"6px 0",gap:0,flexWrap:"wrap"}}>
           {metrics.map((m,i)=>(
@@ -379,21 +438,33 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
         </div>
       )}
 
+      {/* Loading progress bar (visible while file downloads) */}
+      {!wsReady&&(
+        <div style={{height:2,borderRadius:2,background:C.surf2,marginBottom:10,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${loadProgress}%`,background:C.indigo,borderRadius:2,transition:"width .4s ease"}}/>
+        </div>
+      )}
+
       {/* Waveform */}
-      <div ref={waveRef} style={{marginBottom:8,opacity:wsReady?1:0.18,transition:"opacity .3s"}}/>
+      <div ref={waveRef} style={{marginBottom:8,opacity:wsReady?1:0.14,transition:"opacity .3s"}}/>
 
       {/* Transport */}
       <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <button onClick={()=>wsRef.current?.playPause()} disabled={!wsReady}
-          style={{width:28,height:28,borderRadius:8,border:`1px solid ${C.lineS}`,background:C.surf2,
-            cursor:wsReady?"pointer":"default",display:"grid",placeItems:"center",flexShrink:0,padding:0,opacity:wsReady?1:0.4}}>
-          {playing
-            ?<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
-            :<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+        <button onClick={handlePlayPause}
+          style={{width:28,height:28,borderRadius:8,border:`1px solid ${playing||pendingPlay?C.accentBorder:C.lineS}`,
+            background:playing||pendingPlay?C.accentAlpha:C.surf2,
+            cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0,padding:0}}>
+          {showSpinner
+            ?<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="9" stroke={C.indigo} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="28 56"/></svg>
+            :playing
+              ?<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+              :<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
           }
         </button>
         <span className="mono" style={{fontSize:11,color:C.faint}}>{fmtSeconds(currentTime)} / {fmtSeconds(file.duration)}</span>
-        {!wsReady&&<span style={{fontSize:10.5,color:C.dim}}>Loading…</span>}
+        {!wsReady&&<span style={{fontSize:10.5,color:C.dim}}>{loadProgress>0?`${loadProgress}%`:"Connecting…"}</span>}
+        {buffering&&wsReady&&<span style={{fontSize:10.5,color:C.dim}}>Buffering…</span>}
+        {pendingPlay&&!wsReady&&<span style={{fontSize:10.5,color:C.indigo}}>▶ queued</span>}
         {file.linkedPath&&<span style={{marginLeft:"auto",fontSize:9.5,color:C.dim,opacity:.6}} title={file.linkedPath}>linked</span>}
       </div>
     </div>
@@ -557,7 +628,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
             </button>
             {hasPerProjectPath&&(
               <button onClick={handleUnlink} title="Unlink folder" style={{...iconBtn,flexShrink:0,borderColor:"rgba(192,138,138,0.3)",background:"rgba(192,138,138,0.08)"}}>
-                {Icon.trash("c08a8a")}
+                {Icon.trash()}
               </button>
             )}
           </div>
@@ -596,14 +667,21 @@ function parseLines(text) {
 }
 function serializeLines(lines){return lines.map(l=>l.type==="check"?(l.checked?"-x ":"- ")+l.content:l.content).join("\n");}
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [tab,setTab]=useState("open");
   const [versionsCount,setVersionsCount]=useState(null);
+  const [renamingProject,setRenamingProject]=useState(false);
+  const [renameVal,setRenameVal]=useState(name);
   useEffect(()=>{
     fetch(`/api/audio/${encodeURIComponent(name)}`).then(r=>r.json())
       .then(d=>setVersionsCount(d.files?.length??0)).catch(()=>{});
   },[name]);
+  const commitRename=()=>{
+    const trimmed=renameVal.trim();
+    if(trimmed&&trimmed!==name)onRename?.(name,trimmed);
+    setRenamingProject(false);
+  };
   const [text,setText]=useState(notes||"");
   const [lines,setLines]=useState(()=>parseLines(notes));
   const [mode,setMode]=useState("preview");
@@ -617,9 +695,22 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder}) {
       <div style={{background:C.surf,borderRadius:22,border:`1px solid ${C.lineS}`,width:"100%",maxWidth:500,display:"flex",flexDirection:"column",animation:"mtmodal .22s ease",maxHeight:"88vh"}}>
 
         {/* Header */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 20px 0"}}>
-          <div style={{fontSize:16,fontWeight:700,color:C.text}}>{name}</div>
-          <button onClick={close} style={iconBtn}>{Icon.close()}</button>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 20px 0",gap:10}}>
+          {renamingProject?(
+            <div style={{flex:1,display:"flex",alignItems:"center",gap:8}}>
+              <input autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter")commitRename();if(e.key==="Escape"){setRenameVal(name);setRenamingProject(false);}}}
+                className="mt-text" style={{flex:1,padding:"6px 12px",fontSize:15,fontWeight:700,height:"auto"}}/>
+              <button onClick={commitRename} style={{background:C.accentGrad,border:"none",borderRadius:10,color:"#fff",padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Save</button>
+              <button onClick={()=>{setRenameVal(name);setRenamingProject(false);}} style={iconBtn}>{Icon.close()}</button>
+            </div>
+          ):(
+            <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+              <div style={{fontSize:16,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
+              <button onClick={()=>{setRenameVal(name);setRenamingProject(true);}} style={{...iconBtn,flexShrink:0,width:26,height:26,borderRadius:7}} title="Rename project">{Icon.pencil()}</button>
+            </div>
+          )}
+          {!renamingProject&&<button onClick={close} style={{...iconBtn,flexShrink:0}}>{Icon.close()}</button>}
         </div>
 
         {/* Tab bar */}
@@ -1303,6 +1394,28 @@ export default function App() {
   const saveGoal=async v=>{setGoalHours(v);await persistGoal(v);setGoalEditOpen(false);};
   const saveGlobalFolder=async v=>{setGlobalAudioFolder(v);try{await storage.set("music_global_audio_folder",v);}catch{}};
 
+  const renameProject=async(oldName,newName)=>{
+    if(!newName||newName===oldName||projects.find(p=>p.name===newName))return;
+    // Update projects list
+    const nextProjects=projects.map(p=>p.name===oldName?{...p,name:newName}:p);
+    setProjects(nextProjects);await persistProjects(nextProjects);
+    // Update sessions that reference this project
+    const nextSessions=sessions.map(s=>s.project===oldName?{...s,project:newName}:s);
+    setSessions(nextSessions);await persistSessions(nextSessions);
+    // Rename the audio files key server-side
+    await fetch("/api/projects/rename",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({oldName,newName})}).catch(()=>{});
+    // Update scan folders key
+    try{
+      const r=await storage.get("music_scan_folders");
+      const folders=r?.value?JSON.parse(r.value):{};
+      if(folders[oldName]){folders[newName]=folders[oldName];delete folders[oldName];await storage.set("music_scan_folders",JSON.stringify(folders));}
+    }catch{}
+    // Update audio counts map
+    setAudioFileCounts(prev=>{const next={...prev};if(next[oldName]!==undefined){next[newName]=next[oldName];delete next[oldName];}return next;});
+    // Keep panel open with new name
+    setNotesModal(newName);
+  };
+
   const downloadBackup=async()=>{
     const data={exportDate:new Date().toISOString(),sessions,projects};
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
@@ -1394,7 +1507,7 @@ export default function App() {
     <ThemeCtx.Provider value={C}>
     <div className="app" style={{background:C.bg}}>
 
-      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder}/>}
+      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject}/>}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
       {settingsOpen&&<SettingsSheet currentTheme={themeKey} onThemeChange={changeTheme} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder}/>}

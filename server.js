@@ -187,18 +187,24 @@ app.post("/api/audio/:project/upload", upload.single("file"), async (req, res) =
   res.json({ file: meta });
 });
 
-// Scan a folder — finds .wav/.mp3 files and registers them without copying
+// Recursively walk a directory, returning full file paths (skips unreadable dirs)
+function walkDir(dir) {
+  const results = [];
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) results.push(...walkDir(full));
+      else results.push(full);
+    }
+  } catch {} // silently skip permission-denied dirs
+  return results;
+}
+
+// Scan a folder (recursively) — finds .wav/.mp3 files and registers them without copying
 app.post("/api/audio/:project/scan", async (req, res) => {
-  const { folderPath } = req.body;
+  const { folderPath, nameFilter } = req.body;
   if (!folderPath) return res.status(400).json({ error: "folderPath required" });
   if (!existsSync(folderPath)) return res.status(404).json({ error: "Folder not found" });
-
-  let entries;
-  try {
-    entries = readdirSync(folderPath);
-  } catch (e) {
-    return res.status(500).json({ error: `Cannot read folder: ${e.message}` });
-  }
 
   const data = readData();
   if (!data.music_audio_files) data.music_audio_files = {};
@@ -206,13 +212,11 @@ app.post("/api/audio/:project/scan", async (req, res) => {
   const existing = data.music_audio_files[req.params.project];
   const existingPaths = new Set(existing.map(f => f.linkedPath).filter(Boolean));
 
-  const { nameFilter } = req.body; // optional: only register files whose basename contains this string
   const audioExts = [".wav", ".mp3"];
-  const toAdd = entries
-    .filter(e => audioExts.includes(extname(e).toLowerCase()))
-    .filter(e => !nameFilter || basename(e, extname(e)).toLowerCase().includes(nameFilter.toLowerCase()))
-    .map(e => join(folderPath, e))
-    .filter(p => !existingPaths.has(p));
+  const toAdd = walkDir(folderPath)
+    .filter(f => audioExts.includes(extname(f).toLowerCase()))
+    .filter(f => !nameFilter || basename(f, extname(f)).toLowerCase().includes(nameFilter.toLowerCase()))
+    .filter(f => !existingPaths.has(f));
 
   const added = [];
   for (const filePath of toAdd) {
@@ -270,6 +274,19 @@ app.delete("/api/audio/:project/:id", (req, res) => {
     try { unlinkSync(join(AUDIO_DIR, file.filename)); } catch {}
   }
   data.music_audio_files[project] = files.filter(f => f.id !== id);
+  writeData(data);
+  res.json({ ok: true });
+});
+
+// Rename a project — updates the key in music_audio_files
+app.post("/api/projects/rename", (req, res) => {
+  const { oldName, newName } = req.body;
+  if (!oldName || !newName) return res.status(400).json({ error: "oldName and newName required" });
+  const data = readData();
+  if (data.music_audio_files?.[oldName] !== undefined) {
+    data.music_audio_files[newName] = data.music_audio_files[oldName];
+    delete data.music_audio_files[oldName];
+  }
   writeData(data);
   res.json({ ok: true });
 });
