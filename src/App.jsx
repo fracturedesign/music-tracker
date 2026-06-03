@@ -983,8 +983,11 @@ export default function App() {
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 2px 4px"}}>
         <div>
-          <div style={{fontSize:25,fontWeight:700,letterSpacing:"-0.02em",color:C.text}}>Studio Log</div>
-          <div style={{fontSize:13,color:C.faint,marginTop:1}}>Keep the habit. One session at a time.</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <img src="/icon.svg" alt="" style={{width:34,height:34,borderRadius:8,flexShrink:0}} />
+            <div style={{fontSize:25,fontWeight:700,letterSpacing:"-0.02em",color:C.text}}>Orbit</div>
+          </div>
+          <div style={{fontSize:13,color:C.faint,marginTop:4,paddingLeft:44}}>Keep the habit. One session at a time.</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <button onClick={()=>setSettingsOpen(true)} style={iconBtn}>{Icon.gear(C.faint)}</button>

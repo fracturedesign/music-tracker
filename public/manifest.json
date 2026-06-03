@@ -1,7 +1,7 @@
 {
-  "name": "Studio Log",
-  "short_name": "Studio Log",
-  "description": "Music production session tracker",
+  "name": "Orbit",
+  "short_name": "Orbit",
+  "description": "Music production tracker",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0b10",
