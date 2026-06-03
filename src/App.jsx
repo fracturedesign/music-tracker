@@ -515,7 +515,8 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
           fetch(`/api/data/music_scan_folders`).then(r=>r.json()),
           fetch(`/api/data/music_audio_filters`).then(r=>r.json()),
         ]);
-        setFiles(fr.files||[]);
+        const loadedFiles=fr.files||[];
+        setFiles(loadedFiles);
         const savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
         if(savedPath){
           setScanPath(savedPath);
@@ -523,14 +524,25 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
           const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
           if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
         }
-        if(filt?.value){try{setActiveFilters(JSON.parse(filt.value));}catch{}}
+        if(filt?.value){
+          try{
+            const all=JSON.parse(filt.value);
+            const saved=all?.[projectName]||{formats:[],versions:[]};
+            setActiveFilters(saved);
+          }catch{}
+        }
       }catch{}
       setLoading(false);
     })();
   },[projectName]);// eslint-disable-line
 
-  const saveFilters=async filters=>{
-    try{await fetch(`/api/data/music_audio_filters`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(filters)})});}catch{}
+  const saveFilters=async(filters,files_)=>{
+    try{
+      const r=await fetch(`/api/data/music_audio_filters`).then(x=>x.json());
+      const all=r?.value?JSON.parse(r.value):{};
+      all[projectName]=filters;
+      await fetch(`/api/data/music_audio_filters`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(all)})});
+    }catch{}
   };
 
   const toggleFilter=(type,value)=>{
@@ -716,8 +728,13 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
       ):files.length===0?(
         <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a file or scan a folder.</div>
       ):(()=>{
-        const fmtF=activeFilters.formats||[];
-        const verF=activeFilters.versions||[];
+        // Only apply filter values that actually exist in the current file list
+        const availFmts=new Set(files.map(f=>(f.format||"").toUpperCase()).filter(f=>["WAV","MP3"].includes(f)));
+        const availVers=new Set(files.map(f=>extractVersion(f.name)).filter(Boolean));
+        const hasVNum=files.some(f=>/\bv\d/i.test(f.name||""));
+        if(hasVNum)availVers.add("versioned");
+        const fmtF=(activeFilters.formats||[]).filter(v=>availFmts.has(v));
+        const verF=(activeFilters.versions||[]).filter(v=>availVers.has(v));
         const visible=sortAudioFiles(files).filter(f=>{
           if(fmtF.length>0){
             const fmt=(f.format||"").toUpperCase();
