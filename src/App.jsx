@@ -284,33 +284,13 @@ function extractVersion(name) {
   return m ? m[0].toLowerCase() : null;
 }
 
-/* ─── audio metric tile ─── */
-function MetricTile({icon,primary,primarySuffix,secondary,secondarySuffix,warn,C}) {
-  const warnCol="#fb923c";
-  return (
-    <div style={{background:C.surf2,borderRadius:10,padding:"8px 8px 7px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:0}}>
-      <div style={{opacity:.55,lineHeight:0}}>{icon}</div>
-      <div style={{textAlign:"center",lineHeight:1.2,marginTop:1}}>
-        <span style={{fontSize:14,fontWeight:700,color:warn?warnCol:C.text,letterSpacing:"-0.01em"}}>{primary??<span style={{color:C.dim,fontSize:13}}>—</span>}</span>
-        {primarySuffix&&<span style={{fontSize:9,fontWeight:700,color:warn?warnCol:C.dim,marginLeft:2,letterSpacing:"0.04em"}}>{primarySuffix}</span>}
-      </div>
-      {secondary!=null&&(
-        <div style={{textAlign:"center",lineHeight:1.2}}>
-          <span style={{fontSize:11.5,fontWeight:600,color:C.muted}}>{secondary}</span>
-          {secondarySuffix&&<span style={{fontSize:9,fontWeight:700,color:C.dim,marginLeft:2,letterSpacing:"0.04em"}}>{secondarySuffix}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ─── audio file card ─── */
 function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const waveRef=useRef(null);
   const wsRef=useRef(null);
   const [playing,setPlaying]=useState(false);
-  const [currentTime,setCurrentTime]=useState(false);
+  const [currentTime,setCurrentTime]=useState(0);
   const [wsReady,setWsReady]=useState(false);
   const [editing,setEditing]=useState(false);
   const [nameVal,setNameVal]=useState(file.name);
@@ -320,7 +300,6 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
     ?`/api/audio/${encodeURIComponent(projectName)}/stream/${file.id}`
     :`/api/audio/files/${encodeURIComponent(file.filename)}`;
 
-  // Stop this card when another card starts playing
   useEffect(()=>{
     const handler=e=>{if(e.detail.id!==file.id)wsRef.current?.pause();};
     audioEventBus.addEventListener("audioplay",handler);
@@ -332,7 +311,7 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
     if(!container)return;
     const ws=WaveSurfer.create({
       container,waveColor:C.dim,progressColor:C.indigo,
-      height:46,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,
+      height:44,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,
     });
     wsRef.current=ws;
     ws.load(audioUrl);
@@ -357,21 +336,21 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
   const version=extractVersion(file.name);
   const peakWarn=file.truePeak!=null&&file.truePeak>-1;
 
-  // Compact 14px icons
-  const speakerIcon=<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 9v6h4l5 5V4L7 9H3z" stroke={C.indigo} strokeWidth="1.8" strokeLinejoin="round"/><path d="M16.5 7.5a5 5 0 0 1 0 9" stroke={C.indigo} strokeWidth="1.8" strokeLinecap="round"/></svg>;
-  const peakIcon=<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M2 12h3M5 12l2-5 3 10 3-14 3 12 2-5 2 2h2" stroke={peakWarn?"#fb923c":C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-  const drIcon=<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="15" width="2.5" height="6" rx=".8" fill={C.muted} opacity=".45"/><rect x="7.5" y="10" width="2.5" height="11" rx=".8" fill={C.muted} opacity=".65"/><rect x="12" y="6" width="2.5" height="15" rx=".8" fill={C.muted}/><rect x="16.5" y="12" width="2.5" height="9" rx=".8" fill={C.muted} opacity=".55"/></svg>;
+  // Which analysis values are present
+  const metrics=[
+    file.lufsIntegrated!=null&&{v:file.lufsIntegrated.toFixed(1),l:"INT"},
+    file.lufsShort!=null&&{v:file.lufsShort.toFixed(1),l:"ST"},
+    file.truePeak!=null&&{v:file.truePeak.toFixed(1),l:"dBTP",warn:peakWarn},
+    file.dr!=null&&{v:file.dr.toFixed(1),l:"LRA"},
+  ].filter(Boolean);
 
   return (
-    <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:14,padding:"13px 14px",marginBottom:10}}>
+    <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
       {/* Name row */}
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-        {/* Version badge */}
+      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:10}}>
         {version&&<span style={{flexShrink:0,fontSize:10,fontWeight:700,color:C.indigo,background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:5,padding:"2px 7px",textTransform:"uppercase",letterSpacing:"0.05em"}}>{version}</span>}
-        {/* Format badge */}
-        <span style={{flexShrink:0,fontSize:10,fontWeight:700,color:C.faint,background:C.surf2,border:`1px solid ${C.line}`,borderRadius:5,padding:"2px 7px",letterSpacing:"0.05em"}}>{file.format}</span>
-        {/* New badge */}
-        {file.isNew&&<span style={{flexShrink:0,fontSize:10,fontWeight:700,color:C.green,background:"rgba(52,211,153,0.12)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:5,padding:"2px 7px",letterSpacing:"0.05em"}}>NEW</span>}
+        <span style={{flexShrink:0,fontSize:10,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.line}`,borderRadius:5,padding:"2px 7px",letterSpacing:"0.04em"}}>{file.format}</span>
+        {file.isNew&&<span style={{flexShrink:0,fontSize:10,fontWeight:700,color:C.green,background:"rgba(52,211,153,0.1)",border:"1px solid rgba(52,211,153,0.28)",borderRadius:5,padding:"2px 7px",letterSpacing:"0.05em"}}>NEW</span>}
         {editing?(
           <input autoFocus value={nameVal} onChange={e=>setNameVal(e.target.value)}
             onBlur={saveRename} onKeyDown={e=>{if(e.key==="Enter")saveRename();if(e.key==="Escape"){setNameVal(file.name);setEditing(false);}}}
@@ -383,20 +362,22 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
         <span style={{fontSize:10.5,color:C.dim,flexShrink:0,whiteSpace:"nowrap"}}>
           {file.size!=null&&`${file.size} MB`}{file.duration?` · ${fmtSeconds(file.duration)}`:""}
         </span>
-        <button onClick={()=>onDelete(file.id)} style={{...iconBtn,flexShrink:0,width:28,height:28,borderRadius:8}}>{Icon.trash()}</button>
+        <button onClick={()=>onDelete(file.id)} style={{...iconBtn,flexShrink:0,width:26,height:26,borderRadius:7}}>{Icon.trash()}</button>
       </div>
 
-      {/* Metric tiles */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:10}}>
-        <MetricTile C={C} icon={speakerIcon}
-          primary={file.lufsIntegrated!=null?file.lufsIntegrated.toFixed(1):null} primarySuffix="INT"
-          secondary={file.lufsShort!=null?file.lufsShort.toFixed(1):null} secondarySuffix="ST"/>
-        <MetricTile C={C} icon={peakIcon}
-          primary={file.truePeak!=null?file.truePeak.toFixed(1):null} primarySuffix="dBTP"
-          warn={peakWarn}/>
-        <MetricTile C={C} icon={drIcon}
-          primary={file.dr!=null?file.dr.toFixed(1):null} primarySuffix="LRA"/>
-      </div>
+      {/* Inline analysis strip — no cards, just clean values */}
+      {metrics.length>0&&(
+        <div style={{display:"flex",alignItems:"center",borderTop:`1px solid ${C.line}`,borderBottom:`1px solid ${C.line}`,margin:"0 0 10px",padding:"6px 0",gap:0,flexWrap:"wrap"}}>
+          {metrics.map((m,i)=>(
+            <span key={i} style={{display:"flex",alignItems:"baseline",gap:2,paddingRight:14,
+              borderRight:i<metrics.length-1?`1px solid ${C.line}`:"none",
+              marginRight:i<metrics.length-1?14:0}}>
+              <span style={{fontSize:13.5,fontWeight:700,letterSpacing:"-0.02em",color:m.warn?"#fb923c":C.text}}>{m.v}</span>
+              <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.06em",color:m.warn?"#fb923c":C.dim}}>{m.l}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Waveform */}
       <div ref={waveRef} style={{marginBottom:8,opacity:wsReady?1:0.18,transition:"opacity .3s"}}/>
@@ -404,19 +385,35 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
       {/* Transport */}
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <button onClick={()=>wsRef.current?.playPause()} disabled={!wsReady}
-          style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.lineS}`,background:C.surf2,
+          style={{width:28,height:28,borderRadius:8,border:`1px solid ${C.lineS}`,background:C.surf2,
             cursor:wsReady?"pointer":"default",display:"grid",placeItems:"center",flexShrink:0,padding:0,opacity:wsReady?1:0.4}}>
           {playing
-            ?<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
-            :<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+            ?<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+            :<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
           }
         </button>
         <span className="mono" style={{fontSize:11,color:C.faint}}>{fmtSeconds(currentTime)} / {fmtSeconds(file.duration)}</span>
         {!wsReady&&<span style={{fontSize:10.5,color:C.dim}}>Loading…</span>}
-        {file.linkedPath&&<span style={{marginLeft:"auto",fontSize:9.5,color:C.dim}} title={file.linkedPath}>linked</span>}
+        {file.linkedPath&&<span style={{marginLeft:"auto",fontSize:9.5,color:C.dim,opacity:.6}} title={file.linkedPath}>linked</span>}
       </div>
     </div>
   );
+}
+
+/* ─── sort audio files: NEW first, then by version desc, then by date desc ─── */
+function sortAudioFiles(files) {
+  const vNum=name=>{
+    const m=(name||"").match(/\bv(\d+(?:[._]\d+)*)\b/i);
+    if(!m)return -1;
+    return parseFloat(m[1].replace(/_/g,"."));
+  };
+  return [...files].sort((a,b)=>{
+    if(a.isNew&&!b.isNew)return -1;
+    if(!a.isNew&&b.isNew)return 1;
+    const vd=vNum(b.name)-vNum(a.name);
+    if(vd!==0)return vd;
+    return new Date(b.scannedAt||b.uploadedAt||0)-new Date(a.scannedAt||a.uploadedAt||0);
+  });
 }
 
 /* ─── versions tab ─── */
@@ -431,10 +428,8 @@ function VersionsTab({projectName,onCountChange}) {
   const [showScan,setShowScan]=useState(false);
   const fileInputRef=useRef(null);
 
-  // Report count up whenever files change
   useEffect(()=>{onCountChange?.(files.length);},[files.length]);// eslint-disable-line
 
-  // Load files + saved scan path, then auto-scan if path is set
   useEffect(()=>{
     (async()=>{
       try{
@@ -443,10 +438,10 @@ function VersionsTab({projectName,onCountChange}) {
           fetch(`/api/data/music_scan_folders`).then(r=>r.json()),
         ]);
         setFiles(fr.files||[]);
-        const savedPath=pr?.value?JSON.parse(pr.value)?.[projectName]:"";
+        const savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
         if(savedPath){
           setScanPath(savedPath);
-          // auto-scan silently
+          setShowScan(true); // show the panel so user can see the saved path
           const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
           if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
         }
@@ -558,7 +553,7 @@ function VersionsTab({projectName,onCountChange}) {
       ):files.length===0?(
         <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a file or scan a folder.</div>
       ):(
-        files.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName}
+        sortAudioFiles(files).map(f=><AudioFileCard key={f.id} file={f} projectName={projectName}
           onDelete={handleDelete} onRename={handleRename} onMarkSeen={handleMarkSeen}/>)
       )}
     </div>
@@ -579,6 +574,10 @@ function ProjectPanel({name,notes,onSave,onClose}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [tab,setTab]=useState("open");
   const [versionsCount,setVersionsCount]=useState(null);
+  useEffect(()=>{
+    fetch(`/api/audio/${encodeURIComponent(name)}`).then(r=>r.json())
+      .then(d=>setVersionsCount(d.files?.length??0)).catch(()=>{});
+  },[name]);
   const [text,setText]=useState(notes||"");
   const [lines,setLines]=useState(()=>parseLines(notes));
   const [mode,setMode]=useState("preview");
@@ -1047,6 +1046,7 @@ export default function App() {
   const [goalEditOpen,setGoalEditOpen]=useState(false);
   const [showDone,setShowDone]=useState(false);
   const [showReleased,setShowReleased]=useState(false);
+  const [audioFileCounts,setAudioFileCounts]=useState({});
   const [toast,setToast]=useState("");
   const toastTimer=useRef(null);
   const toastQueue=useRef([]);
@@ -1059,6 +1059,7 @@ export default function App() {
       try{const g=await storage.get("music_goal");if(g?.value)setGoalHours(JSON.parse(g.value));}catch{}
       try{const m=await storage.get("music_milestones");if(m?.value)setUnlockedMilestones(JSON.parse(m.value));}catch{}
       try{const t=await storage.get("music_timer");if(t?.value)setTimer(JSON.parse(t.value));}catch{}
+      try{const af=await storage.get("music_audio_files");if(af?.value&&typeof af.value==="object"){setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}}catch{}
       setLoaded(true);
     })();
   },[]);
@@ -1289,7 +1290,15 @@ export default function App() {
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-          <div style={{fontSize:11.5,color:C.faint,marginTop:2}}>{projectCounts[p.name]?`${projectCounts[p.name]} session${projectCounts[p.name]>1?"s":""}`:  "no sessions yet"}</div>
+          <div style={{fontSize:11.5,color:C.faint,marginTop:2,display:"flex",alignItems:"center",gap:8}}>
+            <span>{projectCounts[p.name]?`${projectCounts[p.name]} session${projectCounts[p.name]>1?"s":""}`:  "no sessions yet"}</span>
+            {(audioFileCounts[p.name]||0)>0&&(
+              <span style={{display:"flex",alignItems:"center",gap:3,color:C.dim}}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                {audioFileCounts[p.name]}
+              </span>
+            )}
+          </div>
         </div>
         {!showRestore&&<StatusDropdown name={p.name} status={p.status||"active"}/>}
         <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:"auto",padding:"0 10px",gap:5,display:"flex"}}>
