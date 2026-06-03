@@ -1421,66 +1421,62 @@ function ABCompare({files,projectName,onClose}) {
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
 
   const playingRef=useRef(false);
-  // Shared AudioContext — iOS only allows one active context at a time
-  const audioCtxRef=useRef(null);
-  const getCtx=()=>{
-    if(!audioCtxRef.current)audioCtxRef.current=new(window.AudioContext||window.webkitAudioContext)();
-    return audioCtxRef.current;
+  // Native audio elements — iOS plays these reliably, one at a time
+  const audioA=useRef(null);
+  const audioB=useRef(null);
+  const getAudio=(side)=>{
+    if(side==="A"){if(!audioA.current)audioA.current=new Audio();return audioA.current;}
+    if(!audioB.current)audioB.current=new Audio();return audioB.current;
   };
-  useEffect(()=>()=>{audioCtxRef.current?.close();},[]);
 
-  const initWS=(ref,wsRef,fileId,setReady,side)=>{
+  const initWS=(ref,wsRef,side,fileId,setReady)=>{
     if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
     setReady(false);
     const f=fileMap[fileId];if(!f||!ref.current)return;
+    const audio=getAudio(side);
+    // WaveSurfer uses the audio element for playback; renders waveform from URL
     const ws=WaveSurfer.create({
-      container:ref.current,audioContext:getCtx(),
+      container:ref.current,media:audio,
       waveColor:C.dim,progressColor:side==="A"?C.indigo:C.green,
       height:40,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,
     });
     wsRef.current=ws;
-    ws.setVolume(side===activeRef.current?1:0);
     ws.load(audioUrl(f));
     ws.on("ready",()=>setReady(true));
     ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
     ws.on("finish",()=>{playingRef.current=false;setPlaying(false);setCurrentTime(0);});
   };
 
-  useEffect(()=>{initWS(waveRefA,wsA,slotA,setReadyA,"A");},[slotA]);// eslint-disable-line
-  useEffect(()=>{initWS(waveRefB,wsB,slotB,setReadyB,"B");},[slotB]);// eslint-disable-line
-  useEffect(()=>()=>{wsA.current?.destroy();wsB.current?.destroy();},[]);
+  useEffect(()=>{initWS(waveRefA,wsA,"A",slotA,setReadyA);},[slotA]);// eslint-disable-line
+  useEffect(()=>{initWS(waveRefB,wsB,"B",slotB,setReadyB);},[slotB]);// eslint-disable-line
+  useEffect(()=>()=>{
+    wsA.current?.destroy();wsB.current?.destroy();
+    audioA.current?.pause();audioB.current?.pause();
+  },[]);
 
   const toggle=()=>{
     if(!readyA||!readyB)return;
     const next=active==="A"?"B":"A";
-    const fromWs=active==="A"?wsA.current:wsB.current;
-    const toWs=active==="A"?wsB.current:wsA.current;
-    const toFile=fileMap[next==="A"?slotA:slotB];
-    // Snapshot active track position
-    const t=fromWs?.getCurrentTime?.()??0;
-    // Pause+seek the incoming track while it's still muted — safe, no audio disruption
-    toWs?.pause();
-    if(toFile?.duration)toWs?.seekTo(Math.min(t/toFile.duration,1));
-    // Swap volumes
+    const fromAudio=active==="A"?audioA.current:audioB.current;
+    const toAudio=active==="A"?audioB.current:audioA.current;
+    // Sync position via native currentTime — instant for buffered audio
+    const t=fromAudio?.currentTime??0;
+    fromAudio?.pause();
+    if(toAudio&&!isNaN(toAudio.duration))toAudio.currentTime=Math.min(t,toAudio.duration);
     activeRef.current=next;
     setActive(next);
-    fromWs?.setVolume(0);
-    toWs?.setVolume(1);
-    // Resume incoming if we were playing
-    if(playingRef.current)toWs?.play();
+    if(playingRef.current)toAudio?.play();
   };
 
   const handlePlay=()=>{
-    getCtx().resume(); // required for iOS
-    const wsActive=active==="A"?wsA.current:wsB.current;
-    const wsInactive=active==="A"?wsB.current:wsA.current;
+    const audio=active==="A"?audioA.current:audioB.current;
     const ready=active==="A"?readyA:readyB;
-    if(!wsActive||!ready)return;
+    if(!audio||!ready)return;
     if(playing){
-      wsActive.pause();wsInactive?.pause();
+      audioA.current?.pause();audioB.current?.pause();
       playingRef.current=false;setPlaying(false);
     }else{
-      wsActive.play();wsInactive?.play();
+      audio.play();
       playingRef.current=true;setPlaying(true);
     }
   };
