@@ -1458,14 +1458,24 @@ function ABCompare({files,projectName,onClose}) {
   useEffect(()=>{initWS(waveRefB,wsB,slotB,setReadyB,"B");},[slotB]);// eslint-disable-line
   useEffect(()=>()=>{wsA.current?.destroy();wsB.current?.destroy();},[]);
 
-  // Instant switch: mute inactive, unmute active — both keep playing
+  // Crossfade switch: ramp volumes over 40ms to avoid WebAudio click
   const toggle=()=>{
     if(!readyA||!readyB)return;
     const next=active==="A"?"B":"A";
     activeRef.current=next;
     setActive(next);
-    wsA.current?.setVolume(next==="A"?1:0);
-    wsB.current?.setVolume(next==="B"?1:0);
+    const fromWs=next==="A"?wsB.current:wsA.current;
+    const toWs=next==="A"?wsA.current:wsB.current;
+    const steps=8,ms=40/steps;
+    let i=0;
+    const tick=()=>{
+      i++;
+      const t=i/steps;
+      fromWs?.setVolume(1-t);
+      toWs?.setVolume(t);
+      if(i<steps)setTimeout(tick,ms);
+    };
+    tick();
   };
 
   const handlePlay=()=>{
