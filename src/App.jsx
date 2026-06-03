@@ -19,71 +19,81 @@ const THEMES = {
     accentBorder: "rgba(129,140,248,0.5)",
     todayBg: "linear-gradient(160deg,#1c1c34,#131326)",
     timerBg: "linear-gradient(160deg,#241c3a,#15131f)",
+    loggedBg: "linear-gradient(160deg,#16261f,#111a17)",
+    loggedBorder: "rgba(52,211,153,0.35)",
     heat: ["#16162a","#312e81","#4f46e5","#7c8cf8","#a5b4fc"],
   },
-  amber: {
-    name: "Midnight Amber", emoji: "🔆",
-    bg: "#0d0900", surf: "#141008", surf2: "#1c1a0e",
-    line: "rgba(255,220,100,0.06)", lineS: "rgba(255,210,80,0.1)",
-    text: "#f5f0e8", muted: "#a09080", faint: "#7a6e5e", dim: "#5a5040",
-    indigo: "#fbbf24", deep: "#d97706",
-    green: "#34d399", greenS: "#6ee7b7", flame: "#fb923c",
-    accentGrad: "linear-gradient(135deg,#fbbf24,#d97706)",
-    accentGlow: "rgba(217,119,6,0.55)",
-    accentAlpha: "rgba(251,191,36,0.16)",
-    accentAlpha2: "rgba(251,191,36,0.12)",
-    accentBorder: "rgba(251,191,36,0.5)",
-    todayBg: "linear-gradient(160deg,#1c1600,#131000)",
-    timerBg: "linear-gradient(160deg,#241e00,#181200)",
-    heat: ["#1a1200","#3d2e00","#7a5a00","#c9860a","#f0b429"],
+  paper: {
+    name: "Paper", emoji: "📄",
+    bg: "#f7f7f5", surf: "#ffffff", surf2: "#eeeeeb",
+    line: "rgba(0,0,0,0.07)", lineS: "rgba(0,0,0,0.12)",
+    text: "#16162a", muted: "#6b6b82", faint: "#9090a8", dim: "#b4b4c8",
+    indigo: "#5558e8", deep: "#4f46e5",
+    green: "#059669", greenS: "#10b981", flame: "#ea580c",
+    accentGrad: "linear-gradient(135deg,#6366f1,#4f46e5)",
+    accentGlow: "rgba(99,102,241,0.22)",
+    accentAlpha: "rgba(99,102,241,0.1)",
+    accentAlpha2: "rgba(99,102,241,0.07)",
+    accentBorder: "rgba(99,102,241,0.3)",
+    todayBg: "linear-gradient(160deg,#eef0ff,#f4f4ff)",
+    timerBg: "linear-gradient(160deg,#f0ecff,#ece8ff)",
+    loggedBg: "linear-gradient(160deg,#ecfdf5,#f0fdf6)",
+    loggedBorder: "rgba(5,150,105,0.3)",
+    heat: ["#e4e4ee","#c4b5fd","#818cf8","#4f46e5","#312e81"],
   },
-  forest: {
-    name: "Deep Forest", emoji: "🌲",
-    bg: "#050e07", surf: "#0a160c", surf2: "#0f2012",
-    line: "rgba(100,255,150,0.055)", lineS: "rgba(100,255,150,0.1)",
-    text: "#e8f5ec", muted: "#7a9e84", faint: "#5a7e64", dim: "#3a5e44",
-    indigo: "#4ade80", deep: "#22c55e",
-    green: "#34d399", greenS: "#6ee7b7", flame: "#fb923c",
-    accentGrad: "linear-gradient(135deg,#4ade80,#22c55e)",
-    accentGlow: "rgba(34,197,94,0.6)",
-    accentAlpha: "rgba(74,222,128,0.16)",
-    accentAlpha2: "rgba(74,222,128,0.12)",
-    accentBorder: "rgba(74,222,128,0.5)",
-    todayBg: "linear-gradient(160deg,#0a1e0e,#061208)",
-    timerBg: "linear-gradient(160deg,#0f2a12,#081808)",
-    heat: ["#051a08","#0e3a14","#1a6828","#2ea84c","#4ade80"],
+  sand: {
+    name: "Warm Sand", emoji: "🏖",
+    bg: "#faf7f0", surf: "#ffffff", surf2: "#f2ede3",
+    line: "rgba(0,0,0,0.07)", lineS: "rgba(0,0,0,0.12)",
+    text: "#1c1608", muted: "#786a52", faint: "#9e9078", dim: "#c0b49a",
+    indigo: "#c2611a", deep: "#b45309",
+    green: "#059669", greenS: "#10b981", flame: "#ea580c",
+    accentGrad: "linear-gradient(135deg,#f59e0b,#d97706)",
+    accentGlow: "rgba(217,119,6,0.22)",
+    accentAlpha: "rgba(217,119,6,0.1)",
+    accentAlpha2: "rgba(217,119,6,0.07)",
+    accentBorder: "rgba(217,119,6,0.35)",
+    todayBg: "linear-gradient(160deg,#fffbeb,#fef3c7)",
+    timerBg: "linear-gradient(160deg,#fff7ed,#feebc8)",
+    loggedBg: "linear-gradient(160deg,#ecfdf5,#f0fdf6)",
+    loggedBorder: "rgba(5,150,105,0.3)",
+    heat: ["#e8dfc8","#fcd34d","#f59e0b","#d97706","#92400e"],
   },
-  aurora: {
-    name: "Aurora", emoji: "🌊",
-    bg: "#050d0e", surf: "#091516", surf2: "#0e1e20",
-    line: "rgba(100,220,240,0.055)", lineS: "rgba(100,220,240,0.1)",
-    text: "#e8f5f7", muted: "#7a9ea4", faint: "#5a7e84", dim: "#3a5e64",
-    indigo: "#22d3ee", deep: "#0891b2",
+  slate: {
+    name: "Slate", emoji: "🪨",
+    bg: "#1c1f26", surf: "#252930", surf2: "#2e333c",
+    line: "rgba(255,255,255,0.07)", lineS: "rgba(255,255,255,0.12)",
+    text: "#dde2ec", muted: "#8892a4", faint: "#666e80", dim: "#454d5e",
+    indigo: "#60a5fa", deep: "#3b82f6",
     green: "#34d399", greenS: "#6ee7b7", flame: "#fb923c",
-    accentGrad: "linear-gradient(135deg,#22d3ee,#0891b2)",
-    accentGlow: "rgba(8,145,178,0.6)",
-    accentAlpha: "rgba(34,211,238,0.16)",
-    accentAlpha2: "rgba(34,211,238,0.12)",
-    accentBorder: "rgba(34,211,238,0.5)",
-    todayBg: "linear-gradient(160deg,#091e22,#051418)",
-    timerBg: "linear-gradient(160deg,#0c282e,#071a20)",
-    heat: ["#051518","#0a2e36","#0e5a6e","#0e9ab2","#22d3ee"],
+    accentGrad: "linear-gradient(135deg,#60a5fa,#3b82f6)",
+    accentGlow: "rgba(59,130,246,0.5)",
+    accentAlpha: "rgba(96,165,250,0.15)",
+    accentAlpha2: "rgba(96,165,250,0.1)",
+    accentBorder: "rgba(96,165,250,0.4)",
+    todayBg: "linear-gradient(160deg,#1a2540,#16213a)",
+    timerBg: "linear-gradient(160deg,#1c2545,#18213e)",
+    loggedBg: "linear-gradient(160deg,#142820,#10201a)",
+    loggedBorder: "rgba(52,211,153,0.3)",
+    heat: ["#22262e","#1e3a5c","#1d4f8a","#2563eb","#60a5fa"],
   },
-  rose: {
-    name: "Rose Noir", emoji: "🌹",
-    bg: "#0d0508", surf: "#160a0e", surf2: "#200e14",
-    line: "rgba(255,100,150,0.055)", lineS: "rgba(255,100,150,0.1)",
-    text: "#f8eef2", muted: "#9e7a86", faint: "#7e5a66", dim: "#5e3a46",
-    indigo: "#fb7185", deep: "#e11d48",
+  dusk: {
+    name: "Dusk", emoji: "🌅",
+    bg: "#1c1824", surf: "#252132", surf2: "#2e2a3e",
+    line: "rgba(255,220,255,0.06)", lineS: "rgba(255,220,255,0.1)",
+    text: "#ece8f5", muted: "#9890b0", faint: "#726888", dim: "#504868",
+    indigo: "#c084fc", deep: "#a855f7",
     green: "#34d399", greenS: "#6ee7b7", flame: "#fb923c",
-    accentGrad: "linear-gradient(135deg,#fb7185,#e11d48)",
-    accentGlow: "rgba(225,29,72,0.55)",
-    accentAlpha: "rgba(251,113,133,0.16)",
-    accentAlpha2: "rgba(251,113,133,0.12)",
-    accentBorder: "rgba(251,113,133,0.5)",
-    todayBg: "linear-gradient(160deg,#200a10,#140608)",
-    timerBg: "linear-gradient(160deg,#2a0e16,#180a10)",
-    heat: ["#1a050c","#3a0e1a","#701828","#b8203e","#fb7185"],
+    accentGrad: "linear-gradient(135deg,#c084fc,#a855f7)",
+    accentGlow: "rgba(168,85,247,0.5)",
+    accentAlpha: "rgba(192,132,252,0.16)",
+    accentAlpha2: "rgba(192,132,252,0.11)",
+    accentBorder: "rgba(192,132,252,0.4)",
+    todayBg: "linear-gradient(160deg,#2a1e3c,#221830)",
+    timerBg: "linear-gradient(160deg,#321e46,#281840)",
+    loggedBg: "linear-gradient(160deg,#162420,#121e1a)",
+    loggedBorder: "rgba(52,211,153,0.3)",
+    heat: ["#201c2c","#3b1a5e","#6b21a8","#9333ea","#c084fc"],
   },
 };
 
@@ -93,7 +103,7 @@ function getStyles(C) {
     eyebrow: { fontSize: 11.5, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.faint, whiteSpace: "nowrap" },
     iconBtn: {
       width: 32, height: 32, borderRadius: 9, display: "grid", placeItems: "center", cursor: "pointer",
-      border: `1px solid ${C.lineS}`, background: "rgba(255,255,255,0.03)", flexShrink: 0, padding: 0,
+      border: `1px solid ${C.lineS}`, background: C.surf2, flexShrink: 0, padding: 0,
     },
   };
 }
@@ -517,8 +527,14 @@ export default function App() {
 
   useEffect(()=>{
     document.body.style.background=C.bg;
-    document.documentElement.style.setProperty("--indigo",C.indigo);
-    document.documentElement.style.setProperty("--indigo-deep",C.deep);
+    const r=document.documentElement;
+    r.style.setProperty("--indigo",C.indigo);
+    r.style.setProperty("--indigo-deep",C.deep);
+    r.style.setProperty("--surface-2",C.surf2);
+    r.style.setProperty("--line",C.line);
+    r.style.setProperty("--text",C.text);
+    r.style.setProperty("--dim",C.dim);
+    r.style.setProperty("--surface",C.surf);
   },[C]);
 
   const changeTheme=key=>{localStorage.setItem("music_theme",key);setThemeKey(key);};
@@ -693,8 +709,8 @@ export default function App() {
 
       {/* Today card */}
       <div className="card" style={{...card,padding:22,
-        background:showTimerUI?(timer.phase==="done"?"linear-gradient(160deg,#16261f,#111a17)":C.timerBg):todayHasSession?"linear-gradient(160deg,#16261f,#111a17)":C.todayBg,
-        border:showTimerUI?(timer.phase==="done"?"1px solid rgba(52,211,153,0.4)":`1px solid ${C.accentBorder}`):todayHasSession?"1px solid rgba(52,211,153,0.3)":`1px solid ${C.accentBorder}`}}>
+        background:showTimerUI?(timer.phase==="done"?C.loggedBg:C.timerBg):todayHasSession?C.loggedBg:C.todayBg,
+        border:showTimerUI?(timer.phase==="done"?`1px solid ${C.loggedBorder}`:`1px solid ${C.accentBorder}`):todayHasSession?`1px solid ${C.loggedBorder}`:`1px solid ${C.accentBorder}`}}>
         {timer.phase==="setup" ? (
           <>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
