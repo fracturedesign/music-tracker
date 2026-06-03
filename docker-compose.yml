@@ -1,0 +1,11 @@
+services:
+  music-tracker:
+    build: .
+    container_name: music-tracker
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - /mnt/user/appdata/music-tracker:/data
+    environment:
+      - DATA_PATH=/data/data.json
