@@ -1420,13 +1420,20 @@ function ABCompare({files,projectName,onClose}) {
   const fileMap=Object.fromEntries(files.map(f=>[f.id,f]));
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
 
+  const playingRef=useRef(false);
+
   const syncTo=(targetWs,timeSeconds)=>{
     if(!targetWs||syncingRef.current)return;
     const dur=targetWs.getDuration?.();
     if(!dur)return;
     syncingRef.current=true;
     targetWs.seekTo(Math.min(timeSeconds/dur,1));
-    syncingRef.current=false;
+    // Hold the flag for one frame so the other instance's async seeking event is suppressed
+    requestAnimationFrame(()=>{
+      syncingRef.current=false;
+      // If playback dropped (WebAudio reinitialises source on seek), resume it
+      if(playingRef.current&&!targetWs.isPlaying?.())targetWs.play().catch(()=>{});
+    });
   };
 
   const initWS=(ref,wsRef,fileId,setReady,side)=>{
@@ -1439,7 +1446,7 @@ function ABCompare({files,projectName,onClose}) {
     ws.load(audioUrl(f));
     ws.on("ready",()=>setReady(true));
     ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
-    ws.on("finish",()=>{setPlaying(false);setCurrentTime(0);});
+    ws.on("finish",()=>{playingRef.current=false;setPlaying(false);setCurrentTime(0);});
     ws.on("seeking",t=>{
       if(syncingRef.current)return;
       const other=side==="A"?wsB.current:wsA.current;
@@ -1468,10 +1475,10 @@ function ABCompare({files,projectName,onClose}) {
     if(!wsActive||!ready)return;
     if(playing){
       wsActive.pause();wsInactive?.pause();
-      setPlaying(false);
+      playingRef.current=false;setPlaying(false);
     } else {
       wsActive.play();wsInactive?.play();
-      setPlaying(true);
+      playingRef.current=true;setPlaying(true);
     }
   };
 
