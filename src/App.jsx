@@ -453,6 +453,7 @@ export default function App() {
         const p = await storage.get("music_projects");
         if (p?.value) { const raw = JSON.parse(p.value); setProjects(raw.map(x => typeof x === "string" ? { name: x, notes: "" } : x)); }
       } catch {}
+      try { const t = await storage.get("music_timer"); if (t?.value) setTimer(JSON.parse(t.value)); } catch {}
       setLoaded(true);
     })();
   }, []);
@@ -468,14 +469,34 @@ export default function App() {
 
   /* countdown timer — persisted per-device */
   const TIMER_PRESETS = [30, 45, 60, 90];
-  const [timer, setTimer] = useState(() => {
-    try { const r = JSON.parse(localStorage.getItem("music_timer")); if (r && typeof r === "object" && r.phase) return r; } catch {}
-    return { phase: "idle", target: 0, endsAt: 0, remaining: 0 };
-  });
+  const [timer, setTimer] = useState({ phase: "idle", target: 0, endsAt: 0, remaining: 0 });
   const [customMin, setCustomMin] = useState("");
   const [prompt] = useState(() => PROMPTS[Math.floor(Math.random() * PROMPTS.length)]);
   const [tick, setTick] = useState(0);
-  useEffect(() => { try { localStorage.setItem("music_timer", JSON.stringify(timer)); } catch {} }, [timer]);
+
+  // Persist timer to server whenever it changes
+  useEffect(() => {
+    storage.set("music_timer", JSON.stringify(timer)).catch(() => {});
+  }, [timer]);
+
+  // Poll server every 3s to sync timer across devices
+  useEffect(() => {
+    const iv = setInterval(async () => {
+      try {
+        const r = await storage.get("music_timer");
+        if (!r?.value) return;
+        const remote = JSON.parse(r.value);
+        setTimer(local => {
+          // Adopt remote state if it differs (another device changed it)
+          if (remote.phase !== local.phase || remote.endsAt !== local.endsAt || remote.remaining !== local.remaining)
+            return remote;
+          return local;
+        });
+      } catch {}
+    }, 3000);
+    return () => clearInterval(iv);
+  }, []);
+
   useEffect(() => {
     if (timer.phase !== "running") return;
     const iv = setInterval(() => setTick(t => t + 1), 250);
