@@ -894,14 +894,46 @@ export default function App() {
 
   const {card,eyebrow,iconBtn}=getStyles(C);
 
-  const StatusPill=({name,status})=>{
+  const StatusDropdown=({name,status})=>{
+    const [open,setOpen]=useState(false);
+    const ref=useRef(null);
     const cfg=STATUS_CFG[status]||STATUS_CFG.active;
     const dot=cfg.dot||C.indigo;
+    useEffect(()=>{
+      if(!open)return;
+      const handler=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+      document.addEventListener("mousedown",handler);
+      return()=>document.removeEventListener("mousedown",handler);
+    },[open]);
     return(
-      <select value={status} onChange={e=>updateProjectStatus(name,e.target.value)}
-        style={{fontSize:11.5,fontWeight:600,color:dot,background:`${dot}18`,border:`1px solid ${dot}44`,borderRadius:20,padding:"3px 8px",cursor:"pointer",outline:"none",fontFamily:"var(--font-sans)",appearance:"none",WebkitAppearance:"none"}}>
-        {STATUS_ORDER.map(s=><option key={s} value={s} style={{background:C.surf,color:C.text}}>{STATUS_CFG[s].label}</option>)}
-      </select>
+      <div ref={ref} style={{position:"relative",flexShrink:0}}>
+        <button onClick={()=>setOpen(o=>!o)} style={{
+          fontSize:12,fontWeight:700,color:dot,background:`${dot}1a`,
+          border:`1.5px solid ${dot}55`,borderRadius:20,padding:"4px 11px",
+          cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4,
+        }}>{cfg.label}</button>
+        {open&&(
+          <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:30,
+            background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
+            minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+            {STATUS_ORDER.map(s=>{
+              const sc=STATUS_CFG[s],sd=sc.dot||C.indigo,active=s===status;
+              return(
+                <button key={s} onClick={()=>{updateProjectStatus(name,s);setOpen(false);}} style={{
+                  display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                  borderRadius:9,border:"none",background:active?`${sd}18`:"transparent",
+                  cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
+                  color:active?sd:C.text,textAlign:"left",
+                }}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:sd,flexShrink:0}}/>
+                  {sc.label}
+                  {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={sd} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -912,7 +944,7 @@ export default function App() {
           <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
           <div style={{fontSize:11.5,color:C.faint,marginTop:2}}>{projectCounts[p.name]?`${projectCounts[p.name]} session${projectCounts[p.name]>1?"s":""}`:  "no sessions yet"}</div>
         </div>
-        {!showRestore&&<StatusPill name={p.name} status={p.status||"active"}/>}
+        {!showRestore&&<StatusDropdown name={p.name} status={p.status||"active"}/>}
         <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:"auto",padding:"0 10px",gap:5,display:"flex"}}>
           {Icon.note(C.indigo)}<span style={{fontSize:11.5,fontWeight:600,color:C.indigo}}>{p.notes?"Notes":"Add"}</span>
         </button>
@@ -1135,20 +1167,27 @@ export default function App() {
               const tagCol=s.tag?TAG_COLOR[s.tag]:null;
               const todSlot=s.hour!=null?TOD.find(t=>t.test(s.hour)):null;
               return(
-                <div key={s.id} style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:14,padding:"13px 14px",display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div className="mono" style={{fontSize:11.5,color:C.faint,marginBottom:4}}>{s.date}{todSlot?` · ${todSlot.emoji}`:""}</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                      {s.project&&<button onClick={()=>setNotesModal(s.project)} style={{fontSize:12.5,fontWeight:600,color:C.indigo,background:C.accentAlpha2,border:"none",borderRadius:7,padding:"3px 9px",cursor:"pointer"}}>{s.project}{proj?.notes?" 📝":""}</button>}
-                      {s.tag&&<span style={{fontSize:11.5,fontWeight:600,color:tagCol,background:`${tagCol}20`,borderRadius:6,padding:"2px 7px"}}>{s.tag}</span>}
-                      {s.note&&<span style={{fontSize:12.5,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.note}</span>}
-                    </div>
+                <div key={s.id} style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:14,padding:"12px 14px"}}>
+                  {/* Row 1: date + time emoji */}
+                  <div className="mono" style={{fontSize:11,color:C.faint,marginBottom:7}}>
+                    {s.date}{todSlot?<span style={{fontFamily:"var(--font-sans)"}}> · {todSlot.emoji}</span>:""}
                   </div>
-                  <span style={{fontSize:17}}>{MOOD_EMOJI[s.mood]}</span>
-                  <span style={{fontSize:14,fontWeight:700,color:C.indigo,minWidth:48,textAlign:"right"}}>{fmtDur(s.duration)}</span>
-                  <div style={{display:"flex",gap:6}}>
-                    <button onClick={()=>startEdit(s)} style={iconBtn}>{Icon.pencil()}</button>
-                    <button onClick={()=>deleteSession(s.id)} style={iconBtn}>{Icon.trash()}</button>
+                  {/* Row 2: project + tag + note */}
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10,minHeight:22}}>
+                    {s.project&&<button onClick={()=>setNotesModal(s.project)} style={{fontSize:12.5,fontWeight:600,color:C.indigo,background:C.accentAlpha2,border:"none",borderRadius:7,padding:"3px 10px",cursor:"pointer",lineHeight:1.4}}>{s.project}{proj?.notes?" 📝":""}</button>}
+                    {s.tag&&<span style={{fontSize:12,fontWeight:600,color:tagCol,background:`${tagCol}20`,borderRadius:6,padding:"3px 9px",lineHeight:1.4}}>{s.tag}</span>}
+                    {s.note&&<span style={{fontSize:12.5,color:C.muted,lineHeight:1.6,alignSelf:"center"}}>{s.note}</span>}
+                  </div>
+                  {/* Row 3: mood + duration + buttons */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:18}}>{MOOD_EMOJI[s.mood]}</span>
+                      <span style={{fontSize:15,fontWeight:700,color:C.indigo}}>{fmtDur(s.duration)}</span>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>startEdit(s)} style={iconBtn}>{Icon.pencil()}</button>
+                      <button onClick={()=>deleteSession(s.id)} style={iconBtn}>{Icon.trash()}</button>
+                    </div>
                   </div>
                 </div>
               );
