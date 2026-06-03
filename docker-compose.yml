@@ -1,6 +1,6 @@
 services:
   music-tracker:
-    build: .
+    image: music-tracker
     container_name: music-tracker
     restart: unless-stopped
     ports:
