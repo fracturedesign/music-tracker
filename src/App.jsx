@@ -1416,8 +1416,18 @@ function ABCompare({files,projectName,onClose}) {
   const [readyB,setReadyB]=useState(false);
   const [currentTime,setCurrentTime]=useState(0);
   const activeRef=useRef("A");
+  const syncingRef=useRef(false);
   const fileMap=Object.fromEntries(files.map(f=>[f.id,f]));
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
+
+  const syncTo=(targetWs,timeSeconds)=>{
+    if(!targetWs||syncingRef.current)return;
+    const dur=targetWs.getDuration?.();
+    if(!dur)return;
+    syncingRef.current=true;
+    targetWs.seekTo(Math.min(timeSeconds/dur,1));
+    syncingRef.current=false;
+  };
 
   const initWS=(ref,wsRef,fileId,setReady,side)=>{
     if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
@@ -1430,6 +1440,11 @@ function ABCompare({files,projectName,onClose}) {
     ws.on("ready",()=>setReady(true));
     ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
     ws.on("finish",()=>{setPlaying(false);setCurrentTime(0);});
+    ws.on("seeking",t=>{
+      if(syncingRef.current)return;
+      const other=side==="A"?wsB.current:wsA.current;
+      syncTo(other,t);
+    });
   };
 
   useEffect(()=>{initWS(waveRefA,wsA,slotA,setReadyA,"A");},[slotA]);// eslint-disable-line
