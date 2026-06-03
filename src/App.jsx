@@ -9,11 +9,11 @@ const ThemeCtx = createContext(null);
 const useTheme = () => useContext(ThemeCtx);
 
 const THEMES = {
-  calm:  { name:"Calm Stack",   emoji:"🌌", bg:"#0b0b10", surf:"#131320", surf2:"#1a1a2a", line:"rgba(255,255,255,0.055)", lineS:"rgba(255,255,255,0.1)", text:"#f3f3f8", muted:"#8a8a9e", faint:"#6a6a86", dim:"#55556a", indigo:"#818cf8", deep:"#6366f1", green:"#34d399", greenS:"#6ee7b7", flame:"#fb923c", accentGrad:"linear-gradient(135deg,#818cf8,#6366f1)", accentGlow:"rgba(99,102,241,0.6)", accentAlpha:"rgba(129,140,248,0.16)", accentAlpha2:"rgba(129,140,248,0.12)", accentBorder:"rgba(129,140,248,0.5)", todayBg:"linear-gradient(160deg,#1c1c34,#131326)", timerBg:"linear-gradient(160deg,#241c3a,#15131f)", loggedBg:"linear-gradient(160deg,#16261f,#111a17)", loggedBorder:"rgba(52,211,153,0.35)", heat:["#16162a","#312e81","#4f46e5","#7c8cf8","#a5b4fc"] },
-  paper: { name:"Paper",        emoji:"📄", bg:"#f7f7f5", surf:"#ffffff", surf2:"#eeeeeb", line:"rgba(0,0,0,0.07)", lineS:"rgba(0,0,0,0.12)", text:"#16162a", muted:"#6b6b82", faint:"#9090a8", dim:"#b4b4c8", indigo:"#5558e8", deep:"#4f46e5", green:"#059669", greenS:"#10b981", flame:"#ea580c", accentGrad:"linear-gradient(135deg,#6366f1,#4f46e5)", accentGlow:"rgba(99,102,241,0.22)", accentAlpha:"rgba(99,102,241,0.1)", accentAlpha2:"rgba(99,102,241,0.07)", accentBorder:"rgba(99,102,241,0.3)", todayBg:"linear-gradient(160deg,#eef0ff,#f4f4ff)", timerBg:"linear-gradient(160deg,#f0ecff,#ece8ff)", loggedBg:"linear-gradient(160deg,#ecfdf5,#f0fdf6)", loggedBorder:"rgba(5,150,105,0.3)", heat:["#e4e4ee","#c4b5fd","#818cf8","#4f46e5","#312e81"] },
-  sand:  { name:"Warm Sand",    emoji:"🏖", bg:"#faf7f0", surf:"#ffffff", surf2:"#f2ede3", line:"rgba(0,0,0,0.07)", lineS:"rgba(0,0,0,0.12)", text:"#1c1608", muted:"#786a52", faint:"#9e9078", dim:"#c0b49a", indigo:"#c2611a", deep:"#b45309", green:"#059669", greenS:"#10b981", flame:"#ea580c", accentGrad:"linear-gradient(135deg,#f59e0b,#d97706)", accentGlow:"rgba(217,119,6,0.22)", accentAlpha:"rgba(217,119,6,0.1)", accentAlpha2:"rgba(217,119,6,0.07)", accentBorder:"rgba(217,119,6,0.35)", todayBg:"linear-gradient(160deg,#fffbeb,#fef3c7)", timerBg:"linear-gradient(160deg,#fff7ed,#feebc8)", loggedBg:"linear-gradient(160deg,#ecfdf5,#f0fdf6)", loggedBorder:"rgba(5,150,105,0.3)", heat:["#e8dfc8","#fcd34d","#f59e0b","#d97706","#92400e"] },
-  slate: { name:"Slate",        emoji:"🪨", bg:"#1c1f26", surf:"#252930", surf2:"#2e333c", line:"rgba(255,255,255,0.07)", lineS:"rgba(255,255,255,0.12)", text:"#dde2ec", muted:"#8892a4", faint:"#666e80", dim:"#454d5e", indigo:"#60a5fa", deep:"#3b82f6", green:"#34d399", greenS:"#6ee7b7", flame:"#fb923c", accentGrad:"linear-gradient(135deg,#60a5fa,#3b82f6)", accentGlow:"rgba(59,130,246,0.5)", accentAlpha:"rgba(96,165,250,0.15)", accentAlpha2:"rgba(96,165,250,0.1)", accentBorder:"rgba(96,165,250,0.4)", todayBg:"linear-gradient(160deg,#1a2540,#16213a)", timerBg:"linear-gradient(160deg,#1c2545,#18213e)", loggedBg:"linear-gradient(160deg,#142820,#10201a)", loggedBorder:"rgba(52,211,153,0.3)", heat:["#22262e","#1e3a5c","#1d4f8a","#2563eb","#60a5fa"] },
-  dusk:  { name:"Dusk",         emoji:"🌅", bg:"#1c1824", surf:"#252132", surf2:"#2e2a3e", line:"rgba(255,220,255,0.06)", lineS:"rgba(255,220,255,0.1)", text:"#ece8f5", muted:"#9890b0", faint:"#726888", dim:"#504868", indigo:"#c084fc", deep:"#a855f7", green:"#34d399", greenS:"#6ee7b7", flame:"#fb923c", accentGrad:"linear-gradient(135deg,#c084fc,#a855f7)", accentGlow:"rgba(168,85,247,0.5)", accentAlpha:"rgba(192,132,252,0.16)", accentAlpha2:"rgba(192,132,252,0.11)", accentBorder:"rgba(192,132,252,0.4)", todayBg:"linear-gradient(160deg,#2a1e3c,#221830)", timerBg:"linear-gradient(160deg,#321e46,#281840)", loggedBg:"linear-gradient(160deg,#162420,#121e1a)", loggedBorder:"rgba(52,211,153,0.3)", heat:["#201c2c","#3b1a5e","#6b21a8","#9333ea","#c084fc"] },
+  calm:  { name:"Calm Stack",   emoji:"🌌", dark:true,  bg:"#0b0b10", surf:"#131320", surf2:"#1a1a2a", line:"rgba(255,255,255,0.055)", lineS:"rgba(255,255,255,0.1)", text:"#f3f3f8", muted:"#8a8a9e", faint:"#6a6a86", dim:"#55556a", indigo:"#818cf8", deep:"#6366f1", green:"#34d399", greenS:"#6ee7b7", flame:"#fb923c", accentGrad:"linear-gradient(135deg,#818cf8,#6366f1)", accentGlow:"rgba(99,102,241,0.6)", accentAlpha:"rgba(129,140,248,0.16)", accentAlpha2:"rgba(129,140,248,0.12)", accentBorder:"rgba(129,140,248,0.5)", todayBg:"linear-gradient(160deg,#1c1c34,#131326)", timerBg:"linear-gradient(160deg,#241c3a,#15131f)", loggedBg:"linear-gradient(160deg,#16261f,#111a17)", loggedBorder:"rgba(52,211,153,0.35)", heat:["#16162a","#312e81","#4f46e5","#7c8cf8","#a5b4fc"] },
+  paper: { name:"Paper",        emoji:"📄", dark:false, bg:"#f7f7f5", surf:"#ffffff", surf2:"#eeeeeb", line:"rgba(0,0,0,0.07)", lineS:"rgba(0,0,0,0.12)", text:"#16162a", muted:"#6b6b82", faint:"#9090a8", dim:"#b4b4c8", indigo:"#5558e8", deep:"#4f46e5", green:"#059669", greenS:"#10b981", flame:"#ea580c", accentGrad:"linear-gradient(135deg,#6366f1,#4f46e5)", accentGlow:"rgba(99,102,241,0.22)", accentAlpha:"rgba(99,102,241,0.1)", accentAlpha2:"rgba(99,102,241,0.07)", accentBorder:"rgba(99,102,241,0.3)", todayBg:"linear-gradient(160deg,#eef0ff,#f4f4ff)", timerBg:"linear-gradient(160deg,#f0ecff,#ece8ff)", loggedBg:"linear-gradient(160deg,#ecfdf5,#f0fdf6)", loggedBorder:"rgba(5,150,105,0.3)", heat:["#e4e4ee","#c4b5fd","#818cf8","#4f46e5","#312e81"] },
+  sand:  { name:"Warm Sand",    emoji:"🏖", dark:false, bg:"#faf7f0", surf:"#ffffff", surf2:"#f2ede3", line:"rgba(0,0,0,0.07)", lineS:"rgba(0,0,0,0.12)", text:"#1c1608", muted:"#786a52", faint:"#9e9078", dim:"#c0b49a", indigo:"#c2611a", deep:"#b45309", green:"#059669", greenS:"#10b981", flame:"#ea580c", accentGrad:"linear-gradient(135deg,#f59e0b,#d97706)", accentGlow:"rgba(217,119,6,0.22)", accentAlpha:"rgba(217,119,6,0.1)", accentAlpha2:"rgba(217,119,6,0.07)", accentBorder:"rgba(217,119,6,0.35)", todayBg:"linear-gradient(160deg,#fffbeb,#fef3c7)", timerBg:"linear-gradient(160deg,#fff7ed,#feebc8)", loggedBg:"linear-gradient(160deg,#ecfdf5,#f0fdf6)", loggedBorder:"rgba(5,150,105,0.3)", heat:["#e8dfc8","#fcd34d","#f59e0b","#d97706","#92400e"] },
+  slate: { name:"Slate",        emoji:"🪨", dark:true,  bg:"#1c1f26", surf:"#252930", surf2:"#2e333c", line:"rgba(255,255,255,0.07)", lineS:"rgba(255,255,255,0.12)", text:"#dde2ec", muted:"#8892a4", faint:"#666e80", dim:"#454d5e", indigo:"#60a5fa", deep:"#3b82f6", green:"#34d399", greenS:"#6ee7b7", flame:"#fb923c", accentGrad:"linear-gradient(135deg,#60a5fa,#3b82f6)", accentGlow:"rgba(59,130,246,0.5)", accentAlpha:"rgba(96,165,250,0.15)", accentAlpha2:"rgba(96,165,250,0.1)", accentBorder:"rgba(96,165,250,0.4)", todayBg:"linear-gradient(160deg,#1a2540,#16213a)", timerBg:"linear-gradient(160deg,#1c2545,#18213e)", loggedBg:"linear-gradient(160deg,#142820,#10201a)", loggedBorder:"rgba(52,211,153,0.3)", heat:["#22262e","#1e3a5c","#1d4f8a","#2563eb","#60a5fa"] },
+  dusk:  { name:"Dusk",         emoji:"🌅", dark:true,  bg:"#1c1824", surf:"#252132", surf2:"#2e2a3e", line:"rgba(255,220,255,0.06)", lineS:"rgba(255,220,255,0.1)", text:"#ece8f5", muted:"#9890b0", faint:"#726888", dim:"#504868", indigo:"#c084fc", deep:"#a855f7", green:"#34d399", greenS:"#6ee7b7", flame:"#fb923c", accentGrad:"linear-gradient(135deg,#c084fc,#a855f7)", accentGlow:"rgba(168,85,247,0.5)", accentAlpha:"rgba(192,132,252,0.16)", accentAlpha2:"rgba(192,132,252,0.11)", accentBorder:"rgba(192,132,252,0.4)", todayBg:"linear-gradient(160deg,#2a1e3c,#221830)", timerBg:"linear-gradient(160deg,#321e46,#281840)", loggedBg:"linear-gradient(160deg,#162420,#121e1a)", loggedBorder:"rgba(52,211,153,0.3)", heat:["#201c2c","#3b1a5e","#6b21a8","#9333ea","#c084fc"] },
 };
 
 function getStyles(C) {
@@ -77,6 +77,16 @@ function getWeekStart(offsetWeeks=0) { const t=new Date();t.setHours(0,0,0,0);co
 function weekHours(sessions,startStr) { const s=parseDate(startStr),e=new Date(s);e.setDate(s.getDate()+6);return sessions.filter(x=>{const d=parseDate(x.date);return d>=s&&d<=e;}).reduce((a,x)=>a+x.duration,0)/60; }
 
 function fmtSeconds(s) { s=Math.floor(s||0); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
+function fmtRelativeDate(ds) {
+  if(!ds)return null;
+  const diff=Math.round((keyToUTCms(today)-keyToUTCms(ds))/86400000);
+  if(diff===0)return"today";
+  if(diff===1)return"yesterday";
+  if(diff<7)return`${diff}d ago`;
+  if(diff<30)return`${Math.round(diff/7)}w ago`;
+  if(diff<365)return`${Math.round(diff/30)}mo ago`;
+  return`${Math.round(diff/365)}y ago`;
+}
 
 const today     = toDateStr(new Date());
 const yesterday = toDateStr(new Date(Date.now()-86400000));
@@ -506,6 +516,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
   const [scanMsg,setScanMsg]=useState("");
   const [showScan,setShowScan]=useState(false);
   const [activeFilters,setActiveFilters]=useState({formats:[],versions:[]});
+  const [abOpen,setAbOpen]=useState(false);
   const allFiltersRef=useRef({});
   const fileInputRef=useRef(null);
 
@@ -644,7 +655,15 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
           {hasPerProjectPath?"Folder set":"Scan folder"}
         </button>
+        {files.length>=2&&(
+          <button onClick={()=>setAbOpen(true)}
+            style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,gap:5,display:"flex",
+              color:C.faint,borderColor:C.lineS,background:C.surf2}}>
+            A/B
+          </button>
+        )}
       </div>
+      {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
 
       {/* Scan panel */}
       {showScan&&(
@@ -1128,7 +1147,7 @@ function AllSessions({sessions,projects,projectMap,onEdit,onDelete,onClose}) {
 }
 
 /* ─── settings sheet ─── */
-function SettingsSheet({currentTheme,onThemeChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived}) {
+function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [editingGoal,setEditingGoal]=useState(false);
   const [goalInput,setGoalInput]=useState(String(goalHours));
@@ -1214,23 +1233,28 @@ function SettingsSheet({currentTheme,onThemeChange,goalHours,onGoalChange,onDown
           On each launch, files matching a project name are auto-registered. Filenames must <em>contain</em> the project name.
         </div>
 
-        {/* Theme */}
-        <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:14}}>Theme</div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {Object.entries(THEMES).map(([key,T])=>{
-            const active=currentTheme===key;
-            return(
-              <button key={key} onClick={()=>onThemeChange(key)} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",borderRadius:16,cursor:"pointer",textAlign:"left",border:active?`1px solid ${C.accentBorder}`:`1px solid ${C.line}`,background:active?C.accentAlpha:C.surf2}}>
-                <span style={{fontSize:24,lineHeight:1}}>{T.emoji}</span>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:600,color:active?C.indigo:C.text,marginBottom:8}}>{T.name}</div>
-                  <div style={{display:"flex",gap:4}}>{T.heat.map((c,i)=><div key={i} style={{flex:1,height:6,borderRadius:3,background:c}}/>)}</div>
-                </div>
-                {active&&<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={C.indigo} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-              </button>
-            );
-          })}
-        </div>
+        {/* Theme — dark / light pair */}
+        <div style={{fontSize:11,color:C.dim,marginBottom:16,padding:"0 2px"}}>Follows your system appearance and switches automatically.</div>
+        {[{label:"Dark theme",current:themeDark,onChange:onThemeDarkChange,filter:T=>T.dark},{label:"Light theme",current:themeLight,onChange:onThemeLightChange,filter:T=>!T.dark}].map(({label,current,onChange,filter})=>(
+          <div key={label} style={{marginBottom:18}}>
+            <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:10}}>{label}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {Object.entries(THEMES).filter(([,T])=>filter(T)).map(([key,T])=>{
+                const active=current===key;
+                return(
+                  <button key={key} onClick={()=>onChange(key)} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",borderRadius:16,cursor:"pointer",textAlign:"left",border:active?`1px solid ${C.accentBorder}`:`1px solid ${C.line}`,background:active?C.accentAlpha:C.surf2}}>
+                    <span style={{fontSize:24,lineHeight:1}}>{T.emoji}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:14,fontWeight:600,color:active?C.indigo:C.text,marginBottom:8}}>{T.name}</div>
+                      <div style={{display:"flex",gap:4}}>{T.heat.map((c,i)=><div key={i} style={{flex:1,height:6,borderRadius:3,background:c}}/>)}</div>
+                    </div>
+                    {active&&<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={C.indigo} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
 
         {/* Archived projects */}
         {archivedProjects?.length>0&&(<>
@@ -1288,11 +1312,269 @@ function GoalEditSheet({goalHours,onSave,onClose}) {
   );
 }
 
+/* ─── project timeline ─── */
+function ProjectTimeline({sessions,projects}) {
+  const C=useTheme();
+  if(!sessions.length||!projects.length)return null;
+  const projectNames=projects.map(p=>p.name);
+  const allDates=sessions.map(s=>s.date).sort();
+  if(!allDates.length)return null;
+  const earliest=allDates[0];
+  const totalDays=Math.max(1,Math.round((keyToUTCms(today)-keyToUTCms(earliest))/86400000));
+  const sessionSet=new Map();
+  sessions.forEach(s=>{
+    if(!sessionSet.has(s.project))sessionSet.set(s.project,[]);
+    sessionSet.get(s.project).push(s.date);
+  });
+  const rows=projectNames.filter(n=>sessionSet.has(n));
+  if(!rows.length)return null;
+  return(
+    <div style={{marginTop:4}}>
+      {rows.map(name=>{
+        const dates=sessionSet.get(name)||[];
+        const dateSet=new Set(dates);
+        const lastDate=dates.reduce((a,b)=>a>b?a:b,"");
+        return(
+          <div key={name} style={{marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontSize:11.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"60%"}}>{name}</span>
+              <span style={{fontSize:10,color:C.dim}}>{fmtRelativeDate(lastDate)}</span>
+            </div>
+            <div style={{height:8,borderRadius:4,background:C.surf2,overflow:"hidden",position:"relative"}}>
+              {dates.length>0&&(()=>{
+                // Group consecutive days into segments for rendering
+                const sorted=[...dateSet].sort();
+                return sorted.map(d=>{
+                  const pct=Math.round((keyToUTCms(d)-keyToUTCms(earliest))/86400000)/totalDays*100;
+                  return<div key={d} style={{position:"absolute",top:0,bottom:0,left:`${pct}%`,width:`${Math.max(0.8,100/totalDays)}%`,background:C.indigo,opacity:0.7,borderRadius:2}}/>;
+                });
+              })()}
+            </div>
+          </div>
+        );
+      })}
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
+        <span style={{fontSize:9.5,color:C.dim}}>{fmtDate(earliest)}</span>
+        <span style={{fontSize:9.5,color:C.dim}}>today</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── weekly review sheet ─── */
+function WeeklyReviewSheet({sessions,goalHours,currentStreak,onClose}) {
+  const C=useTheme(); const {iconBtn}=getStyles(C);
+  const thisStart=getWeekStart(0);
+  const lastStart=getWeekStart(1);
+  const thisWeekSessions=sessions.filter(s=>s.date>=thisStart&&s.date<=today);
+  const lastWeekSessions=sessions.filter(s=>{const ls=parseDate(lastStart),le=new Date(ls);le.setDate(ls.getDate()+6);const d=parseDate(s.date);return d>=ls&&d<=le;});
+  const thisH=weekHours(sessions,thisStart);
+  const lastH=weekHours(sessions,lastStart);
+  const diff=thisH-lastH;
+  const pct=goalHours>0?Math.min(1,thisH/goalHours):0;
+  // project breakdown this week
+  const projMap={};
+  thisWeekSessions.forEach(s=>{if(s.project){projMap[s.project]=(projMap[s.project]||0)+s.duration;}});
+  const projRows=Object.entries(projMap).sort((a,b)=>b[1]-a[1]);
+  // mood avg this week
+  const moodSessions=thisWeekSessions.filter(s=>s.mood);
+  const moodAvg=moodSessions.length?moodSessions.reduce((a,s)=>a+s.mood,0)/moodSessions.length:null;
+  // best session this week
+  const bestSession=thisWeekSessions.length?[...thisWeekSessions].sort((a,b)=>b.duration-a.duration)[0]:null;
+  const MOOD_LABEL=["","Rough","Neutral","Good","Great","🔥 Flow"];
+  const circumference=2*Math.PI*38;
+  return(
+    <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="grab"/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <div style={{fontSize:19,fontWeight:700,letterSpacing:"-0.01em",color:C.text}}>Weekly Review</div>
+          <button onClick={onClose} style={iconBtn}>{Icon.close()}</button>
+        </div>
+        {/* Goal ring + hours */}
+        <div style={{display:"flex",alignItems:"center",gap:20,background:C.surf2,borderRadius:16,padding:"16px 20px",marginBottom:16}}>
+          <svg width="90" height="90" viewBox="0 0 90 90" style={{flexShrink:0}}>
+            <circle cx="45" cy="45" r="38" fill="none" stroke={C.surf} strokeWidth="8"/>
+            <circle cx="45" cy="45" r="38" fill="none" stroke={C.indigo} strokeWidth="8"
+              strokeDasharray={circumference} strokeDashoffset={circumference*(1-pct)}
+              strokeLinecap="round" transform="rotate(-90 45 45)" style={{transition:"stroke-dashoffset .6s ease"}}/>
+            <text x="45" y="49" textAnchor="middle" fill={C.text} fontSize="15" fontWeight="700" fontFamily="var(--font-sans)">{fmtDur(Math.round(thisH*60))}</text>
+          </svg>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.text}}>This week</div>
+            <div style={{fontSize:12,color:C.faint,marginTop:3}}>{goalHours>0?`${fmtDur(Math.round(Math.max(0,goalHours-thisH)*60))} to go · ${goalHours}h goal`:`${thisWeekSessions.length} session${thisWeekSessions.length!==1?"s":""}`}</div>
+            {lastH>0&&<div style={{fontSize:12,color:diff>=0?C.green:C.flame,marginTop:4,fontWeight:600}}>{diff>=0?"↑":"↓"} {fmtDur(Math.round(Math.abs(diff)*60))} vs last week</div>}
+            {currentStreak>0&&<div style={{fontSize:12,color:C.faint,marginTop:4}}>🔥 {currentStreak}-day streak</div>}
+          </div>
+        </div>
+        {/* Projects breakdown */}
+        {projRows.length>0&&(
+          <>
+            <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:10}}>By project</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
+              {projRows.map(([name,mins])=>{
+                const maxMins=projRows[0][1];
+                return(
+                  <div key={name}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"70%"}}>{name}</span>
+                      <span style={{fontSize:12,color:C.faint}}>{fmtDur(mins)}</span>
+                    </div>
+                    <div style={{height:5,borderRadius:3,background:C.surf2,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${mins/maxMins*100}%`,background:C.indigo,borderRadius:3,opacity:0.75}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {/* Mood + best session */}
+        <div style={{display:"flex",gap:10,marginBottom:4}}>
+          {moodAvg!==null&&(
+            <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px"}}>
+              <div style={{fontSize:10.5,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:6}}>Avg mood</div>
+              <div style={{fontSize:22}}>{MOOD_EMOJI[Math.round(moodAvg)]}</div>
+              <div style={{fontSize:12,color:C.faint,marginTop:2}}>{MOOD_LABEL[Math.round(moodAvg)]}</div>
+            </div>
+          )}
+          {bestSession&&(
+            <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px"}}>
+              <div style={{fontSize:10.5,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:6}}>Best session</div>
+              <div style={{fontSize:18,fontWeight:700,color:C.text}}>{fmtDur(bestSession.duration)}</div>
+              <div style={{fontSize:12,color:C.faint,marginTop:2}}>{fmtDate(bestSession.date)}</div>
+            </div>
+          )}
+        </div>
+        {thisWeekSessions.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:C.dim,fontSize:13}}>No sessions logged this week yet.</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ─── A/B comparison ─── */
+function ABCompare({files,projectName,onClose}) {
+  const C=useTheme(); const {iconBtn}=getStyles(C);
+  const [slotA,setSlotA]=useState(files[0]?.id||null);
+  const [slotB,setSlotB]=useState(files[1]?.id||null);
+  const [active,setActive]=useState("A"); // which side is playing
+  const [playing,setPlaying]=useState(false);
+  const waveRefA=useRef(null),waveRefB=useRef(null);
+  const wsA=useRef(null),wsB=useRef(null);
+  const [readyA,setReadyA]=useState(false);
+  const [readyB,setReadyB]=useState(false);
+  const [timeA,setTimeA]=useState(0);
+  const [timeB,setTimeB]=useState(0);
+  const fileMap=Object.fromEntries(files.map(f=>[f.id,f]));
+  const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
+
+  const initWS=(ref,wsRef,fileId,setReady,setTime,side)=>{
+    if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
+    setReady(false);setTime(0);
+    const f=fileMap[fileId];if(!f||!ref.current)return;
+    const ws=WaveSurfer.create({container:ref.current,waveColor:C.dim,progressColor:side==="A"?C.indigo:C.green,height:40,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted});
+    wsRef.current=ws;
+    ws.load(audioUrl(f));
+    ws.on("ready",()=>setReady(true));
+    ws.on("timeupdate",t=>setTime(t));
+    ws.on("finish",()=>setPlaying(false));
+  };
+
+  useEffect(()=>{if(slotA)initWS(waveRefA,wsA,slotA,setReadyA,setTimeA,"A");},[slotA]);// eslint-disable-line
+  useEffect(()=>{if(slotB)initWS(waveRefB,wsB,slotB,setReadyB,setTimeB,"B");},[slotB]);// eslint-disable-line
+  useEffect(()=>()=>{wsA.current?.destroy();wsB.current?.destroy();},[]);
+
+  const toggle=()=>{
+    const fromWS=active==="A"?wsA.current:wsB.current;
+    const toWS=active==="A"?wsB.current:wsA.current;
+    const fromReady=active==="A"?readyA:readyB;
+    const toReady=active==="A"?readyB:readyA;
+    if(!toReady)return;
+    const t=fromWS?.getCurrentTime?.()||0;
+    if(playing&&fromWS)fromWS.pause();
+    const nextActive=active==="A"?"B":"A";
+    setActive(nextActive);
+    if(toWS&&toReady){toWS.seekTo(Math.min(t/(fileMap[nextActive==="A"?slotA:slotB]?.duration||1),1));if(playing)toWS.play();}
+  };
+
+  const handlePlay=()=>{
+    const ws=active==="A"?wsA.current:wsB.current;
+    const ready=active==="A"?readyA:readyB;
+    if(!ws||!ready)return;
+    if(playing){ws.pause();setPlaying(false);}else{ws.play();setPlaying(true);}
+  };
+
+  const fActive=fileMap[active==="A"?slotA:slotB];
+  const currentTime=active==="A"?timeA:timeB;
+
+  const SlotSelect=({side,value,onChange})=>(
+    <div style={{flex:1}}>
+      <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",color:side==="A"?C.indigo:C.green,marginBottom:6,textTransform:"uppercase"}}>{side}</div>
+      <select value={value||""} onChange={e=>onChange(e.target.value)}
+        style={{width:"100%",background:C.surf2,border:`1px solid ${side==="A"?C.accentBorder:"rgba(52,211,153,0.4)"}`,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:12,fontFamily:"var(--font-sans)",cursor:"pointer"}}>
+        <option value="">— pick a file —</option>
+        {files.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+      </select>
+    </div>
+  );
+
+  return(
+    <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="grab"/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+          <div style={{fontSize:17,fontWeight:700,color:C.text}}>A/B Compare</div>
+          <button onClick={onClose} style={iconBtn}>{Icon.close()}</button>
+        </div>
+        <div style={{display:"flex",gap:10,marginBottom:16}}>
+          <SlotSelect side="A" value={slotA} onChange={v=>{setSlotA(v);setPlaying(false);}}/>
+          <SlotSelect side="B" value={slotB} onChange={v=>{setSlotB(v);setPlaying(false);}}/>
+        </div>
+        {/* Waveforms */}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.07em",color:C.indigo,marginBottom:4,textTransform:"uppercase",opacity:active==="A"?1:0.35}}>A — {fileMap[slotA]?.name||"—"}</div>
+          <div ref={waveRefA} style={{opacity:readyA?(active==="A"?1:0.3):0.12,transition:"opacity .2s"}}/>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.07em",color:C.green,margin:"10px 0 4px",textTransform:"uppercase",opacity:active==="B"?1:0.35}}>B — {fileMap[slotB]?.name||"—"}</div>
+          <div ref={waveRefB} style={{opacity:readyB?(active==="B"?1:0.3):0.12,transition:"opacity .2s"}}/>
+        </div>
+        {/* Controls */}
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <button onClick={handlePlay} disabled={!(active==="A"?readyA:readyB)}
+            style={{width:36,height:36,borderRadius:10,border:`1px solid ${C.accentBorder}`,background:C.accentAlpha,cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0,padding:0,opacity:(active==="A"?readyA:readyB)?1:0.4}}>
+            {playing
+              ?<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+              :<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+            }
+          </button>
+          <button onClick={toggle} disabled={!readyA||!readyB}
+            style={{padding:"0 16px",height:36,borderRadius:10,border:`1.5px solid ${active==="A"?C.accentBorder:"rgba(52,211,153,0.4)"}`,
+              background:active==="A"?C.accentAlpha:"rgba(52,211,153,0.12)",cursor:"pointer",
+              fontSize:13,fontWeight:700,color:active==="A"?C.indigo:C.green,fontFamily:"var(--font-sans)",
+              opacity:readyA&&readyB?1:0.4}}>
+            Playing: {active}
+          </button>
+          <span className="mono" style={{fontSize:11,color:C.faint}}>{fmtSeconds(currentTime)} / {fmtSeconds(fActive?.duration)}</span>
+        </div>
+        {(!readyA||!readyB)&&<div style={{fontSize:11.5,color:C.dim,marginTop:10}}>Loading waveforms…</div>}
+      </div>
+    </div>
+  );
+}
+
 /* ─── main app ─── */
 const PROMPTS=["Make something beautiful today.","Chase the sound in your head.","Press record, see what happens.","One loop can become a song.","Start before you feel ready.","Trust your ears today.","Finish something today.","Show up for the music.","Turn an idea into a take."];
 
 export default function App() {
-  const [themeKey,setThemeKey]=useState(()=>localStorage.getItem("music_theme")||"calm");
+  const [themeDark,setThemeDark]=useState(()=>localStorage.getItem("music_theme_dark")||"calm");
+  const [themeLight,setThemeLight]=useState(()=>localStorage.getItem("music_theme_light")||"paper");
+  const [systemDark,setSystemDark]=useState(()=>window.matchMedia("(prefers-color-scheme: dark)").matches);
+  useEffect(()=>{
+    const mq=window.matchMedia("(prefers-color-scheme: dark)");
+    const handler=e=>setSystemDark(e.matches);
+    mq.addEventListener("change",handler);
+    return()=>mq.removeEventListener("change",handler);
+  },[]);
+  const themeKey=systemDark?themeDark:themeLight;
   const C=THEMES[themeKey]||THEMES.calm;
 
   useEffect(()=>{
@@ -1307,7 +1589,8 @@ export default function App() {
     r.style.setProperty("--dim",C.dim);
   },[C]);
 
-  const changeTheme=key=>{localStorage.setItem("music_theme",key);setThemeKey(key);};
+  const changeThemeDark=key=>{localStorage.setItem("music_theme_dark",key);setThemeDark(key);};
+  const changeThemeLight=key=>{localStorage.setItem("music_theme_light",key);setThemeLight(key);};
 
   const [sessions,setSessions]=useState([]);
   const [projects,setProjects]=useState([]);
@@ -1320,6 +1603,7 @@ export default function App() {
   const [sheet,setSheet]=useState(null);
   const [allOpen,setAllOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const [reviewOpen,setReviewOpen]=useState(false);
   const [goalEditOpen,setGoalEditOpen]=useState(false);
   const [showDone,setShowDone]=useState(false);
   const [showReleased,setShowReleased]=useState(false);
@@ -1640,6 +1924,7 @@ export default function App() {
           <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
           <div style={{fontSize:11.5,color:C.faint,marginTop:2,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <span>{projectCounts[p.name]?`${projectCounts[p.name]} session${projectCounts[p.name]>1?"s":""}`:  "no sessions yet"}</span>
+            {(()=>{const rel=fmtRelativeDate(lastSessionDateOf(p.name));return rel&&!isDoneOrReleased?<span style={{color:rel==="today"?C.green:rel==="yesterday"?C.indigo:C.dim}}>· {rel}</span>:null;})()}
             {(audioFileCounts[p.name]||0)>0&&(
               <span style={{display:"flex",alignItems:"center",gap:3,color:C.dim}}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -1670,8 +1955,9 @@ export default function App() {
       {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject}/>}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
-      {settingsOpen&&<SettingsSheet currentTheme={themeKey} onThemeChange={changeTheme} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
+      {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
+      {reviewOpen&&<WeeklyReviewSheet sessions={sessions} goalHours={goalHours} currentStreak={currentStreak} onClose={()=>setReviewOpen(false)}/>}
       {toast&&<div className="toast">{toast}</div>}
 
       {/* Header */}
@@ -1684,6 +1970,9 @@ export default function App() {
           <div style={{fontSize:13,color:C.faint,marginTop:4,paddingLeft:44}}>Keep the habit. One session at a time.</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <button onClick={()=>setReviewOpen(true)} title="Weekly review" style={iconBtn}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="17" rx="2.5" stroke={C.faint} strokeWidth="1.7"/><path d="M3 9h18" stroke={C.faint} strokeWidth="1.7"/><path d="M8 2v4M16 2v4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M7 14h3M7 17h5" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+          </button>
           <button onClick={()=>setSettingsOpen(true)} style={iconBtn}>{Icon.gear(C.faint)}</button>
           <div style={{display:"flex",alignItems:"center",gap:6,background:C.surf,border:`1px solid ${C.line}`,borderRadius:999,padding:"8px 13px"}}>
             <span style={{fontSize:15}}>🔥</span>
@@ -1832,6 +2121,12 @@ export default function App() {
         {activeProjects.length>0&&(
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {activeProjects.map(p=><ProjectRow key={p.name} p={p}/>)}
+          </div>
+        )}
+        {activeProjects.length>1&&sessions.length>0&&(
+          <div style={{marginTop:16,borderTop:`1px solid ${C.line}`,paddingTop:14}}>
+            <div style={{fontSize:11,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:10}}>Timeline</div>
+            <ProjectTimeline sessions={sessions} projects={activeProjects}/>
           </div>
         )}
 
