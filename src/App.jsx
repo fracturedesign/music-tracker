@@ -503,6 +503,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
   const [scanMsg,setScanMsg]=useState("");
   const [showScan,setShowScan]=useState(false);
   const [activeFilters,setActiveFilters]=useState({formats:[],versions:[]});
+  const allFiltersRef=useRef({});
   const fileInputRef=useRef(null);
 
   useEffect(()=>{onCountChange?.(files.length);},[files.length]);// eslint-disable-line
@@ -527,6 +528,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
         if(filt?.value){
           try{
             const all=JSON.parse(filt.value);
+            allFiltersRef.current=all||{};
             const saved=all?.[projectName]||{formats:[],versions:[]};
             setActiveFilters(saved);
           }catch{}
@@ -536,12 +538,10 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
     })();
   },[projectName]);// eslint-disable-line
 
-  const saveFilters=async(filters,files_)=>{
+  const saveFilters=async filters=>{
     try{
-      const r=await fetch(`/api/data/music_audio_filters`).then(x=>x.json());
-      const all=r?.value?JSON.parse(r.value):{};
-      all[projectName]=filters;
-      await fetch(`/api/data/music_audio_filters`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(all)})});
+      allFiltersRef.current={...allFiltersRef.current,[projectName]:filters};
+      await fetch(`/api/data/music_audio_filters`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(allFiltersRef.current)})});
     }catch{}
   };
 
