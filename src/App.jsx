@@ -1421,7 +1421,7 @@ function ABCompare({files,projectName,onClose}) {
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
 
   const playingRef=useRef(false);
-  // Single shared AudioContext — required for iOS (only one context can be active at a time)
+  // Shared AudioContext — iOS only allows one active context at a time
   const audioCtxRef=useRef(null);
   const getCtx=()=>{
     if(!audioCtxRef.current)audioCtxRef.current=new(window.AudioContext||window.webkitAudioContext)();
@@ -1444,34 +1444,34 @@ function ABCompare({files,projectName,onClose}) {
     ws.on("ready",()=>setReady(true));
     ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
     ws.on("finish",()=>{playingRef.current=false;setPlaying(false);setCurrentTime(0);});
-    ws.on("seeking",t=>{
-      if(syncingRef.current)return;
-      const other=side==="A"?wsB.current:wsA.current;
-      const otherFile=fileMap[side==="A"?slotB:slotA];
-      if(!other||!otherFile?.duration)return;
-      syncingRef.current=true;
-      other.seekTo(Math.min(t/otherFile.duration,1));
-      requestAnimationFrame(()=>{syncingRef.current=false;});
-    });
   };
 
   useEffect(()=>{initWS(waveRefA,wsA,slotA,setReadyA,"A");},[slotA]);// eslint-disable-line
   useEffect(()=>{initWS(waveRefB,wsB,slotB,setReadyB,"B");},[slotB]);// eslint-disable-line
   useEffect(()=>()=>{wsA.current?.destroy();wsB.current?.destroy();},[]);
 
-  // Instant mute switch within shared context — works on iOS
   const toggle=()=>{
     if(!readyA||!readyB)return;
     const next=active==="A"?"B":"A";
+    const fromWs=active==="A"?wsA.current:wsB.current;
+    const toWs=active==="A"?wsB.current:wsA.current;
+    const toFile=fileMap[next==="A"?slotA:slotB];
+    // Snapshot active track position
+    const t=fromWs?.getCurrentTime?.()??0;
+    // Pause+seek the incoming track while it's still muted — safe, no audio disruption
+    toWs?.pause();
+    if(toFile?.duration)toWs?.seekTo(Math.min(t/toFile.duration,1));
+    // Swap volumes
     activeRef.current=next;
     setActive(next);
-    wsA.current?.setVolume(next==="A"?1:0);
-    wsB.current?.setVolume(next==="B"?1:0);
+    fromWs?.setVolume(0);
+    toWs?.setVolume(1);
+    // Resume incoming if we were playing
+    if(playingRef.current)toWs?.play();
   };
 
   const handlePlay=()=>{
-    // Resume AudioContext first — required for iOS after page load
-    getCtx().resume();
+    getCtx().resume(); // required for iOS
     const wsActive=active==="A"?wsA.current:wsB.current;
     const wsInactive=active==="A"?wsB.current:wsA.current;
     const ready=active==="A"?readyA:readyB;
