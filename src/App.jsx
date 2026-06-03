@@ -680,8 +680,14 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
           ...vTagLabels.map(v=>({type:"versions",value:v,label:v.charAt(0).toUpperCase()+v.slice(1)})),
         ];
         if(pills.length===0)return null;
+        const anyActive=(activeFilters.formats||[]).length>0||(activeFilters.versions||[]).length>0;
+        const clearFilters=()=>{
+          const cleared={formats:[],versions:[]};
+          setActiveFilters(cleared);
+          saveFilters(cleared);
+        };
         return(
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10,alignItems:"center"}}>
             {pills.map(({type,value,label})=>{
               const on=activeFilters[type]?.includes(value);
               return(
@@ -695,6 +701,11 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
                 </button>
               );
             })}
+            {anyActive&&<button onClick={clearFilters}
+              style={{fontSize:10.5,fontWeight:600,padding:"3px 9px",borderRadius:20,cursor:"pointer",
+                fontFamily:"var(--font-sans)",border:"none",background:"transparent",color:C.dim}}>
+              Clear
+            </button>}
           </div>
         );
       })()}
@@ -709,7 +720,8 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
         const verF=activeFilters.versions||[];
         const visible=sortAudioFiles(files).filter(f=>{
           if(fmtF.length>0){
-            if(!fmtF.includes((f.format||"").toUpperCase()))return false;
+            const fmt=(f.format||"").toUpperCase();
+            if(fmt&&!fmtF.includes(fmt))return false;
           }
           if(verF.length>0){
             const ver=extractVersion(f.name);
