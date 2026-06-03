@@ -1128,7 +1128,7 @@ function AllSessions({sessions,projects,projectMap,onEdit,onDelete,onClose}) {
 }
 
 /* ─── settings sheet ─── */
-function SettingsSheet({currentTheme,onThemeChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange}) {
+function SettingsSheet({currentTheme,onThemeChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [editingGoal,setEditingGoal]=useState(false);
   const [goalInput,setGoalInput]=useState(String(goalHours));
@@ -1231,6 +1231,27 @@ function SettingsSheet({currentTheme,onThemeChange,goalHours,onGoalChange,onDown
             );
           })}
         </div>
+
+        {/* Archived projects */}
+        {archivedProjects?.length>0&&(<>
+          <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,margin:"22px 0 12px"}}>Archived projects</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {archivedProjects.map(p=>(
+              <div key={p.name} style={{background:C.surf2,borderRadius:14,padding:"12px 15px",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                  {p.archivedAt&&<div style={{fontSize:11,color:C.dim,marginTop:2}}>Archived {new Date(p.archivedAt).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}</div>}
+                </div>
+                <button onClick={()=>onRestoreArchived(p.name)}
+                  style={{fontSize:11.5,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:8,padding:"5px 10px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)"}}>
+                  Restore
+                </button>
+                <button onClick={()=>onDeleteArchived(p.name)} style={iconBtn}>{Icon.trash()}</button>
+              </div>
+            ))}
+          </div>
+        </>)}
+
       </div>
     </div>
   );
@@ -1304,6 +1325,7 @@ export default function App() {
   const [showReleased,setShowReleased]=useState(false);
   const [audioFileCounts,setAudioFileCounts]=useState({});
   const [globalAudioFolder,setGlobalAudioFolder]=useState("");
+  const [archivedProjects,setArchivedProjects]=useState([]);
   const [toast,setToast]=useState("");
   const toastTimer=useRef(null);
   const toastQueue=useRef([]);
@@ -1318,6 +1340,7 @@ export default function App() {
       try{const t=await storage.get("music_timer");if(t?.value)setTimer(JSON.parse(t.value));}catch{}
       try{const af=await storage.get("music_audio_files");if(af?.value&&typeof af.value==="object"){setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}}catch{}
       try{const gf=await storage.get("music_global_audio_folder");if(gf?.value)setGlobalAudioFolder(gf.value);}catch{}
+      try{const ar=await storage.get("music_archived_projects");if(ar?.value)setArchivedProjects(JSON.parse(ar.value));}catch{}
       setLoaded(true);
     })();
   },[]);
@@ -1490,7 +1513,30 @@ export default function App() {
     if(status==="released"){flash("🚀 Project released!");checkMilestones(sessions,next,currentStreak,unlockedMilestones);}
     else if(status==="done")flash("✓ Project marked as done");
   };
-  const restoreProject=async name=>updateProjectStatus(name,"active");
+  const persistArchived=async next=>{try{await storage.set("music_archived_projects",JSON.stringify(next));}catch{}};
+  const archiveProject=async name=>{
+    const proj=projects.find(p=>p.name===name);
+    if(!proj)return;
+    const nextProjects=projects.filter(p=>p.name!==name);
+    const nextArchived=[{...proj,archivedAt:new Date().toISOString()},...archivedProjects];
+    setProjects(nextProjects);await persistProjects(nextProjects);
+    setArchivedProjects(nextArchived);await persistArchived(nextArchived);
+    flash("Project archived");
+  };
+  const restoreFromArchive=async name=>{
+    const proj=archivedProjects.find(p=>p.name===name);
+    if(!proj)return;
+    const{archivedAt:_,...restored}=proj;
+    const nextArchived=archivedProjects.filter(p=>p.name!==name);
+    const nextProjects=[...projects,{...restored,status:"active"}];
+    setArchivedProjects(nextArchived);await persistArchived(nextArchived);
+    setProjects(nextProjects);await persistProjects(nextProjects);
+    flash("Project restored");
+  };
+  const deleteArchived=async name=>{
+    const next=archivedProjects.filter(p=>p.name!==name);
+    setArchivedProjects(next);await persistArchived(next);
+  };
   const removeProject=async name=>{const next=projects.filter(p=>p.name!==name);setProjects(next);await persistProjects(next);};
   const saveNotes=async(name,notes)=>{const next=projects.map(p=>p.name===name?{...p,notes}:p);setProjects(next);await persistProjects(next);};
 
@@ -1574,7 +1620,9 @@ export default function App() {
     );
   };
 
-  const ProjectRow=({p})=>(
+  const ProjectRow=({p})=>{
+    const isDoneOrReleased=["done","released"].includes(p.status||"active");
+    return(
     <div style={{background:C.surf2,borderRadius:14,padding:"12px 15px"}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <div style={{flex:1,minWidth:0}}>
@@ -1593,10 +1641,16 @@ export default function App() {
         <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:"auto",padding:"0 10px",gap:5,display:"flex"}}>
           {Icon.note(C.indigo)}<span style={{fontSize:11.5,fontWeight:600,color:C.indigo}}>Open</span>
         </button>
-        <button onClick={()=>removeProject(p.name)} style={iconBtn}>{Icon.trash()}</button>
+        {isDoneOrReleased
+          ?<button onClick={()=>archiveProject(p.name)} title="Archive project" style={iconBtn}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+            </button>
+          :<button onClick={()=>removeProject(p.name)} style={iconBtn}>{Icon.trash()}</button>
+        }
       </div>
     </div>
-  );
+  );};
+
 
   return (
     <ThemeCtx.Provider value={C}>
@@ -1605,7 +1659,7 @@ export default function App() {
       {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject}/>}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
-      {settingsOpen&&<SettingsSheet currentTheme={themeKey} onThemeChange={changeTheme} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder}/>}
+      {settingsOpen&&<SettingsSheet currentTheme={themeKey} onThemeChange={changeTheme} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
       {toast&&<div className="toast">{toast}</div>}
 
