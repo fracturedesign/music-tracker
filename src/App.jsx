@@ -1422,35 +1422,25 @@ function ABCompare({files,projectName,onClose}) {
 
   const playingRef=useRef(false);
 
-  const syncTo=(targetWs,timeSeconds)=>{
-    if(!targetWs||syncingRef.current)return;
-    const dur=targetWs.getDuration?.();
-    if(!dur)return;
-    syncingRef.current=true;
-    targetWs.seekTo(Math.min(timeSeconds/dur,1));
-    // Hold the flag for one frame so the other instance's async seeking event is suppressed
-    requestAnimationFrame(()=>{
-      syncingRef.current=false;
-      // If playback dropped (WebAudio reinitialises source on seek), resume it
-      if(playingRef.current&&!targetWs.isPlaying?.())targetWs.play().catch(()=>{});
-    });
-  };
-
   const initWS=(ref,wsRef,fileId,setReady,side)=>{
     if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
     setReady(false);
     const f=fileMap[fileId];if(!f||!ref.current)return;
     const ws=WaveSurfer.create({container:ref.current,waveColor:C.dim,progressColor:side==="A"?C.indigo:C.green,height:40,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted});
     wsRef.current=ws;
-    ws.setVolume(side===activeRef.current?1:0);
     ws.load(audioUrl(f));
     ws.on("ready",()=>setReady(true));
     ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
     ws.on("finish",()=>{playingRef.current=false;setPlaying(false);setCurrentTime(0);});
+    // Sync inactive (paused) track position on seek — paused seekTo is instant, no audio disruption
     ws.on("seeking",t=>{
       if(syncingRef.current)return;
       const other=side==="A"?wsB.current:wsA.current;
-      syncTo(other,t);
+      const otherFile=fileMap[side==="A"?slotB:slotA];
+      if(!other||!otherFile?.duration)return;
+      syncingRef.current=true;
+      other.seekTo(Math.min(t/otherFile.duration,1));
+      requestAnimationFrame(()=>{syncingRef.current=false;});
     });
   };
 
@@ -1458,28 +1448,24 @@ function ABCompare({files,projectName,onClose}) {
   useEffect(()=>{initWS(waveRefB,wsB,slotB,setReadyB,"B");},[slotB]);// eslint-disable-line
   useEffect(()=>()=>{wsA.current?.destroy();wsB.current?.destroy();},[]);
 
-  // Instant switch: mute inactive, unmute active — both keep playing
+  // Pause active, play inactive — inactive is already at the right position
   const toggle=()=>{
     if(!readyA||!readyB)return;
     const next=active==="A"?"B":"A";
+    const fromWs=active==="A"?wsA.current:wsB.current;
+    const toWs=active==="A"?wsB.current:wsA.current;
+    fromWs?.pause();
+    if(playingRef.current)toWs?.play();
     activeRef.current=next;
     setActive(next);
-    wsA.current?.setVolume(next==="A"?1:0);
-    wsB.current?.setVolume(next==="B"?1:0);
   };
 
   const handlePlay=()=>{
-    const wsActive=active==="A"?wsA.current:wsB.current;
-    const wsInactive=active==="A"?wsB.current:wsA.current;
+    const ws=active==="A"?wsA.current:wsB.current;
     const ready=active==="A"?readyA:readyB;
-    if(!wsActive||!ready)return;
-    if(playing){
-      wsActive.pause();wsInactive?.pause();
-      playingRef.current=false;setPlaying(false);
-    } else {
-      wsActive.play();wsInactive?.play();
-      playingRef.current=true;setPlaying(true);
-    }
+    if(!ws||!ready)return;
+    if(playing){ws.pause();playingRef.current=false;setPlaying(false);}
+    else{ws.play();playingRef.current=true;setPlaying(true);}
   };
 
   const fActive=fileMap[active==="A"?slotA:slotB];
