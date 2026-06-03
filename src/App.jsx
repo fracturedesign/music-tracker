@@ -573,7 +573,11 @@ export default function App() {
   const [prompt]=useState(()=>PROMPTS[Math.floor(Math.random()*PROMPTS.length)]);
   const [tick,setTick]=useState(0);
 
-  useEffect(()=>{storage.set("music_timer",JSON.stringify(timer)).catch(()=>{});},[timer]);
+  // Only save timer once initial load is done — otherwise the idle default overwrites the server's running timer
+  useEffect(()=>{
+    if(!loaded) return;
+    storage.set("music_timer",JSON.stringify(timer)).catch(()=>{});
+  },[timer,loaded]);
   useEffect(()=>{
     const iv=setInterval(async()=>{
       try{
