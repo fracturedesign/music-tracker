@@ -1545,8 +1545,8 @@ export default function App() {
     return(
       <div ref={ref} style={{position:"relative",flexShrink:0}}>
         <button onClick={()=>setOpen(o=>!o)} style={{
-          fontSize:12,fontWeight:700,color:dot,background:`${dot}1a`,
-          border:`1.5px solid ${dot}55`,borderRadius:20,padding:"4px 11px",
+          fontSize:10.5,fontWeight:700,color:dot,background:`${dot}1a`,
+          border:`1.5px solid ${dot}55`,borderRadius:20,padding:"2px 8px",
           cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4,
         }}>{cfg.label}</button>
         {open&&(
@@ -1579,7 +1579,7 @@ export default function App() {
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-          <div style={{fontSize:11.5,color:C.faint,marginTop:2,display:"flex",alignItems:"center",gap:8}}>
+          <div style={{fontSize:11.5,color:C.faint,marginTop:2,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <span>{projectCounts[p.name]?`${projectCounts[p.name]} session${projectCounts[p.name]>1?"s":""}`:  "no sessions yet"}</span>
             {(audioFileCounts[p.name]||0)>0&&(
               <span style={{display:"flex",alignItems:"center",gap:3,color:C.dim}}>
@@ -1587,9 +1587,9 @@ export default function App() {
                 {audioFileCounts[p.name]}
               </span>
             )}
+            {!showRestore&&<StatusDropdown name={p.name} status={p.status||"active"}/>}
           </div>
         </div>
-        {!showRestore&&<StatusDropdown name={p.name} status={p.status||"active"}/>}
         <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:"auto",padding:"0 10px",gap:5,display:"flex"}}>
           {Icon.note(C.indigo)}<span style={{fontSize:11.5,fontWeight:600,color:C.indigo}}>Open</span>
         </button>
