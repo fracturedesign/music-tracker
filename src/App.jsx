@@ -1574,7 +1574,7 @@ export default function App() {
     );
   };
 
-  const ProjectRow=({p,showRestore=false})=>(
+  const ProjectRow=({p})=>(
     <div style={{background:C.surf2,borderRadius:14,padding:"12px 15px"}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <div style={{flex:1,minWidth:0}}>
@@ -1587,16 +1587,13 @@ export default function App() {
                 {audioFileCounts[p.name]}
               </span>
             )}
-            {!showRestore&&<StatusDropdown name={p.name} status={p.status||"active"}/>}
+            <StatusDropdown name={p.name} status={p.status||"active"}/>
           </div>
         </div>
         <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:"auto",padding:"0 10px",gap:5,display:"flex"}}>
           {Icon.note(C.indigo)}<span style={{fontSize:11.5,fontWeight:600,color:C.indigo}}>Open</span>
         </button>
-        {showRestore
-          ?<button onClick={()=>restoreProject(p.name)} style={{fontSize:11.5,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer"}}>Restore</button>
-          :<button onClick={()=>removeProject(p.name)} style={iconBtn}>{Icon.trash()}</button>
-        }
+        <button onClick={()=>removeProject(p.name)} style={iconBtn}>{Icon.trash()}</button>
       </div>
     </div>
   );
@@ -1780,7 +1777,7 @@ export default function App() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:showDone?"rotate(90deg)":"none",transition:"transform .2s"}}><path d="M9 6l6 6-6 6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               <span style={{fontSize:12,fontWeight:600,color:C.faint}}>Done ({doneProjects.length})</span>
             </button>
-            {showDone&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{doneProjects.map(p=><ProjectRow key={p.name} p={p} showRestore/>)}</div>}
+            {showDone&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{doneProjects.map(p=><ProjectRow key={p.name} p={p}/>)}</div>}
           </div>
         )}
 
@@ -1791,7 +1788,7 @@ export default function App() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:showReleased?"rotate(90deg)":"none",transition:"transform .2s"}}><path d="M9 6l6 6-6 6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               <span style={{fontSize:12,fontWeight:600,color:C.faint}}>Released / Archive ({releasedProjects.length})</span>
             </button>
-            {showReleased&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{releasedProjects.map(p=><ProjectRow key={p.name} p={p} showRestore/>)}</div>}
+            {showReleased&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{releasedProjects.map(p=><ProjectRow key={p.name} p={p}/>)}</div>}
           </div>
         )}
       </div>
