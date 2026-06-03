@@ -554,21 +554,29 @@ function AllSessions({sessions,projects,projectMap,onEdit,onDelete,onClose}) {
             :filtered.map(s=>{
               const proj=s.project?projectMap[s.project]:null;
               const tagCol=s.tag?TAG_COLOR[s.tag]:null;
+              const todSlot=s.hour!=null?TOD.find(t=>t.test(s.hour)):null;
+              const smBtn={...iconBtn,width:28,height:28,borderRadius:8};
               return(
-                <div key={s.id} style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:14,padding:"13px 14px",display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div className="mono" style={{fontSize:11.5,color:C.faint,marginBottom:4}}>{s.date}</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                      {s.project&&<span style={{fontSize:12.5,fontWeight:600,color:C.indigo,background:C.accentAlpha2,borderRadius:7,padding:"3px 9px"}}>{s.project}{proj?.notes?" 📝":""}</span>}
-                      {s.tag&&<span style={{fontSize:12,fontWeight:600,color:tagCol||C.muted,background:`${tagCol||C.muted}20`,borderRadius:6,padding:"2px 7px"}}>{s.tag}</span>}
-                      {s.note&&<span style={{fontSize:12.5,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.note}</span>}
+                <div key={s.id} style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:14,padding:"11px 14px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
+                    <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:5,minWidth:0}}>
+                      {s.project&&<span style={{fontSize:13,fontWeight:600,color:C.indigo,background:C.accentAlpha2,borderRadius:8,padding:"3px 10px"}}>{s.project}{proj?.notes?" 📝":""}</span>}
+                      {s.tag&&<span style={{fontSize:12,fontWeight:600,color:tagCol,background:`${tagCol}1e`,borderRadius:6,padding:"3px 9px"}}>{s.tag}</span>}
+                      {!s.project&&!s.tag&&<span style={{fontSize:12.5,color:C.dim}}>session</span>}
                     </div>
+                    <span style={{fontSize:17,flexShrink:0}}>{MOOD_EMOJI[s.mood]}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:C.indigo,flexShrink:0}}>{fmtDur(s.duration)}</span>
                   </div>
-                  <span style={{fontSize:17}}>{MOOD_EMOJI[s.mood]}</span>
-                  <span style={{fontSize:14,fontWeight:700,color:C.indigo,minWidth:48,textAlign:"right"}}>{fmtDur(s.duration)}</span>
-                  <div style={{display:"flex",gap:6}}>
-                    <button onClick={()=>onEdit(s)} style={iconBtn}>{Icon.pencil()}</button>
-                    <button onClick={()=>onDelete(s.id)} style={iconBtn}>{Icon.trash()}</button>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:4,flexWrap:"nowrap",overflow:"hidden"}}>
+                      <span className="mono" style={{fontSize:10.5,color:C.dim,flexShrink:0}}>{s.date}</span>
+                      {todSlot&&<span style={{fontSize:11,flexShrink:0}}>{todSlot.emoji}</span>}
+                      {s.note&&<span style={{fontSize:12,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>· {s.note}</span>}
+                    </div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <button onClick={()=>onEdit(s)} style={smBtn}>{Icon.pencil()}</button>
+                      <button onClick={()=>onDelete(s.id)} style={smBtn}>{Icon.trash()}</button>
+                    </div>
                   </div>
                 </div>
               );
@@ -1166,27 +1174,29 @@ export default function App() {
               const proj=s.project?projectMap[s.project]:null;
               const tagCol=s.tag?TAG_COLOR[s.tag]:null;
               const todSlot=s.hour!=null?TOD.find(t=>t.test(s.hour)):null;
+              const smBtn={...iconBtn,width:28,height:28,borderRadius:8};
               return(
-                <div key={s.id} style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:14,padding:"12px 14px"}}>
-                  {/* Row 1: date + time emoji */}
-                  <div className="mono" style={{fontSize:11,color:C.faint,marginBottom:7}}>
-                    {s.date}{todSlot?<span style={{fontFamily:"var(--font-sans)"}}> · {todSlot.emoji}</span>:""}
-                  </div>
-                  {/* Row 2: project + tag + note */}
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10,minHeight:22}}>
-                    {s.project&&<button onClick={()=>setNotesModal(s.project)} style={{fontSize:12.5,fontWeight:600,color:C.indigo,background:C.accentAlpha2,border:"none",borderRadius:7,padding:"3px 10px",cursor:"pointer",lineHeight:1.4}}>{s.project}{proj?.notes?" 📝":""}</button>}
-                    {s.tag&&<span style={{fontSize:12,fontWeight:600,color:tagCol,background:`${tagCol}20`,borderRadius:6,padding:"3px 9px",lineHeight:1.4}}>{s.tag}</span>}
-                    {s.note&&<span style={{fontSize:12.5,color:C.muted,lineHeight:1.6,alignSelf:"center"}}>{s.note}</span>}
-                  </div>
-                  {/* Row 3: mood + duration + buttons */}
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:18}}>{MOOD_EMOJI[s.mood]}</span>
-                      <span style={{fontSize:15,fontWeight:700,color:C.indigo}}>{fmtDur(s.duration)}</span>
+                <div key={s.id} style={{background:C.surf2,border:`1px solid ${C.line}`,borderRadius:14,padding:"11px 14px"}}>
+                  {/* Main row: chips + mood + duration */}
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
+                    <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:5,minWidth:0}}>
+                      {s.project&&<button onClick={()=>setNotesModal(s.project)} style={{fontSize:13,fontWeight:600,color:C.indigo,background:C.accentAlpha2,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer"}}>{s.project}{proj?.notes?" 📝":""}</button>}
+                      {s.tag&&<span style={{fontSize:12,fontWeight:600,color:tagCol,background:`${tagCol}1e`,borderRadius:6,padding:"3px 9px"}}>{s.tag}</span>}
+                      {!s.project&&!s.tag&&<span style={{fontSize:12.5,color:C.dim}}>session</span>}
                     </div>
-                    <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>startEdit(s)} style={iconBtn}>{Icon.pencil()}</button>
-                      <button onClick={()=>deleteSession(s.id)} style={iconBtn}>{Icon.trash()}</button>
+                    <span style={{fontSize:17,flexShrink:0}}>{MOOD_EMOJI[s.mood]}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:C.indigo,flexShrink:0}}>{fmtDur(s.duration)}</span>
+                  </div>
+                  {/* Meta row: date + tod + note + actions */}
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:4,overflow:"hidden"}}>
+                      <span className="mono" style={{fontSize:10.5,color:C.dim,flexShrink:0}}>{s.date}</span>
+                      {todSlot&&<span style={{fontSize:11,flexShrink:0}}>{todSlot.emoji}</span>}
+                      {s.note&&<span style={{fontSize:12,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>· {s.note}</span>}
+                    </div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <button onClick={()=>startEdit(s)} style={smBtn}>{Icon.pencil()}</button>
+                      <button onClick={()=>deleteSession(s.id)} style={smBtn}>{Icon.trash()}</button>
                     </div>
                   </div>
                 </div>
