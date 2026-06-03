@@ -309,6 +309,7 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
     const handler=e=>{
       if(e.detail.id!==file.id){
         wsRef.current?.pause();
+        pendingPlayRef.current=false; // cancel queued play so ready callback doesn't override
         setPendingPlay(false);
         setBuffering(false);
       }
