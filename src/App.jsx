@@ -1416,10 +1416,25 @@ function ABCompare({files,projectName,onClose}) {
   const [readyB,setReadyB]=useState(false);
   const [currentTime,setCurrentTime]=useState(0);
   const activeRef=useRef("A");
+  const syncingRef=useRef(false);
   const fileMap=Object.fromEntries(files.map(f=>[f.id,f]));
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
 
   const playingRef=useRef(false);
+
+  const syncTo=(targetWs,timeSeconds)=>{
+    if(!targetWs||syncingRef.current)return;
+    const dur=targetWs.getDuration?.();
+    if(!dur)return;
+    syncingRef.current=true;
+    targetWs.seekTo(Math.min(timeSeconds/dur,1));
+    // Hold the flag for one frame so the other instance's async seeking event is suppressed
+    requestAnimationFrame(()=>{
+      syncingRef.current=false;
+      // If playback dropped (WebAudio reinitialises source on seek), resume it
+      if(playingRef.current&&!targetWs.isPlaying?.())targetWs.play().catch(()=>{});
+    });
+  };
 
   const initWS=(ref,wsRef,fileId,setReady,side)=>{
     if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
@@ -1432,37 +1447,25 @@ function ABCompare({files,projectName,onClose}) {
     ws.on("ready",()=>setReady(true));
     ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
     ws.on("finish",()=>{playingRef.current=false;setPlaying(false);setCurrentTime(0);});
+    ws.on("seeking",t=>{
+      if(syncingRef.current)return;
+      const other=side==="A"?wsB.current:wsA.current;
+      syncTo(other,t);
+    });
   };
 
   useEffect(()=>{initWS(waveRefA,wsA,slotA,setReadyA,"A");},[slotA]);// eslint-disable-line
   useEffect(()=>{initWS(waveRefB,wsB,slotB,setReadyB,"B");},[slotB]);// eslint-disable-line
   useEffect(()=>()=>{wsA.current?.destroy();wsB.current?.destroy();},[]);
 
-  // Sync inactive track to current position (while still muted), then crossfade
+  // Instant switch: mute inactive, unmute active — both keep playing
   const toggle=()=>{
     if(!readyA||!readyB)return;
     const next=active==="A"?"B":"A";
-    const fromWs=active==="A"?wsA.current:wsB.current;
-    const toWs=active==="A"?wsB.current:wsA.current;
-    const toFile=fileMap[next==="A"?slotA:slotB];
-    // Seek the incoming (muted) track to match current position — inaudible
-    if(fromWs&&toWs&&toFile?.duration){
-      const t=fromWs.getCurrentTime?.()??0;
-      toWs.seekTo(Math.min(t/toFile.duration,1));
-    }
     activeRef.current=next;
     setActive(next);
-    // Crossfade over 40ms to avoid WebAudio click
-    const steps=8,ms=40/steps;
-    let i=0;
-    const tick=()=>{
-      i++;
-      const p=i/steps;
-      fromWs?.setVolume(1-p);
-      toWs?.setVolume(p);
-      if(i<steps)setTimeout(tick,ms);
-    };
-    tick();
+    wsA.current?.setVolume(next==="A"?1:0);
+    wsB.current?.setVolume(next==="B"?1:0);
   };
 
   const handlePlay=()=>{
