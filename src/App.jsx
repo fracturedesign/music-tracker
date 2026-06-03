@@ -1492,9 +1492,6 @@ export default function App() {
     return s.length?s.reduce((best,x)=>x.date>best?x.date:best,""):"";
   };
   const activeProjects=[...rawActive].sort((a,b)=>{
-    const pa=a.pinned?1:0,pb=b.pinned?1:0;
-    if(pa!==pb)return pb-pa;
-    if(a.pinned&&b.pinned)return rawActive.indexOf(a)-rawActive.indexOf(b);
     const da=lastSessionDateOf(a.name),db=lastSessionDateOf(b.name);
     if(da&&db)return db.localeCompare(da);
     if(da)return -1;
@@ -1552,7 +1549,6 @@ export default function App() {
     setArchivedProjects(next);await persistArchived(next);
   };
   const removeProject=async name=>{const next=projects.filter(p=>p.name!==name);setProjects(next);await persistProjects(next);};
-  const togglePin=async name=>{const next=projects.map(p=>p.name===name?{...p,pinned:!p.pinned}:p);setProjects(next);await persistProjects(next);};
   const saveNotes=async(name,notes)=>{const next=projects.map(p=>p.name===name?{...p,notes}:p);setProjects(next);await persistProjects(next);};
 
   const saveGoal=async v=>{setGoalHours(v);await persistGoal(v);setGoalEditOpen(false);};
@@ -1660,12 +1656,7 @@ export default function App() {
           ?<button onClick={()=>archiveProject(p.name)} title="Archive project" style={iconBtn}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
             </button>
-          :<>
-            <button onClick={()=>togglePin(p.name)} title={p.pinned?"Unpin":"Pin to top"} style={{...iconBtn,color:p.pinned?C.indigo:C.faint,borderColor:p.pinned?C.accentBorder:C.lineS,background:p.pinned?C.accentAlpha:"transparent"}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 6.4H21l-5.4 4 2 6.4L12 15l-5.6 3.8 2-6.4L3 8.4h6.6L12 2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" fill={p.pinned?"currentColor":"none"}/></svg>
-            </button>
-            <button onClick={()=>removeProject(p.name)} style={iconBtn}>{Icon.trash()}</button>
-          </>
+          :<button onClick={()=>removeProject(p.name)} style={iconBtn}>{Icon.trash()}</button>
         }
       </div>
     </div>
