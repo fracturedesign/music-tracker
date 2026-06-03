@@ -30,7 +30,8 @@
       "Bash(/opt/homebrew/bin/railway init *)",
       "Bash(curl -s --max-time 10 https://backboard.railway.com/graphql/v2)",
       "Bash(cp /Users/egortuchin/Downloads/index.html /Users/egortuchin/claude-music-tracker/index.html)",
-      "Bash(cp /Users/egortuchin/Downloads/App.jsx /Users/egortuchin/claude-music-tracker/src/App.jsx)"
+      "Bash(cp /Users/egortuchin/Downloads/App.jsx /Users/egortuchin/claude-music-tracker/src/App.jsx)",
+      "Bash(convert --version)"
     ]
   }
 }
