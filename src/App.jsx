@@ -1312,55 +1312,6 @@ function GoalEditSheet({goalHours,onSave,onClose}) {
   );
 }
 
-/* ─── project timeline ─── */
-function ProjectTimeline({sessions,projects}) {
-  const C=useTheme();
-  if(!sessions.length||!projects.length)return null;
-  const projectNames=projects.map(p=>p.name);
-  const allDates=sessions.map(s=>s.date).sort();
-  if(!allDates.length)return null;
-  const earliest=allDates[0];
-  const totalDays=Math.max(1,Math.round((keyToUTCms(today)-keyToUTCms(earliest))/86400000));
-  const sessionSet=new Map();
-  sessions.forEach(s=>{
-    if(!sessionSet.has(s.project))sessionSet.set(s.project,[]);
-    sessionSet.get(s.project).push(s.date);
-  });
-  const rows=projectNames.filter(n=>sessionSet.has(n));
-  if(!rows.length)return null;
-  return(
-    <div style={{marginTop:4}}>
-      {rows.map(name=>{
-        const dates=sessionSet.get(name)||[];
-        const dateSet=new Set(dates);
-        const lastDate=dates.reduce((a,b)=>a>b?a:b,"");
-        return(
-          <div key={name} style={{marginBottom:10}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-              <span style={{fontSize:11.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"60%"}}>{name}</span>
-              <span style={{fontSize:10,color:C.dim}}>{fmtRelativeDate(lastDate)}</span>
-            </div>
-            <div style={{height:8,borderRadius:4,background:C.surf2,overflow:"hidden",position:"relative"}}>
-              {dates.length>0&&(()=>{
-                // Group consecutive days into segments for rendering
-                const sorted=[...dateSet].sort();
-                return sorted.map(d=>{
-                  const pct=Math.round((keyToUTCms(d)-keyToUTCms(earliest))/86400000)/totalDays*100;
-                  return<div key={d} style={{position:"absolute",top:0,bottom:0,left:`${pct}%`,width:`${Math.max(0.8,100/totalDays)}%`,background:C.indigo,opacity:0.7,borderRadius:2}}/>;
-                });
-              })()}
-            </div>
-          </div>
-        );
-      })}
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
-        <span style={{fontSize:9.5,color:C.dim}}>{fmtDate(earliest)}</span>
-        <span style={{fontSize:9.5,color:C.dim}}>today</span>
-      </div>
-    </div>
-  );
-}
-
 /* ─── weekly review sheet ─── */
 function WeeklyReviewSheet({sessions,goalHours,currentStreak,onClose}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
@@ -1457,60 +1408,64 @@ function ABCompare({files,projectName,onClose}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [slotA,setSlotA]=useState(files[0]?.id||null);
   const [slotB,setSlotB]=useState(files[1]?.id||null);
-  const [active,setActive]=useState("A"); // which side is playing
+  const [active,setActive]=useState("A");
   const [playing,setPlaying]=useState(false);
   const waveRefA=useRef(null),waveRefB=useRef(null);
   const wsA=useRef(null),wsB=useRef(null);
   const [readyA,setReadyA]=useState(false);
   const [readyB,setReadyB]=useState(false);
-  const [timeA,setTimeA]=useState(0);
-  const [timeB,setTimeB]=useState(0);
+  const [currentTime,setCurrentTime]=useState(0);
+  const activeRef=useRef("A");
   const fileMap=Object.fromEntries(files.map(f=>[f.id,f]));
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
 
-  const initWS=(ref,wsRef,fileId,setReady,setTime,side)=>{
+  const initWS=(ref,wsRef,fileId,setReady,side)=>{
     if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
-    setReady(false);setTime(0);
+    setReady(false);
     const f=fileMap[fileId];if(!f||!ref.current)return;
     const ws=WaveSurfer.create({container:ref.current,waveColor:C.dim,progressColor:side==="A"?C.indigo:C.green,height:40,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted});
     wsRef.current=ws;
+    ws.setVolume(side===activeRef.current?1:0);
     ws.load(audioUrl(f));
     ws.on("ready",()=>setReady(true));
-    ws.on("timeupdate",t=>setTime(t));
-    ws.on("finish",()=>setPlaying(false));
+    ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
+    ws.on("finish",()=>{setPlaying(false);setCurrentTime(0);});
   };
 
-  useEffect(()=>{if(slotA)initWS(waveRefA,wsA,slotA,setReadyA,setTimeA,"A");},[slotA]);// eslint-disable-line
-  useEffect(()=>{if(slotB)initWS(waveRefB,wsB,slotB,setReadyB,setTimeB,"B");},[slotB]);// eslint-disable-line
+  useEffect(()=>{initWS(waveRefA,wsA,slotA,setReadyA,"A");},[slotA]);// eslint-disable-line
+  useEffect(()=>{initWS(waveRefB,wsB,slotB,setReadyB,"B");},[slotB]);// eslint-disable-line
   useEffect(()=>()=>{wsA.current?.destroy();wsB.current?.destroy();},[]);
 
+  // Instant switch: mute inactive, unmute active — both keep playing
   const toggle=()=>{
-    const fromWS=active==="A"?wsA.current:wsB.current;
-    const toWS=active==="A"?wsB.current:wsA.current;
-    const fromReady=active==="A"?readyA:readyB;
-    const toReady=active==="A"?readyB:readyA;
-    if(!toReady)return;
-    const t=fromWS?.getCurrentTime?.()||0;
-    if(playing&&fromWS)fromWS.pause();
-    const nextActive=active==="A"?"B":"A";
-    setActive(nextActive);
-    if(toWS&&toReady){toWS.seekTo(Math.min(t/(fileMap[nextActive==="A"?slotA:slotB]?.duration||1),1));if(playing)toWS.play();}
+    if(!readyA||!readyB)return;
+    const next=active==="A"?"B":"A";
+    activeRef.current=next;
+    setActive(next);
+    wsA.current?.setVolume(next==="A"?1:0);
+    wsB.current?.setVolume(next==="B"?1:0);
   };
 
   const handlePlay=()=>{
-    const ws=active==="A"?wsA.current:wsB.current;
+    const wsActive=active==="A"?wsA.current:wsB.current;
+    const wsInactive=active==="A"?wsB.current:wsA.current;
     const ready=active==="A"?readyA:readyB;
-    if(!ws||!ready)return;
-    if(playing){ws.pause();setPlaying(false);}else{ws.play();setPlaying(true);}
+    if(!wsActive||!ready)return;
+    if(playing){
+      wsActive.pause();wsInactive?.pause();
+      setPlaying(false);
+    } else {
+      wsActive.play();wsInactive?.play();
+      setPlaying(true);
+    }
   };
 
   const fActive=fileMap[active==="A"?slotA:slotB];
-  const currentTime=active==="A"?timeA:timeB;
 
   const SlotSelect=({side,value,onChange})=>(
     <div style={{flex:1}}>
       <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",color:side==="A"?C.indigo:C.green,marginBottom:6,textTransform:"uppercase"}}>{side}</div>
-      <select value={value||""} onChange={e=>onChange(e.target.value)}
+      <select value={value||""} onChange={e=>{onChange(e.target.value);setPlaying(false);}}
         style={{width:"100%",background:C.surf2,border:`1px solid ${side==="A"?C.accentBorder:"rgba(52,211,153,0.4)"}`,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:12,fontFamily:"var(--font-sans)",cursor:"pointer"}}>
         <option value="">— pick a file —</option>
         {files.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
@@ -1527,8 +1482,8 @@ function ABCompare({files,projectName,onClose}) {
           <button onClick={onClose} style={iconBtn}>{Icon.close()}</button>
         </div>
         <div style={{display:"flex",gap:10,marginBottom:16}}>
-          <SlotSelect side="A" value={slotA} onChange={v=>{setSlotA(v);setPlaying(false);}}/>
-          <SlotSelect side="B" value={slotB} onChange={v=>{setSlotB(v);setPlaying(false);}}/>
+          <SlotSelect side="A" value={slotA} onChange={setSlotA}/>
+          <SlotSelect side="B" value={slotB} onChange={setSlotB}/>
         </div>
         {/* Waveforms */}
         <div style={{marginBottom:12}}>
@@ -1550,8 +1505,8 @@ function ABCompare({files,projectName,onClose}) {
             style={{padding:"0 16px",height:36,borderRadius:10,border:`1.5px solid ${active==="A"?C.accentBorder:"rgba(52,211,153,0.4)"}`,
               background:active==="A"?C.accentAlpha:"rgba(52,211,153,0.12)",cursor:"pointer",
               fontSize:13,fontWeight:700,color:active==="A"?C.indigo:C.green,fontFamily:"var(--font-sans)",
-              opacity:readyA&&readyB?1:0.4}}>
-            Playing: {active}
+              opacity:readyA&&readyB?1:0.4,transition:"all .1s"}}>
+            {active}
           </button>
           <span className="mono" style={{fontSize:11,color:C.faint}}>{fmtSeconds(currentTime)} / {fmtSeconds(fActive?.duration)}</span>
         </div>
@@ -2123,13 +2078,6 @@ export default function App() {
             {activeProjects.map(p=><ProjectRow key={p.name} p={p}/>)}
           </div>
         )}
-        {activeProjects.length>1&&sessions.length>0&&(
-          <div style={{marginTop:16,borderTop:`1px solid ${C.line}`,paddingTop:14}}>
-            <div style={{fontSize:11,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:10}}>Timeline</div>
-            <ProjectTimeline sessions={sessions} projects={activeProjects}/>
-          </div>
-        )}
-
         {/* Done section */}
         {doneProjects.length>0&&(
           <div style={{marginTop:14}}>
