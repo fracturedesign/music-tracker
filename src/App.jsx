@@ -1421,18 +1421,29 @@ function ABCompare({files,projectName,onClose}) {
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
 
   const playingRef=useRef(false);
+  // Single shared AudioContext — required for iOS (only one context can be active at a time)
+  const audioCtxRef=useRef(null);
+  const getCtx=()=>{
+    if(!audioCtxRef.current)audioCtxRef.current=new(window.AudioContext||window.webkitAudioContext)();
+    return audioCtxRef.current;
+  };
+  useEffect(()=>()=>{audioCtxRef.current?.close();},[]);
 
   const initWS=(ref,wsRef,fileId,setReady,side)=>{
     if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
     setReady(false);
     const f=fileMap[fileId];if(!f||!ref.current)return;
-    const ws=WaveSurfer.create({container:ref.current,waveColor:C.dim,progressColor:side==="A"?C.indigo:C.green,height:40,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted});
+    const ws=WaveSurfer.create({
+      container:ref.current,audioContext:getCtx(),
+      waveColor:C.dim,progressColor:side==="A"?C.indigo:C.green,
+      height:40,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,
+    });
     wsRef.current=ws;
+    ws.setVolume(side===activeRef.current?1:0);
     ws.load(audioUrl(f));
     ws.on("ready",()=>setReady(true));
     ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
     ws.on("finish",()=>{playingRef.current=false;setPlaying(false);setCurrentTime(0);});
-    // Sync inactive (paused) track position on seek — paused seekTo is instant, no audio disruption
     ws.on("seeking",t=>{
       if(syncingRef.current)return;
       const other=side==="A"?wsB.current:wsA.current;
@@ -1448,24 +1459,30 @@ function ABCompare({files,projectName,onClose}) {
   useEffect(()=>{initWS(waveRefB,wsB,slotB,setReadyB,"B");},[slotB]);// eslint-disable-line
   useEffect(()=>()=>{wsA.current?.destroy();wsB.current?.destroy();},[]);
 
-  // Pause active, play inactive — inactive is already at the right position
+  // Instant mute switch within shared context — works on iOS
   const toggle=()=>{
     if(!readyA||!readyB)return;
     const next=active==="A"?"B":"A";
-    const fromWs=active==="A"?wsA.current:wsB.current;
-    const toWs=active==="A"?wsB.current:wsA.current;
-    fromWs?.pause();
-    if(playingRef.current)toWs?.play();
     activeRef.current=next;
     setActive(next);
+    wsA.current?.setVolume(next==="A"?1:0);
+    wsB.current?.setVolume(next==="B"?1:0);
   };
 
   const handlePlay=()=>{
-    const ws=active==="A"?wsA.current:wsB.current;
+    // Resume AudioContext first — required for iOS after page load
+    getCtx().resume();
+    const wsActive=active==="A"?wsA.current:wsB.current;
+    const wsInactive=active==="A"?wsB.current:wsA.current;
     const ready=active==="A"?readyA:readyB;
-    if(!ws||!ready)return;
-    if(playing){ws.pause();playingRef.current=false;setPlaying(false);}
-    else{ws.play();playingRef.current=true;setPlaying(true);}
+    if(!wsActive||!ready)return;
+    if(playing){
+      wsActive.pause();wsInactive?.pause();
+      playingRef.current=false;setPlaying(false);
+    }else{
+      wsActive.play();wsInactive?.play();
+      playingRef.current=true;setPlaying(true);
+    }
   };
 
   const fActive=fileMap[active==="A"?slotA:slotB];
