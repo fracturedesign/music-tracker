@@ -299,6 +299,7 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
   const [nameVal,setNameVal]=useState(file.name);
   const markedRef=useRef(false);
   const bufferingTimer=useRef(null);
+  const userPlayingRef=useRef(false); // true only after user explicitly pressed play
 
   const audioUrl=file.linkedPath
     ?`/api/audio/${encodeURIComponent(projectName)}/stream/${file.id}`
@@ -309,7 +310,8 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
     const handler=e=>{
       if(e.detail.id!==file.id){
         wsRef.current?.pause();
-        pendingPlayRef.current=false; // cancel queued play so ready callback doesn't override
+        pendingPlayRef.current=false;
+        userPlayingRef.current=false;
         setPendingPlay(false);
         setBuffering(false);
       }
@@ -346,11 +348,11 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
         const media=ws.getMediaElement?.();
         if(media){
           const onWaiting=()=>{
+            if(!userPlayingRef.current)return;
             setBuffering(true);
-            // Auto-resume after short delay if still stalled
             clearTimeout(bufferingTimer.current);
             bufferingTimer.current=setTimeout(()=>{
-              if(wsRef.current&&!wsRef.current.isPlaying?.())wsRef.current.play().catch(()=>{});
+              if(wsRef.current&&userPlayingRef.current&&!wsRef.current.isPlaying?.())wsRef.current.play().catch(()=>{});
             },1500);
           };
           const onResume=()=>{clearTimeout(bufferingTimer.current);setBuffering(false);};
@@ -364,13 +366,14 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
 
     ws.on("timeupdate",t=>setCurrentTime(t));
     ws.on("play",()=>{
+      userPlayingRef.current=true;
       setPlaying(true);
       setBuffering(false);
       audioEventBus.dispatchEvent(new CustomEvent("audioplay",{detail:{id:file.id}}));
       if(file.isNew&&!markedRef.current){markedRef.current=true;onMarkSeen?.(file.id);}
     });
-    ws.on("pause",()=>setPlaying(false));
-    ws.on("finish",()=>{setPlaying(false);setCurrentTime(0);setBuffering(false);});
+    ws.on("pause",()=>{userPlayingRef.current=false;setPlaying(false);});
+    ws.on("finish",()=>{userPlayingRef.current=false;setPlaying(false);setCurrentTime(0);setBuffering(false);});
 
     return()=>{clearTimeout(bufferingTimer.current);ws.destroy();wsRef.current=null;};
   },[]);// eslint-disable-line
