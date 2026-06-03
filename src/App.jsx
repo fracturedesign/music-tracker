@@ -297,8 +297,10 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
   const [pendingPlay,setPendingPlay]=useState(false);  // play was clicked before ready
   const [editing,setEditing]=useState(false);
   const [nameVal,setNameVal]=useState(file.name);
+  const [airplayAvailable,setAirplayAvailable]=useState(false);
   const markedRef=useRef(false);
   const bufferingTimer=useRef(null);
+  const mediaElRef=useRef(null);
 
   const audioUrl=file.linkedPath
     ?`/api/audio/${encodeURIComponent(projectName)}/stream/${file.id}`
@@ -341,10 +343,13 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
         setPendingPlay(false);
         ws.play();
       }
-      // Hook into media element for buffering stalls during playback
+      // Hook into media element for buffering stalls and AirPlay
       try{
         const media=ws.getMediaElement?.();
         if(media){
+          mediaElRef.current=media;
+          media.setAttribute("x-webkit-airplay","allow");
+          if(typeof media.webkitShowPlaybackTargetPicker==="function")setAirplayAvailable(true);
           const onWaiting=()=>{
             setBuffering(true);
             // Auto-resume after short delay if still stalled
@@ -466,7 +471,19 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
         {!wsReady&&<span style={{fontSize:10.5,color:C.dim}}>{loadProgress>0?`${loadProgress}%`:"Connecting…"}</span>}
         {buffering&&wsReady&&<span style={{fontSize:10.5,color:C.dim}}>Buffering…</span>}
         {pendingPlay&&!wsReady&&<span style={{fontSize:10.5,color:C.indigo}}>▶ queued</span>}
-        {file.linkedPath&&<span style={{marginLeft:"auto",fontSize:9.5,color:C.dim,opacity:.6}} title={file.linkedPath}>linked</span>}
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
+          {airplayAvailable&&(
+            <button onClick={()=>mediaElRef.current?.webkitShowPlaybackTargetPicker()} title="AirPlay"
+              style={{...iconBtn,width:26,height:26,borderRadius:7,flexShrink:0}}>
+              {/* AirPlay icon */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                <polygon points="12 15 17 21 7 21" fill={C.faint}/>
+              </svg>
+            </button>
+          )}
+          {file.linkedPath&&<span style={{fontSize:9.5,color:C.dim,opacity:.6}} title={file.linkedPath}>linked</span>}
+        </div>
       </div>
     </div>
   );
