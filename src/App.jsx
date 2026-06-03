@@ -293,7 +293,7 @@ function ProjectNotes({name,notes,onSave,onClose}) {
   const empty=lines.length===0||(lines.length===1&&lines[0].content==="");
   return (
     <div className="overlay" style={{alignItems:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&close()}>
-      <div style={{background:C.surf,borderRadius:22,border:`1px solid ${C.lineS}`,width:"100%",maxWidth:440,display:"flex",flexDirection:"column",animation:"mtpop .22s ease"}}>
+      <div style={{background:C.surf,borderRadius:22,border:`1px solid ${C.lineS}`,width:"100%",maxWidth:440,display:"flex",flexDirection:"column",animation:"mtmodal .22s ease"}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"18px 20px"}}>
           <div>
             <div style={{fontSize:16,fontWeight:700,color:C.text}}>{name}</div>
