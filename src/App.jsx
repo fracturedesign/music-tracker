@@ -472,8 +472,9 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
   );
 }
 
-/* ─── sort audio files: NEW first, then by version desc, then by date desc ─── */
+/* ─── sort audio files: NEW first, final next, then by version desc, then by date desc ─── */
 function sortAudioFiles(files) {
+  const isFinal=name=>/\bfinal\b/i.test(name||"");
   const vNum=name=>{
     const m=(name||"").match(/\bv(\d+(?:[._]\d+)*)\b/i);
     if(!m)return -1;
@@ -482,6 +483,9 @@ function sortAudioFiles(files) {
   return [...files].sort((a,b)=>{
     if(a.isNew&&!b.isNew)return -1;
     if(!a.isNew&&b.isNew)return 1;
+    const fa=isFinal(a.name),fb=isFinal(b.name);
+    if(fa&&!fb)return -1;
+    if(!fa&&fb)return 1;
     const vd=vNum(b.name)-vNum(a.name);
     if(vd!==0)return vd;
     return new Date(b.scannedAt||b.uploadedAt||0)-new Date(a.scannedAt||a.uploadedAt||0);
@@ -498,6 +502,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
   const [scanPath,setScanPath]=useState("");
   const [scanMsg,setScanMsg]=useState("");
   const [showScan,setShowScan]=useState(false);
+  const [activeFilters,setActiveFilters]=useState({formats:[],versions:[]});
   const fileInputRef=useRef(null);
 
   useEffect(()=>{onCountChange?.(files.length);},[files.length]);// eslint-disable-line
@@ -505,22 +510,38 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
   useEffect(()=>{
     (async()=>{
       try{
-        const[fr,pr]=await Promise.all([
+        const[fr,pr,filt]=await Promise.all([
           fetch(`/api/audio/${encodeURIComponent(projectName)}`).then(r=>r.json()),
           fetch(`/api/data/music_scan_folders`).then(r=>r.json()),
+          fetch(`/api/data/music_audio_filters`).then(r=>r.json()),
         ]);
         setFiles(fr.files||[]);
         const savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
         if(savedPath){
           setScanPath(savedPath);
-          setShowScan(true); // show the panel so user can see the saved path
+          setShowScan(true);
           const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
           if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
         }
+        if(filt?.value){try{setActiveFilters(JSON.parse(filt.value));}catch{}}
       }catch{}
       setLoading(false);
     })();
   },[projectName]);// eslint-disable-line
+
+  const saveFilters=async filters=>{
+    try{await fetch(`/api/data/music_audio_filters`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(filters)})});}catch{}
+  };
+
+  const toggleFilter=(type,value)=>{
+    setActiveFilters(prev=>{
+      const cur=prev[type]||[];
+      const next=cur.includes(value)?cur.filter(v=>v!==value):[...cur,value];
+      const updated={...prev,[type]:next};
+      saveFilters(updated);
+      return updated;
+    });
+  };
 
   const saveScanPath=async path=>{
     try{
@@ -645,15 +666,65 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
         </div>
       )}
 
+      {/* Filter badges */}
+      {!loading&&files.length>0&&(()=>{
+        const fmts=[...new Set(files.map(f=>(f.name||"").split(".").pop().toUpperCase()))].filter(f=>["WAV","MP3"].includes(f));
+        const verLabels=[...new Set(files.map(f=>extractVersion(f.name)).filter(Boolean))];
+        const hasFinal=verLabels.includes("final");
+        const vTagLabels=verLabels.filter(v=>v!=="final"&&!/^v\d/.test(v)); // master,demo,draft
+        const hasVNum=files.some(f=>/\bv\d/i.test(f.name||""));
+        const pills=[
+          ...fmts.map(f=>({type:"formats",value:f,label:f})),
+          ...(hasFinal?[{type:"versions",value:"final",label:"Final"}]:[]),
+          ...(hasVNum?[{type:"versions",value:"versioned",label:"Versioned"}]:[]),
+          ...vTagLabels.map(v=>({type:"versions",value:v,label:v.charAt(0).toUpperCase()+v.slice(1)})),
+        ];
+        if(pills.length===0)return null;
+        return(
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
+            {pills.map(({type,value,label})=>{
+              const on=activeFilters[type]?.includes(value);
+              return(
+                <button key={type+value} onClick={()=>toggleFilter(type,value)}
+                  style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:20,cursor:"pointer",
+                    letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:"var(--font-sans)",
+                    border:`1px solid ${on?C.accentBorder:C.lineS}`,
+                    background:on?C.accentAlpha:"transparent",
+                    color:on?C.indigo:C.dim,transition:"all .15s"}}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* File list */}
       {loading?(
         <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>Loading…</div>
       ):files.length===0?(
         <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a file or scan a folder.</div>
-      ):(
-        sortAudioFiles(files).map(f=><AudioFileCard key={f.id} file={f} projectName={projectName}
-          onDelete={handleDelete} onRename={handleRename} onMarkSeen={handleMarkSeen}/>)
-      )}
+      ):(()=>{
+        const fmtF=activeFilters.formats||[];
+        const verF=activeFilters.versions||[];
+        const visible=sortAudioFiles(files).filter(f=>{
+          if(fmtF.length>0){
+            const ext=(f.name||"").split(".").pop().toUpperCase();
+            if(!fmtF.includes(ext))return false;
+          }
+          if(verF.length>0){
+            const ver=extractVersion(f.name);
+            const matchFinal=verF.includes("final")&&ver==="final";
+            const matchVersioned=verF.includes("versioned")&&/\bv\d/i.test(f.name||"");
+            const matchLabel=verF.some(v=>v!=="final"&&v!=="versioned"&&ver===v);
+            if(!matchFinal&&!matchVersioned&&!matchLabel)return false;
+          }
+          return true;
+        });
+        if(visible.length===0)return <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No files match the selected filters.</div>;
+        return visible.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName}
+          onDelete={handleDelete} onRename={handleRename} onMarkSeen={handleMarkSeen}/>);
+      })()}
     </div>
   );
 }
