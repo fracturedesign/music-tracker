@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
+import WaveSurfer from "wavesurfer.js";
 
 /* ─── theme system ─── */
 const ThemeCtx = createContext(null);
@@ -71,6 +72,8 @@ function fmtClock(ms) { const s=Math.max(0,Math.floor(ms/1000)),h=Math.floor(s/3
 function totalMin(sessions) { return sessions.reduce((a,s)=>a+s.duration,0); }
 function getWeekStart(offsetWeeks=0) { const t=new Date();t.setHours(0,0,0,0);const dow=(t.getDay()+6)%7,mon=new Date(t);mon.setDate(t.getDate()-dow-offsetWeeks*7);return toDateStr(mon); }
 function weekHours(sessions,startStr) { const s=parseDate(startStr),e=new Date(s);e.setDate(s.getDate()+6);return sessions.filter(x=>{const d=parseDate(x.date);return d>=s&&d<=e;}).reduce((a,x)=>a+x.duration,0)/60; }
+
+function fmtSeconds(s) { s=Math.floor(s||0); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
 
 const today     = toDateStr(new Date());
 const yesterday = toDateStr(new Date(Date.now()-86400000));
@@ -271,7 +274,185 @@ function AnalyticsCard({sessions}) {
   );
 }
 
-/* ─── project notes ─── */
+/* ─── audio file card ─── */
+function AudioFileCard({file,projectName,onDelete,onRename}) {
+  const C=useTheme(); const {iconBtn}=getStyles(C);
+  const waveRef=useRef(null);
+  const wsRef=useRef(null);
+  const [playing,setPlaying]=useState(false);
+  const [currentTime,setCurrentTime]=useState(0);
+  const [wsReady,setWsReady]=useState(false);
+  const [editing,setEditing]=useState(false);
+  const [nameVal,setNameVal]=useState(file.name);
+
+  // Capture theme colors at mount (WaveSurfer doesn't react to prop changes)
+  const waveColor=C.dim;
+  const progressColor=C.indigo;
+
+  useEffect(()=>{
+    const container=waveRef.current;
+    if(!container)return;
+    const ws=WaveSurfer.create({
+      container,
+      waveColor,
+      progressColor,
+      height:52,
+      barWidth:2,
+      barGap:1,
+      barRadius:2,
+      cursorWidth:1,
+      cursorColor:C.muted,
+    });
+    wsRef.current=ws;
+    ws.load(`/api/audio/files/${encodeURIComponent(file.filename)}`);
+    ws.on("ready",()=>setWsReady(true));
+    ws.on("timeupdate",t=>setCurrentTime(t));
+    ws.on("play",()=>setPlaying(true));
+    ws.on("pause",()=>setPlaying(false));
+    ws.on("finish",()=>{setPlaying(false);setCurrentTime(0);});
+    return()=>{ws.destroy();wsRef.current=null;};
+  },[]);// eslint-disable-line
+
+  const saveRename=()=>{
+    const trimmed=nameVal.trim();
+    if(trimmed&&trimmed!==file.name)onRename(file.id,trimmed);
+    else setNameVal(file.name);
+    setEditing(false);
+  };
+
+  const metaItems=[
+    file.size!=null&&`${file.size} MB`,
+    file.duration&&fmtSeconds(file.duration),
+    file.lufsIntegrated!=null&&`${file.lufsIntegrated.toFixed(1)} LUFS Int`,
+    file.lufsShort!=null&&`${file.lufsShort.toFixed(1)} LUFS ST`,
+    file.dr!=null&&`LRA ${file.dr.toFixed(1)} LU`,
+    file.truePeak!=null&&`${file.truePeak.toFixed(1)} dBTP`,
+  ].filter(Boolean);
+
+  return (
+    <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:14,padding:"14px 16px",marginBottom:10}}>
+      {/* Name + format + delete */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{flexShrink:0,fontSize:11,fontWeight:700,color:C.indigo,background:C.accentAlpha,borderRadius:6,padding:"3px 8px"}}>{file.format}</span>
+        {editing?(
+          <input autoFocus value={nameVal} onChange={e=>setNameVal(e.target.value)}
+            onBlur={saveRename}
+            onKeyDown={e=>{if(e.key==="Enter")saveRename();if(e.key==="Escape"){setNameVal(file.name);setEditing(false);}}}
+            className="mt-text" style={{flex:1,padding:"5px 10px",fontSize:13,height:"auto"}}/>
+        ):(
+          <span onClick={()=>setEditing(true)} title="Click to rename"
+            style={{flex:1,fontSize:14,fontWeight:600,color:C.text,cursor:"text",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file.name}</span>
+        )}
+        <button onClick={()=>onDelete(file.id)} style={{...iconBtn,flexShrink:0}}>{Icon.trash()}</button>
+      </div>
+
+      {/* Metadata chips */}
+      {metaItems.length>0&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+          {metaItems.map((item,i)=>(
+            <span key={i} style={{fontSize:11,color:C.faint,background:C.surf2,border:`1px solid ${C.line}`,borderRadius:6,padding:"3px 8px"}}>{item}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Waveform */}
+      <div ref={waveRef} style={{marginBottom:10,opacity:wsReady?1:0.25,transition:"opacity .3s"}}/>
+
+      {/* Transport */}
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <button onClick={()=>wsRef.current?.playPause()} disabled={!wsReady}
+          style={{width:34,height:34,borderRadius:10,border:`1px solid ${C.lineS}`,background:C.surf2,
+            cursor:wsReady?"pointer":"default",display:"grid",placeItems:"center",flexShrink:0,padding:0,
+            opacity:wsReady?1:0.45}}>
+          {playing
+            ?<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+            :<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+          }
+        </button>
+        <span className="mono" style={{fontSize:12,color:C.faint}}>{fmtSeconds(currentTime)} / {fmtSeconds(file.duration)}</span>
+        {!wsReady&&<span style={{fontSize:11,color:C.dim}}>Loading…</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ─── versions tab ─── */
+function VersionsTab({projectName}) {
+  const C=useTheme();
+  const [files,setFiles]=useState([]);
+  const [uploading,setUploading]=useState(false);
+  const [loading,setLoading]=useState(true);
+  const fileInputRef=useRef(null);
+
+  useEffect(()=>{
+    (async()=>{
+      try{const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}`);const d=await r.json();setFiles(d.files||[]);}catch{}
+      setLoading(false);
+    })();
+  },[projectName]);
+
+  const handleUpload=async e=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    e.target.value="";
+    setUploading(true);
+    try{
+      const fd=new FormData();fd.append("file",file);
+      const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}/upload`,{method:"POST",body:fd});
+      if(r.ok){const{file:meta}=await r.json();setFiles(f=>[...f,meta]);}
+    }catch{}
+    setUploading(false);
+  };
+
+  const handleDelete=async id=>{
+    try{
+      await fetch(`/api/audio/${encodeURIComponent(projectName)}/${id}`,{method:"DELETE"});
+      setFiles(f=>f.filter(x=>x.id!==id));
+    }catch{}
+  };
+
+  const handleRename=async(id,name)=>{
+    try{
+      await fetch(`/api/audio/${encodeURIComponent(projectName)}/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+      setFiles(f=>f.map(x=>x.id===id?{...x,name}:x));
+    }catch{}
+  };
+
+  return (
+    <div style={{padding:"16px 20px 20px"}}>
+      <input ref={fileInputRef} type="file" accept=".wav,.mp3" onChange={handleUpload} style={{display:"none"}}/>
+      <button onClick={()=>fileInputRef.current?.click()} disabled={uploading}
+        style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+          padding:"14px 0",borderRadius:12,cursor:uploading?"default":"pointer",
+          border:`1.5px dashed ${C.lineS}`,background:"transparent",
+          color:uploading?C.dim:C.faint,fontSize:13.5,fontWeight:600,
+          marginBottom:16,fontFamily:"var(--font-sans)"}}>
+        {uploading?(
+          <>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite"}}>
+              <circle cx="12" cy="12" r="9" stroke={C.dim} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="28 56"/>
+            </svg>
+            Uploading &amp; analyzing…
+          </>
+        ):(
+          <>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Upload WAV or MP3
+          </>
+        )}
+      </button>
+      {loading?(
+        <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>Loading…</div>
+      ):files.length===0?(
+        <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a WAV or MP3 to get started.</div>
+      ):(
+        files.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName} onDelete={handleDelete} onRename={handleRename}/>)
+      )}
+    </div>
+  );
+}
+
+/* ─── project panel (notes + versions) ─── */
 function parseLines(text) {
   return (text||"").split("\n").map(line=>{
     if(/^-x /i.test(line))return{type:"check",checked:true,content:line.slice(3)};
@@ -281,8 +462,9 @@ function parseLines(text) {
 }
 function serializeLines(lines){return lines.map(l=>l.type==="check"?(l.checked?"-x ":"- ")+l.content:l.content).join("\n");}
 
-function ProjectNotes({name,notes,onSave,onClose}) {
+function ProjectPanel({name,notes,onSave,onClose}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
+  const [tab,setTab]=useState("open");
   const [text,setText]=useState(notes||"");
   const [lines,setLines]=useState(()=>parseLines(notes));
   const [mode,setMode]=useState("preview");
@@ -293,49 +475,73 @@ function ProjectNotes({name,notes,onSave,onClose}) {
   const empty=lines.length===0||(lines.length===1&&lines[0].content==="");
   return (
     <div className="overlay" style={{alignItems:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&close()}>
-      <div style={{background:C.surf,borderRadius:22,border:`1px solid ${C.lineS}`,width:"100%",maxWidth:440,display:"flex",flexDirection:"column",animation:"mtmodal .22s ease"}}>
-        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"18px 20px"}}>
-          <div>
-            <div style={{fontSize:16,fontWeight:700,color:C.text}}>{name}</div>
-            <div style={{fontSize:12,color:C.faint,marginTop:3}}>start a line with <span className="mono" style={{color:C.indigo}}>-</span> for a checkbox</div>
-          </div>
+      <div style={{background:C.surf,borderRadius:22,border:`1px solid ${C.lineS}`,width:"100%",maxWidth:500,display:"flex",flexDirection:"column",animation:"mtmodal .22s ease",maxHeight:"88vh"}}>
+
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 20px 0"}}>
+          <div style={{fontSize:16,fontWeight:700,color:C.text}}>{name}</div>
           <button onClick={close} style={iconBtn}>{Icon.close()}</button>
         </div>
-        <div style={{display:"flex",gap:4,padding:"0 20px 14px"}}>
-          {[["preview","Preview"],["edit","Edit"]].map(([m,label])=>(
-            <button key={m} onClick={m==="preview"?toPreview:toEdit}
-              style={{fontSize:12.5,fontWeight:600,padding:"7px 16px",borderRadius:10,border:"none",cursor:"pointer",
-                background:mode===m?C.accentAlpha:"transparent",color:mode===m?C.indigo:C.faint}}>{label}</button>
+
+        {/* Tab bar */}
+        <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
+          {[["open","Open"],["versions","Versions"]].map(([t,l])=>(
+            <button key={t} onClick={()=>setTab(t)} style={{
+              padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
+              borderBottom:`2px solid ${tab===t?C.indigo:"transparent"}`,background:"transparent",
+              color:tab===t?C.indigo:C.faint,marginBottom:"-1px",fontFamily:"var(--font-sans)",
+            }}>{l}</button>
           ))}
         </div>
-        <div style={{minHeight:220,maxHeight:"52vh",overflowY:"auto",borderTop:`1px solid ${C.line}`}}>
-          {mode==="preview"?(
-            <div style={{padding:"18px 20px"}}>
-              {empty?<div style={{color:C.dim,fontSize:13.5}}>No notes yet — switch to Edit to add some.</div>
-                :lines.map((l,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                    {l.type==="check"?(
-                      <>
-                        <button onClick={()=>toggle(i)} style={{flexShrink:0,marginTop:2,width:18,height:18,borderRadius:5,
-                          border:`1.5px solid ${l.checked?C.deep:"#3a3a52"}`,background:l.checked?C.deep:"transparent",
-                          cursor:"pointer",display:"grid",placeItems:"center",padding:0}}>
-                          {l.checked&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                        </button>
-                        <span style={{fontSize:14,lineHeight:1.5,color:l.checked?C.dim:C.text,textDecoration:l.checked?"line-through":"none"}}>{l.content}</span>
-                      </>
-                    ):<span className="mono" style={{fontSize:13,lineHeight:1.6,color:C.muted,paddingLeft:28}}>{l.content||" "}</span>}
-                  </div>
-                ))}
+
+        {/* Open (notes) tab */}
+        {tab==="open"&&(
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:4,padding:"12px 20px 10px"}}>
+              {[["preview","Preview"],["edit","Edit"]].map(([m,label])=>(
+                <button key={m} onClick={m==="preview"?toPreview:toEdit}
+                  style={{fontSize:12.5,fontWeight:600,padding:"6px 14px",borderRadius:10,border:"none",cursor:"pointer",
+                    background:mode===m?C.accentAlpha:"transparent",color:mode===m?C.indigo:C.faint}}>{label}</button>
+              ))}
+              <span style={{fontSize:11,color:C.dim,marginLeft:6}}>start a line with <span className="mono" style={{color:C.indigo}}>-</span> for a checkbox</span>
             </div>
-          ):(
-            <textarea className="mt" value={text} onChange={e=>setText(e.target.value)}
-              placeholder={"Notes and to-dos…\n\n- Record main melody\n- Mix bass"}
-              style={{minHeight:220,borderRadius:0,border:"none",background:"transparent",fontFamily:"var(--font-mono)",fontSize:13,lineHeight:1.7,padding:"18px 20px"}}/>
-          )}
-        </div>
-        <div style={{display:"flex",justifyContent:"flex-end",padding:"14px 20px",borderTop:`1px solid ${C.line}`}}>
-          <button onClick={close} style={{background:C.accentGrad,border:"none",borderRadius:12,color:"#fff",padding:"11px 22px",fontSize:14,fontWeight:600,cursor:"pointer"}}>Save &amp; close</button>
-        </div>
+            <div style={{flex:1,overflowY:"auto",minHeight:200,maxHeight:"50vh",borderTop:`1px solid ${C.line}`}}>
+              {mode==="preview"?(
+                <div style={{padding:"16px 20px"}}>
+                  {empty?<div style={{color:C.dim,fontSize:13.5}}>No notes yet — switch to Edit to add some.</div>
+                    :lines.map((l,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                        {l.type==="check"?(
+                          <>
+                            <button onClick={()=>toggle(i)} style={{flexShrink:0,marginTop:2,width:18,height:18,borderRadius:5,
+                              border:`1.5px solid ${l.checked?C.deep:"#3a3a52"}`,background:l.checked?C.deep:"transparent",
+                              cursor:"pointer",display:"grid",placeItems:"center",padding:0}}>
+                              {l.checked&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </button>
+                            <span style={{fontSize:14,lineHeight:1.5,color:l.checked?C.dim:C.text,textDecoration:l.checked?"line-through":"none"}}>{l.content}</span>
+                          </>
+                        ):<span className="mono" style={{fontSize:13,lineHeight:1.6,color:C.muted,paddingLeft:28}}>{l.content||" "}</span>}
+                      </div>
+                    ))}
+                </div>
+              ):(
+                <textarea className="mt" value={text} onChange={e=>setText(e.target.value)}
+                  placeholder={"Notes and to-dos…\n\n- Record main melody\n- Mix bass"}
+                  style={{minHeight:200,borderRadius:0,border:"none",background:"transparent",fontFamily:"var(--font-mono)",fontSize:13,lineHeight:1.7,padding:"16px 20px",width:"100%",boxSizing:"border-box"}}/>
+              )}
+            </div>
+            <div style={{display:"flex",justifyContent:"flex-end",padding:"14px 20px",borderTop:`1px solid ${C.line}`}}>
+              <button onClick={close} style={{background:C.accentGrad,border:"none",borderRadius:12,color:"#fff",padding:"11px 22px",fontSize:14,fontWeight:600,cursor:"pointer"}}>Save &amp; close</button>
+            </div>
+          </>
+        )}
+
+        {/* Versions tab */}
+        {tab==="versions"&&(
+          <div style={{flex:1,overflowY:"auto"}}>
+            <VersionsTab projectName={name}/>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -954,7 +1160,7 @@ export default function App() {
         </div>
         {!showRestore&&<StatusDropdown name={p.name} status={p.status||"active"}/>}
         <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:"auto",padding:"0 10px",gap:5,display:"flex"}}>
-          {Icon.note(C.indigo)}<span style={{fontSize:11.5,fontWeight:600,color:C.indigo}}>{p.notes?"Notes":"Add"}</span>
+          {Icon.note(C.indigo)}<span style={{fontSize:11.5,fontWeight:600,color:C.indigo}}>Open</span>
         </button>
         {showRestore
           ?<button onClick={()=>restoreProject(p.name)} style={{fontSize:11.5,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer"}}>Restore</button>
@@ -973,7 +1179,7 @@ export default function App() {
     <ThemeCtx.Provider value={C}>
     <div className="app" style={{background:C.bg}}>
 
-      {notesModal&&<ProjectNotes name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)}/>}
+      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)}/>}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
       {settingsOpen&&<SettingsSheet currentTheme={themeKey} onThemeChange={changeTheme} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)}/>}
