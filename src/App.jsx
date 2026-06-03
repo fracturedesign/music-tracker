@@ -1598,11 +1598,6 @@ export default function App() {
           :<button onClick={()=>removeProject(p.name)} style={iconBtn}>{Icon.trash()}</button>
         }
       </div>
-      {p.notes&&(
-        <div onClick={()=>setNotesModal(p.name)} style={{borderTop:`1px solid ${C.line}`,marginTop:10,paddingTop:9,cursor:"pointer"}}>
-          <pre className="mono" style={{margin:0,fontSize:11,color:C.faint,whiteSpace:"pre-wrap",lineHeight:1.6,maxHeight:44,overflow:"hidden",maskImage:"linear-gradient(to bottom,#000 40%,transparent)",WebkitMaskImage:"linear-gradient(to bottom,#000 40%,transparent)"}}>{p.notes}</pre>
-        </div>
-      )}
     </div>
   );
 
