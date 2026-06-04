@@ -2129,40 +2129,42 @@ export default function App() {
     const audioCount=audioFileCounts[p.name]||0;
     return(
     <div style={{background:C.surf2,borderRadius:14,padding:"11px 13px 11px 14px"}}>
-      <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
-        {/* Status dot — always fixed left, opens dropdown */}
-        <StatusDropdown name={p.name} status={p.status||"active"} dotOnly/>
+      <div style={{display:"flex",gap:10,alignItems:"center"}}>
+        {/* Status bubble — vertically centred in the card */}
+        <StatusDropdown name={p.name} status={p.status||"active"}/>
         {/* Content */}
         <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{p.name}</div>
-            <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-              {Icon.note(C.indigo)}
-            </button>
-            {isDoneOrReleased
-              ?<button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
-                </button>
-              :<button onClick={()=>removeProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
-            }
-          </div>
-          <div style={{fontSize:11.5,color:C.faint,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-            <span style={{color:cnt?C.faint:C.dim}}>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
-            {rel&&!isDoneOrReleased&&<span style={{color:rel==="today"?C.green:rel==="yesterday"?C.indigo:C.dim}}>· {rel}</span>}
-            {audioCount>0&&<span style={{display:"flex",alignItems:"center",gap:2,color:C.dim}}>·<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}</span>}
+          <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+          <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+            {/* dates first */}
             {tlLabel?(
               <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlColor,fontWeight:500,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                ·<svg width="9" height="9" viewBox="0 0 24 24" fill="none" style={{marginLeft:2}}><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlColor} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlColor} strokeWidth="2" strokeLinecap="round"/></svg>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlColor} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlColor} strokeWidth="2" strokeLinecap="round"/></svg>
                 {tlLabel}
               </button>
             ):(
               <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.dim,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                ·<svg width="9" height="9" viewBox="0 0 24 24" fill="none" style={{marginLeft:2}}><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
                 dates
               </button>
             )}
+            {/* sessions */}
+            <span style={{color:C.dim}}>·</span>
+            <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
+            {/* audio files */}
+            {audioCount>0&&<><span style={{color:C.dim}}>·</span><span style={{display:"flex",alignItems:"center",gap:2}}><svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}</span></>}
           </div>
         </div>
+        {/* Action buttons */}
+        <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+          {Icon.note(C.indigo)}
+        </button>
+        {isDoneOrReleased
+          ?<button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+            </button>
+          :<button onClick={()=>removeProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
+        }
       </div>
       {/* Inline timeline editor — full width below the main row */}
       {tlOpen&&(
