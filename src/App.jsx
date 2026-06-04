@@ -1284,7 +1284,7 @@ function RangePicker({start,end,onChange,open,onClose}) {
   if(!open)return null;
   return(
     <div style={{marginTop:6,background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:12,
-      position:"absolute",zIndex:40,boxShadow:`0 8px 28px -6px rgba(0,0,0,0.3)`,minWidth:230,right:0}}>
+      position:"absolute",zIndex:40,boxShadow:`0 8px 28px -6px rgba(0,0,0,0.3)`,minWidth:230,left:0}}>
       {/* Month nav */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <button type="button" onClick={()=>step(-1)} style={iconBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
