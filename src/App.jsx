@@ -789,6 +789,84 @@ function parseLines(text) {
 }
 function serializeLines(lines){return lines.map(l=>l.type==="check"?(l.checked?"-x ":"- ")+l.content:l.content).join("\n");}
 
+/* ─── line-by-line notes editor with auto-checkbox (Notion-style) ─── */
+function NotesEditor({value,onChange}) {
+  const C=useTheme();
+  const [lines,setLines]=useState(()=>{
+    const p=parseLines(value);
+    return p.length?p:[{type:"text",content:""}];
+  });
+  const lineRefs=useRef([]);
+
+  const emit=next=>{setLines(next);onChange(serializeLines(next));};
+
+  const update=(i,content)=>{
+    // Typing "- " at start of a plain text line → auto-convert to checkbox
+    if(lines[i].type==="text"&&content==="- "){
+      const next=[...lines];next[i]={type:"check",checked:false,content:""};
+      emit(next);setTimeout(()=>lineRefs.current[i]?.focus(),0);return;
+    }
+    const next=[...lines];next[i]={...lines[i],content};emit(next);
+  };
+
+  const toggle=i=>{const next=[...lines];next[i]={...lines[i],checked:!lines[i].checked};emit(next);};
+
+  const moveFocus=i=>setTimeout(()=>{
+    const el=lineRefs.current[i];
+    if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length);}catch{}}
+  },0);
+
+  const onKey=(i,e)=>{
+    if(e.key==="Enter"){
+      e.preventDefault();
+      const next=[...lines];
+      // Continue checkbox list on Enter; plain text creates plain line
+      next.splice(i+1,0,{type:lines[i].type==="check"?"check":"text",checked:false,content:""});
+      emit(next);moveFocus(i+1);
+    } else if(e.key==="Backspace"&&lines[i].content===""){
+      if(lines[i].type==="check"){
+        // Backspace on empty checkbox → demote back to text
+        e.preventDefault();
+        const next=[...lines];next[i]={type:"text",content:""};
+        emit(next);setTimeout(()=>lineRefs.current[i]?.focus(),0);
+      } else if(i>0){
+        e.preventDefault();
+        const next=[...lines];next.splice(i,1);
+        emit(next);moveFocus(i-1);
+      }
+    }
+  };
+
+  return(
+    <div style={{borderTop:`1px solid ${C.line}`,minHeight:120,padding:"8px 16px 4px"}}>
+      {lines.map((line,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:8,minHeight:28,padding:"1px 0"}}>
+          {line.type==="check"?(
+            <button onClick={()=>toggle(i)} style={{flexShrink:0,width:16,height:16,borderRadius:4,
+              border:`1.5px solid ${line.checked?C.deep:C.dim}`,background:line.checked?C.deep:"transparent",
+              cursor:"pointer",display:"grid",placeItems:"center",padding:0}}>
+              {line.checked&&<svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </button>
+          ):<div style={{width:16,flexShrink:0}}/>}
+          <input
+            ref={el=>lineRefs.current[i]=el}
+            value={line.content}
+            onChange={e=>update(i,e.target.value)}
+            onKeyDown={e=>onKey(i,e)}
+            placeholder={i===0&&line.type==="text"?`Notes… type "- " for a checkbox`:undefined}
+            style={{flex:1,background:"transparent",border:"none",outline:"none",
+              fontSize:13,lineHeight:1.7,fontFamily:"var(--font-mono)",padding:0,
+              color:line.checked?C.dim:C.text,
+              textDecoration:line.type==="check"&&line.checked?"line-through":"none"}}
+          />
+        </div>
+      ))}
+      {/* Click empty area below to focus last line */}
+      <div style={{minHeight:24,cursor:"text"}} onClick={()=>lineRefs.current[lines.length-1]?.focus()}/>
+    </div>
+  );
+}
+
 function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [tab,setTab]=useState("open");
@@ -810,23 +888,9 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const commitTimeline=()=>{onSaveTimeline?.(tlStart,tlEnd);setTlEditing(false);};
   const clearTimeline=()=>{setTlStart("");setTlEnd("");onSaveTimeline?.("","");setTlEditing(false);};
   const [text,setText]=useState(notes||"");
-  const notesRef=useRef(null);
   const close=()=>{onSave(text);onClose();};
-  const insertCheckbox=()=>{
-    const el=notesRef.current;if(!el)return;
-    const s=el.selectionStart,v=el.value;
-    // Insert at start of current line
-    const lineStart=v.lastIndexOf("\n",s-1)+1;
-    const insert="- ";
-    const next=v.slice(0,lineStart)+insert+v.slice(lineStart);
-    setText(next);
-    setTimeout(()=>{el.selectionStart=el.selectionEnd=lineStart+insert.length+(s-lineStart);el.focus();},0);
-  };
 
-  // History — sessions for this project sorted newest first
-  const today=toDateStr(new Date());
   const projectSessions=(sessions||[]).filter(s=>s.project===name).sort((a,b)=>b.date.localeCompare(a.date)||((b.hour??0)-(a.hour??0)));
-
   const tlFmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric",year:"numeric"}):"";
   const hasTl=plannedStart||plannedEnd;
 
@@ -848,7 +912,6 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
             <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
               <div style={{fontSize:16,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
               <button onClick={()=>{setRenameVal(name);setRenamingProject(true);}} style={{...iconBtn,flexShrink:0,width:26,height:26,borderRadius:7}} title="Rename project">{Icon.pencil()}</button>
-              {/* Timeline button */}
               <button onClick={()=>setTlEditing(v=>!v)}
                 style={{...iconBtn,flexShrink:0,width:"auto",padding:"0 8px",gap:4,display:"flex",alignItems:"center",height:26,borderRadius:7,
                   background:hasTl?C.accentAlpha:"transparent",border:hasTl?`1px solid ${C.accentBorder}`:`1px solid ${C.lineS}`}}
@@ -861,7 +924,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
           {!renamingProject&&<button onClick={close} style={{...iconBtn,flexShrink:0}}>{Icon.close()}</button>}
         </div>
 
-        {/* Timeline editor (inline, below header) */}
+        {/* Timeline editor */}
         {tlEditing&&!renamingProject&&(
           <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px 0",flexWrap:"wrap"}}>
             <input type="date" value={tlStart} onChange={e=>setTlStart(e.target.value)}
@@ -876,63 +939,55 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
 
         {/* Tab bar */}
         <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
-          {[["open","Notes"],["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"]].map(([t,l])=>(
+          {[["open","Notes"],["history",`History · ${projectSessions.length}`],["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"]].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
-              padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
+              padding:"8px 14px",fontSize:13,fontWeight:600,border:"none",cursor:"pointer",
               borderBottom:`2px solid ${tab===t?C.indigo:"transparent"}`,background:"transparent",
               color:tab===t?C.indigo:C.faint,marginBottom:"-1px",fontFamily:"var(--font-sans)",whiteSpace:"nowrap",
             }}>{l}</button>
           ))}
         </div>
 
-        {/* Notes + History tab */}
+        {/* Notes tab */}
         {tab==="open"&&(
           <>
             <div style={{flex:1,overflowY:"auto",maxHeight:"58vh"}}>
-              {/* Notes */}
-              <div style={{padding:"10px 16px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <span style={{fontSize:11,color:C.dim}}>Notes &amp; to-dos</span>
-                <button onClick={insertCheckbox} title="Insert checkbox"
-                  style={{fontSize:11,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:"none",borderRadius:7,padding:"4px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2.5" stroke={C.indigo} strokeWidth="1.5"/><path d="M3.5 7l2.5 2.5 4-5" stroke={C.indigo} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  checkbox
-                </button>
-              </div>
-              <textarea ref={notesRef} className="mt" value={text} onChange={e=>setText(e.target.value)}
-                placeholder={"Notes and to-dos…\n\n- Record main melody\n- Mix bass"}
-                style={{minHeight:120,borderRadius:0,border:"none",borderTop:`1px solid ${C.line}`,background:"transparent",fontFamily:"var(--font-mono)",fontSize:13,lineHeight:1.7,padding:"12px 16px",width:"100%",boxSizing:"border-box"}}/>
-              {/* Session history */}
-              {projectSessions.length>0&&(
-                <div style={{borderTop:`1px solid ${C.line}`}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",padding:"10px 16px 6px"}}>Session history</div>
-                  {projectSessions.map((s,i)=>{
-                    const tagCol=s.tag?TAG_COLOR[s.tag]:null;
-                    const isNewDate=i===0||projectSessions[i-1].date!==s.date;
-                    return(
-                      <div key={s.id}>
-                        {isNewDate&&<div style={{fontSize:11,color:C.faint,padding:"6px 16px 2px",fontWeight:600}}>{fmtRelativeDate(s.date)||s.date}</div>}
-                        <div style={{display:"flex",gap:10,padding:"6px 16px",borderTop:`1px solid ${C.line}`}}>
-                          <div style={{width:3,borderRadius:2,background:tagCol||C.indigo,flexShrink:0,alignSelf:"stretch",minHeight:28}}/>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                              <span style={{fontSize:11.5,color:C.muted}}>{fmtDur(s.duration)}</span>
-                              {s.hour!=null&&<span style={{fontSize:11,color:C.dim}}>{`${s.hour%12||12}${s.hour<12?"am":"pm"}`}</span>}
-                              {s.mood!=null&&<span style={{fontSize:11}}>{MOOD_EMOJI[s.mood]}</span>}
-                              {s.tag&&<span style={{fontSize:10,fontWeight:600,color:tagCol,background:`${tagCol}1e`,borderRadius:4,padding:"1px 6px"}}>{s.tag}</span>}
-                            </div>
-                            {s.note&&<div style={{fontSize:12.5,color:C.text,lineHeight:1.5}}>{s.note}</div>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <NotesEditor value={text} onChange={setText}/>
             </div>
             <div style={{display:"flex",justifyContent:"flex-end",padding:"14px 20px",borderTop:`1px solid ${C.line}`}}>
               <button onClick={close} style={{background:C.accentGrad,border:"none",borderRadius:12,color:"#fff",padding:"11px 22px",fontSize:14,fontWeight:600,cursor:"pointer"}}>Save &amp; close</button>
             </div>
           </>
+        )}
+
+        {/* History tab */}
+        {tab==="history"&&(
+          <div style={{flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column"}}>
+            {projectSessions.length===0
+              ?<div style={{color:C.dim,fontSize:13.5,textAlign:"center",padding:"24px 0"}}>No sessions logged for this project yet.</div>
+              :projectSessions.map((s,i)=>{
+                const tagCol=s.tag?TAG_COLOR[s.tag]:null;
+                const isNewDate=i===0||projectSessions[i-1].date!==s.date;
+                return(
+                  <div key={s.id}>
+                    {isNewDate&&<div style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.05em",textTransform:"uppercase",padding:i>0?"14px 0 4px":"0 0 4px"}}>{fmtRelativeDate(s.date)||s.date}</div>}
+                    <div style={{display:"flex",gap:10,padding:"7px 0",borderTop:`1px solid ${C.line}`}}>
+                      <div style={{width:3,borderRadius:2,background:tagCol||C.indigo,flexShrink:0,alignSelf:"stretch",minHeight:28}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11.5,fontWeight:600,color:C.muted}}>{fmtDur(s.duration)}</span>
+                          {s.hour!=null&&<span style={{fontSize:11,color:C.dim}}>{`${s.hour%12||12}${s.hour<12?"am":"pm"}`}</span>}
+                          {s.mood!=null&&<span style={{fontSize:12}}>{MOOD_EMOJI[s.mood]}</span>}
+                          {s.tag&&<span style={{fontSize:10,fontWeight:600,color:tagCol,background:`${tagCol}1e`,borderRadius:4,padding:"1px 6px"}}>{s.tag}</span>}
+                        </div>
+                        {s.note?<div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{s.note}</div>
+                          :<div style={{fontSize:12,color:C.dim,fontStyle:"italic"}}>no note</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         )}
 
         {/* Versions tab */}
@@ -2165,23 +2220,30 @@ export default function App() {
           {DAYS_MON.map((d,i)=><div key={i} style={{fontSize:10.5,color:C.dim,textAlign:"center"}}>{d}</div>)}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-          {calCells.map((ds,i)=>{
-            if(!ds)return<div key={i}/>;
-            const isPast=ds<today,isToday=ds===today,hasSess=!!sessionsByDate[ds],missed=isPast&&!hasSess;
-            const tlProjects=projects.filter(p=>p.plannedStart&&p.plannedEnd&&p.plannedStart<=ds&&ds<=p.plannedEnd);
-            const tlBarColor=p=>p.plannedEnd<today?C.flame:p.plannedStart<=today?C.green:C.indigo;
-            return(
-              <button key={ds} onClick={()=>setSheet({form:newForm(ds),editing:false,id:null})} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:"pointer",padding:0,position:"relative",background:isToday?C.accentAlpha:hasSess?C.accentAlpha2:"transparent",border:isToday?`1.5px solid ${C.indigo}`:"1.5px solid transparent"}}>
-                <span style={{fontSize:12.5,color:isToday?C.indigo:hasSess?C.text:C.faint,fontWeight:hasSess?600:400}}>{Number(ds.slice(8))}</span>
-                {hasSess?<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>:missed?<span style={{width:5,height:5,borderRadius:"50%",background:C.surf2}}/>:<span style={{height:5}}/>}
-                {tlProjects.length>0&&(
-                  <div style={{position:"absolute",bottom:0,left:0,right:0,height:3,display:"flex",borderRadius:"0 0 8px 8px",overflow:"hidden"}}>
-                    {tlProjects.map(p=><div key={p.name} style={{flex:1,background:tlBarColor(p)}}/>)}
-                  </div>
-                )}
-              </button>
-            );
-          })}
+          {(()=>{
+            // Assign each timed project a fixed lane (consistent vertical position across all days)
+            const timedProjects=projects.filter(p=>p.plannedStart&&p.plannedEnd);
+            const tlColor=p=>p.plannedEnd<today?C.flame:p.plannedStart<=today?C.green:C.indigo;
+            return calCells.map((ds,i)=>{
+              if(!ds)return<div key={i}/>;
+              const isPast=ds<today,isToday=ds===today,hasSess=!!sessionsByDate[ds],missed=isPast&&!hasSess;
+              // Projects that span this day, with their lane index
+              const dayTl=timedProjects.map((p,li)=>({p,li})).filter(({p})=>p.plannedStart<=ds&&ds<=p.plannedEnd);
+              const hasProject=dayTl.length>0;
+              const firstProject=hasProject?dayTl[0].p:null;
+              const handleClick=()=>{if(firstProject)setNotesModal(firstProject.name);};
+              return(
+                <button key={ds} onClick={handleClick} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:hasProject?"pointer":"default",padding:0,position:"relative",overflow:"hidden",background:isToday?C.accentAlpha:hasSess?C.accentAlpha2:"transparent",border:isToday?`1.5px solid ${C.indigo}`:"1.5px solid transparent"}}>
+                  <span style={{fontSize:12.5,color:isToday?C.indigo:hasSess?C.text:C.faint,fontWeight:hasSess?600:400,position:"relative",zIndex:1}}>{Number(ds.slice(8))}</span>
+                  {hasSess?<span style={{width:5,height:5,borderRadius:"50%",background:C.green,position:"relative",zIndex:1}}/>:missed?<span style={{width:5,height:5,borderRadius:"50%",background:C.surf2,position:"relative",zIndex:1}}/>:<span style={{height:5,position:"relative",zIndex:1}}/>}
+                  {/* One horizontal band per project, stacked from bottom upward */}
+                  {dayTl.map(({p,li})=>(
+                    <div key={p.name} style={{position:"absolute",left:0,right:0,height:6,bottom:3+li*8,background:tlColor(p),opacity:0.72}}/>
+                  ))}
+                </button>
+              );
+            });
+          })()}
         </div>
       </div>
 
