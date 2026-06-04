@@ -38,6 +38,26 @@ const STATUS_CFG = {
   released:  { label:"Released",   dot:"#fbbf24" },
 };
 
+// 12 perceptually distinct colors for project identity — spread across hue wheel
+const PROJECT_PALETTE = [
+  "#f87171", // red
+  "#fb923c", // orange
+  "#fbbf24", // amber
+  "#a3e635", // lime
+  "#34d399", // emerald
+  "#22d3ee", // cyan
+  "#60a5fa", // blue
+  "#818cf8", // indigo
+  "#c084fc", // purple
+  "#f472b6", // pink
+  "#e11d48", // rose-red
+  "#0ea5e9", // sky
+];
+const pickProjectColor=(usedColors)=>{
+  const free=PROJECT_PALETTE.find(c=>!usedColors.has(c));
+  return free||PROJECT_PALETTE[usedColors.size%PROJECT_PALETTE.length];
+};
+
 const GROUP_TYPE_CFG = {
   album: { label:"Album", badge:"LP", dot:"#fb923c" },
   ep:    { label:"EP",    badge:"EP", dot:"#60a5fa" },
@@ -2327,7 +2347,15 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
       try{const r=await storage.get("music_sessions");if(r?.value)setSessions(JSON.parse(r.value));}catch{}
-      try{const p=await storage.get("music_projects");if(p?.value){const raw=JSON.parse(p.value);setProjects(raw.map(x=>typeof x==="string"?{name:x,notes:"",status:"active"}:{...x,status:x.status||"active"}));}}catch{}
+      try{const p=await storage.get("music_projects");if(p?.value){
+        const raw=JSON.parse(p.value).map(x=>typeof x==="string"?{name:x,notes:"",status:"active"}:{...x,status:x.status||"active"});
+        // Migrate: assign a stored color to any project that doesn't have one
+        const usedColors=new Set(raw.filter(x=>x.color).map(x=>x.color));
+        let changed=false;
+        raw.forEach(x=>{if(!x.color){x.color=pickProjectColor(usedColors);usedColors.add(x.color);changed=true;}});
+        setProjects(raw);
+        if(changed)await storage.set("music_projects",JSON.stringify(raw));
+      }}catch{}
       try{const g=await storage.get("music_goal");if(g?.value)setGoalHours(JSON.parse(g.value));}catch{}
       try{const m=await storage.get("music_milestones");if(m?.value)setUnlockedMilestones(JSON.parse(m.value));}catch{}
       try{const t=await storage.get("music_timer");if(t?.value)setTimer(JSON.parse(t.value));}catch{}
@@ -2507,14 +2535,8 @@ export default function App() {
   const projectMap=Object.fromEntries(projects.map(p=>[p.name,p]));
   const projectCounts=sessions.reduce((acc,s)=>{if(s.project)acc[s.project]=(acc[s.project]||0)+1;return acc;},{});
 
-  // Deterministic per-project color: sort by name → assign sequentially from 12-color palette.
-  // Guarantees uniqueness up to 12 projects, then cycles. Stable across re-renders.
-  const TL_PALETTE=["#60a5fa","#34d399","#fb923c","#f472b6","#a78bfa","#fbbf24","#4ade80","#38bdf8","#e879f9","#f87171","#2dd4bf","#facc15"];
-  const projectColorMap=(()=>{
-    const sorted=[...projects].sort((a,b)=>a.name.localeCompare(b.name));
-    const map={};sorted.forEach((p,i)=>{map[p.name]=TL_PALETTE[i%TL_PALETTE.length];});
-    return map;
-  })();
+  // Color is stored on each project — stable regardless of add/delete order
+  const projectColorMap=Object.fromEntries(projects.map(p=>[p.name,p.color||PROJECT_PALETTE[0]]));
   const recent=[...sessions].sort((a,b)=>b.date.localeCompare(a.date));
 
   const rawActive=projects.filter(p=>!["done","released"].includes(p.status||"active"));
@@ -2563,7 +2585,8 @@ export default function App() {
 
   const addProject=async(type="track")=>{
     const name=newProject.trim();if(!name||projects.find(p=>p.name===name))return;
-    const proj={name,notes:"",status:"active"};
+    const usedColors=new Set(projects.map(p=>p.color).filter(Boolean));
+    const proj={name,notes:"",status:"active",color:pickProjectColor(usedColors)};
     if(type&&type!=="track")proj.type=type;
     if(newProjectStart)proj.plannedStart=newProjectStart;
     if(newProjectEnd)proj.plannedEnd=newProjectEnd;
