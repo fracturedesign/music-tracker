@@ -213,9 +213,18 @@ app.post("/api/audio/:project/scan", async (req, res) => {
   const existingPaths = new Set(existing.map(f => f.linkedPath).filter(Boolean));
 
   const audioExts = [".wav", ".mp3"];
+  // Match files whose basename starts with the project name (case-insensitive),
+  // followed by end-of-string or a separator char (space, dash, underscore, dot).
+  // This prevents "Flower of memories" from matching project "Fading Flower".
+  const nameMatchesProject = (filePath, filter) => {
+    if (!filter) return true;
+    const base = basename(filePath, extname(filePath)).toLowerCase();
+    const f = filter.toLowerCase();
+    return base === f || /^[-_ .]/.test(base.slice(f.length)) && base.startsWith(f);
+  };
   const toAdd = walkDir(folderPath)
     .filter(f => audioExts.includes(extname(f).toLowerCase()))
-    .filter(f => !nameFilter || basename(f, extname(f)).toLowerCase().includes(nameFilter.toLowerCase()))
+    .filter(f => nameMatchesProject(f, nameFilter))
     .filter(f => !existingPaths.has(f));
 
   const added = [];

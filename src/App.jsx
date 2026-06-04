@@ -912,6 +912,25 @@ function NotesEditor({value,onChange}) {
   );
 }
 
+function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCountChange,borderTop=false}) {
+  const C=useTheme();
+  const [open,setOpen]=useState(true);
+  return(
+    <div style={{borderTop:borderTop?`1px solid ${C.line}`:"none"}}>
+      <button onClick={()=>setOpen(v=>!v)} style={{
+        width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+        padding:"10px 16px 6px",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",
+      }}>
+        <span style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase"}}>{label}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:open?"rotate(180deg)":"none",transition:"transform .18s",flexShrink:0}}>
+          <path d="M6 9l6 6 6-6" stroke={C.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {open&&<VersionsTab projectName={projectName} onCountChange={onCountChange} globalAudioFolder={globalAudioFolder}/>}
+    </div>
+  );
+}
+
 function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,canGoBack=false}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const isGroupType=!!GROUP_TYPE_CFG[type];
@@ -1199,10 +1218,9 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
             {isGroup?(
               <>
                 {childProjects.map((c,i)=>(
-                  <div key={c.name}>
-                    <div style={{padding:"10px 16px 4px",fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",borderTop:i>0?`1px solid ${C.line}`:"none"}}>{c.name}</div>
-                    <VersionsTab projectName={c.name} onCountChange={i===0?setVersionsCount:undefined} globalAudioFolder={globalAudioFolder}/>
-                  </div>
+                  <CollapsibleVersionsSection key={c.name} projectName={c.name} label={c.name}
+                    onCountChange={i===0?setVersionsCount:undefined}
+                    globalAudioFolder={globalAudioFolder} borderTop={i>0}/>
                 ))}
                 {childProjects.length===0&&<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"32px 0",fontStyle:"italic"}}>No tracks in this group yet</div>}
               </>
