@@ -914,7 +914,8 @@ function NotesEditor({value,onChange}) {
 
 function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,canGoBack=false}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
-  const [tab,setTab]=useState(initialTab||"open");
+  const isGroupType=!!GROUP_TYPE_CFG[type];
+  const [tab,setTab]=useState(initialTab&&initialTab!=="open"?initialTab:isGroupType?"tracks":"open");
   const [versionsCount,setVersionsCount]=useState(null);
   const [renamingProject,setRenamingProject]=useState(false);
   const [renameVal,setRenameVal]=useState(name);
@@ -948,7 +949,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const [text,setText]=useState(notes||"");
   const [historyOpen,setHistoryOpen]=useState(false);
   const [addTrackOpen,setAddTrackOpen]=useState(false);
-  const isGroup=!!GROUP_TYPE_CFG[type];
+  const isGroup=isGroupType;
   const close=()=>{onSave(text);onClose()};
 
   const projectSessions=(sessions||[]).filter(s=>s.project===name).sort((a,b)=>b.date.localeCompare(a.date)||((b.hour??0)-(a.hour??0)));
@@ -1051,8 +1052,8 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
         {/* Tab bar */}
         <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
           {[
-            ["open","Notes"],
             ...(isGroup?[["tracks",`Tracks · ${childProjects.length}`]]:[]),
+            ["open","Notes"],
             ["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"],
           ].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
@@ -1117,46 +1118,77 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
 
         {/* Tracks tab — group projects only */}
         {tab==="tracks"&&(
-          <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:8}}>
-            {childProjects.map(c=>(
-              <div key={c.name} style={{display:"flex",alignItems:"center",gap:8,background:C.surf2,borderRadius:12,padding:"10px 12px"}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
-                  <div style={{fontSize:11,color:C.dim,marginTop:1}}>{STATUS_CFG[c.status||"active"]?.label}</div>
-                </div>
-                <button onClick={()=>onOpenProject?.(c.name)} style={{fontSize:12,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)"}}>Open</button>
-                <button onClick={()=>onRemoveFromGroup?.(c.name)} title="Remove from group" style={{background:"none",border:"none",cursor:"pointer",color:C.faint,padding:4,borderRadius:6,display:"flex",alignItems:"center"}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke={C.faint} strokeWidth="2" strokeLinecap="round"/></svg>
+          <div style={{flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
+            {/* Add track button — top */}
+            {ungroupedProjects.length>0&&(
+              !addTrackOpen?(
+                <button onClick={()=>setAddTrackOpen(true)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px dashed ${C.lineS}`,borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.dim,fontSize:13,fontWeight:600,width:"100%",fontFamily:"var(--font-sans)"}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
+                  Add track to group
                 </button>
-              </div>
-            ))}
+              ):(
+                <div style={{background:C.surf2,borderRadius:12,padding:8,display:"flex",flexDirection:"column",gap:4}}>
+                  {ungroupedProjects.map(p=>(
+                    <button key={p.name} onClick={()=>{onAddToGroup?.(p.name,name);setAddTrackOpen(false);}} style={{
+                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                      borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
+                      fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
+                    }}>
+                      <span style={{width:7,height:7,borderRadius:"50%",background:C.indigo,flexShrink:0}}/>
+                      {p.name}
+                    </button>
+                  ))}
+                  <button onClick={()=>setAddTrackOpen(false)} style={{fontSize:12,color:C.faint,background:"none",border:"none",cursor:"pointer",padding:"4px 12px",textAlign:"left",fontFamily:"var(--font-sans)"}}>Cancel</button>
+                </div>
+              )
+            )}
+            {/* Child project cards — ProjectRow style */}
+            {childProjects.map(c=>{
+              const sc=STATUS_CFG[c.status||"active"]||STATUS_CFG.active;
+              const sd=sc.dot||C.indigo;
+              const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
+              const tlLabel=(()=>{
+                if(c.plannedStart&&c.plannedEnd&&c.plannedStart!==c.plannedEnd)return`${fmt(c.plannedStart)} → ${fmt(c.plannedEnd)}`;
+                if(c.plannedStart&&c.plannedEnd&&c.plannedStart===c.plannedEnd)return fmt(c.plannedStart);
+                if(c.plannedStart)return fmt(c.plannedStart);
+                if(c.plannedEnd)return`due ${fmt(c.plannedEnd)}`;
+                return null;
+              })();
+              const today2=new Date().toISOString().slice(0,10);
+              const tlColor=(()=>{
+                if(!c.plannedStart&&!c.plannedEnd)return C.dim;
+                if(c.plannedEnd&&c.plannedEnd<today2)return C.flame;
+                if(c.plannedStart&&c.plannedStart<=today2&&(!c.plannedEnd||c.plannedEnd>=today2))return C.green;
+                return C.indigo;
+              })();
+              const cnt=sessions?.filter(s=>s.project===c.name).length||0;
+              return(
+                <div key={c.name} style={{background:C.surf2,borderRadius:12,padding:"11px 12px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <button onClick={()=>onOpenProject?.(c.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",width:"100%"}}>
+                      <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+                    </button>
+                    <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                      {tlLabel&&(
+                        <span style={{display:"flex",alignItems:"center",gap:2,color:tlColor,fontWeight:500}}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlColor} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlColor} strokeWidth="2" strokeLinecap="round"/></svg>
+                          {tlLabel}
+                        </span>
+                      )}
+                      {tlLabel&&<span style={{color:C.dim}}>·</span>}
+                      <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
+                    </div>
+                  </div>
+                  <button onClick={()=>onOpenProject?.(c.name)} style={{fontSize:10.5,fontWeight:700,color:sd,background:`${sd}1a`,border:`1.5px solid ${sd}55`,borderRadius:20,padding:"2px 8px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4}}>{sc.label}</button>
+                  <button onClick={()=>onOpenProject?.(c.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.note(C.indigo)}</button>
+                  <button onClick={()=>onRemoveFromGroup?.(c.name)} title="Remove from group" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke={C.faint} strokeWidth="2" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+              );
+            })}
             {childProjects.length===0&&(
               <div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"16px 0",fontStyle:"italic"}}>No tracks yet</div>
-            )}
-            {/* Add track selector */}
-            {ungroupedProjects.length>0&&(
-              <div style={{marginTop:4}}>
-                {!addTrackOpen?(
-                  <button onClick={()=>setAddTrackOpen(true)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px dashed ${C.lineS}`,borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.dim,fontSize:13,fontWeight:600,width:"100%",fontFamily:"var(--font-sans)"}}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
-                    Add track to group
-                  </button>
-                ):(
-                  <div style={{background:C.surf2,borderRadius:12,padding:8,display:"flex",flexDirection:"column",gap:4}}>
-                    {ungroupedProjects.map(p=>(
-                      <button key={p.name} onClick={()=>{onAddToGroup?.(p.name,name);setAddTrackOpen(false);}} style={{
-                        display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                        borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
-                        fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
-                      }}>
-                        <span style={{width:7,height:7,borderRadius:"50%",background:C.indigo,flexShrink:0}}/>
-                        {p.name}
-                      </button>
-                    ))}
-                    <button onClick={()=>setAddTrackOpen(false)} style={{fontSize:12,color:C.faint,background:"none",border:"none",cursor:"pointer",padding:"4px 12px",textAlign:"left",fontFamily:"var(--font-sans)"}}>Cancel</button>
-                  </div>
-                )}
-              </div>
             )}
           </div>
         )}
@@ -1164,7 +1196,18 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
         {/* Versions tab */}
         {tab==="versions"&&(
           <div style={{flex:1,overflowY:"auto"}}>
-            <VersionsTab projectName={name} onCountChange={setVersionsCount} globalAudioFolder={globalAudioFolder}/>
+            {isGroup?(
+              <>
+                {[{name, label: name+" (group)"}, ...childProjects.map(c=>({name:c.name,label:c.name}))].map(({name:pn,label},i)=>(
+                  <div key={pn}>
+                    <div style={{padding:"10px 16px 4px",fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",borderTop:i>0?`1px solid ${C.line}`:"none"}}>{label}</div>
+                    <VersionsTab projectName={pn} onCountChange={i===0?setVersionsCount:undefined} globalAudioFolder={globalAudioFolder}/>
+                  </div>
+                ))}
+              </>
+            ):(
+              <VersionsTab projectName={name} onCountChange={setVersionsCount} globalAudioFolder={globalAudioFolder}/>
+            )}
           </div>
         )}
       </div>
