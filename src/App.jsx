@@ -907,7 +907,7 @@ function NotesEditor({value,onChange}) {
   );
 }
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [tab,setTab]=useState(initialTab||"open");
   const [versionsCount,setVersionsCount]=useState(null);
@@ -916,10 +916,17 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const [tlStart,setTlStart]=useState(plannedStart||"");
   const [tlEnd,setTlEnd]=useState(plannedEnd||"");
   const [tlEditing,setTlEditing]=useState(false);
+  const [statusDropOpen,setStatusDropOpen]=useState(false);
+  const statusDropRef=useRef(null);
   useEffect(()=>{
     fetch(`/api/audio/${encodeURIComponent(name)}`).then(r=>r.json())
       .then(d=>setVersionsCount(d.files?.length??0)).catch(()=>{});
   },[name]);
+  useEffect(()=>{
+    if(!statusDropOpen)return;
+    const h=e=>{if(statusDropRef.current&&!statusDropRef.current.contains(e.target))setStatusDropOpen(false);};
+    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+  },[statusDropOpen]);
   const commitRename=()=>{
     const trimmed=renameVal.trim();
     if(trimmed&&trimmed!==name)onRename?.(name,trimmed);
@@ -932,8 +939,14 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const close=()=>{onSave(text);onClose();};
 
   const projectSessions=(sessions||[]).filter(s=>s.project===name).sort((a,b)=>b.date.localeCompare(a.date)||((b.hour??0)-(a.hour??0)));
-  const tlFmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric",year:"numeric"}):"";
+  const totalProjMins=projectSessions.reduce((a,s)=>a+s.duration,0);
+  const lastSession=projectSessions[0];
+  const tlFmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
+  const tlFmtFull=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric",year:"numeric"}):"";
   const hasTl=plannedStart||plannedEnd;
+  const curStatus=status||"active";
+  const statusCfg=STATUS_CFG[curStatus]||STATUS_CFG.active;
+  const statusDot=statusCfg.dot||C.indigo;
 
   return (
     <div className="overlay" style={{alignItems:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&close()}>
@@ -950,20 +963,72 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
               <button onClick={()=>{setRenameVal(name);setRenamingProject(false);}} style={iconBtn}>{Icon.close()}</button>
             </div>
           ):(
-            <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
               <div style={{fontSize:16,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
               <button onClick={()=>{setRenameVal(name);setRenamingProject(true);}} style={{...iconBtn,flexShrink:0,width:26,height:26,borderRadius:7}} title="Rename project">{Icon.pencil()}</button>
-              <button onClick={()=>setTlEditing(v=>!v)}
-                style={{...iconBtn,flexShrink:0,width:"auto",padding:"0 8px",gap:4,display:"flex",alignItems:"center",height:26,borderRadius:7,
-                  background:hasTl?C.accentAlpha:"transparent",border:hasTl?`1px solid ${C.accentBorder}`:`1px solid ${C.lineS}`}}
-                title="Set planned dates">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={hasTl?C.indigo:C.muted} strokeWidth="1.8"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={hasTl?C.indigo:C.muted} strokeWidth="1.8" strokeLinecap="round"/></svg>
-                {hasTl&&<span style={{fontSize:10.5,fontWeight:600,color:C.indigo,whiteSpace:"nowrap"}}>{tlFmt(plannedStart)}{plannedEnd?` → ${tlFmt(plannedEnd)}`:""}</span>}
-              </button>
             </div>
           )}
           {!renamingProject&&<button onClick={close} style={{...iconBtn,flexShrink:0}}>{Icon.close()}</button>}
         </div>
+
+        {/* Metadata strip — status · dates · stats */}
+        {!renamingProject&&(
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px 0",flexWrap:"wrap"}}>
+            {/* Status pill + dropdown */}
+            <div ref={statusDropRef} style={{position:"relative"}}>
+              <button onClick={()=>setStatusDropOpen(o=>!o)} style={{
+                fontSize:11,fontWeight:700,color:statusDot,background:`${statusDot}1a`,
+                border:`1.5px solid ${statusDot}55`,borderRadius:20,padding:"3px 10px",
+                cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4,
+              }}>{statusCfg.label}</button>
+              {statusDropOpen&&(
+                <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:30,
+                  background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
+                  minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                  {STATUS_ORDER.map(s=>{
+                    const sc=STATUS_CFG[s],sd=sc.dot||C.indigo,isActive=s===curStatus;
+                    return(
+                      <button key={s} onClick={()=>{onStatusChange?.(name,s);setStatusDropOpen(false);}} style={{
+                        display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",
+                        borderRadius:9,border:"none",background:isActive?`${sd}18`:"transparent",
+                        cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
+                        color:isActive?sd:C.text,textAlign:"left",
+                      }}>
+                        <span style={{width:8,height:8,borderRadius:"50%",background:sd,flexShrink:0}}/>
+                        {sc.label}
+                        {isActive&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={sd} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Dates chip */}
+            <button onClick={()=>setTlEditing(v=>!v)} style={{
+              display:"flex",alignItems:"center",gap:5,
+              fontSize:11,fontWeight:600,
+              color:hasTl?C.indigo:C.faint,
+              background:hasTl?C.accentAlpha:"transparent",
+              border:`1.5px solid ${hasTl?C.accentBorder:C.line}`,
+              borderRadius:20,padding:"3px 10px",cursor:"pointer",
+              fontFamily:"var(--font-sans)",lineHeight:1.4,whiteSpace:"nowrap",
+            }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke="currentColor" strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              {hasTl?`${tlFmt(plannedStart)}${plannedEnd?` → ${tlFmt(plannedEnd)}`:""}` : "Set dates"}
+            </button>
+
+            {/* Stats */}
+            {projectSessions.length>0&&(
+              <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:11,color:C.faint}}>{fmtDur(totalProjMins)}</span>
+                <span style={{fontSize:11,color:C.dim}}>·</span>
+                <span style={{fontSize:11,color:C.faint}}>{projectSessions.length} session{projectSessions.length!==1?"s":""}</span>
+                {lastSession&&<><span style={{fontSize:11,color:C.dim}}>·</span><span style={{fontSize:11,color:C.faint}}>{tlFmtFull(lastSession.date)}</span></>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Timeline editor */}
         {tlEditing&&!renamingProject&&(
@@ -2614,7 +2679,7 @@ export default function App() {
     <ThemeCtx.Provider value={C}>
     <div className="app" style={{background:C.bg}}>
 
-      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} plannedStart={projectMap[notesModal]?.plannedStart||""} plannedEnd={projectMap[notesModal]?.plannedEnd||""} onSaveTimeline={(s,e)=>saveTimeline(notesModal,s,e)} sessions={sessions} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject} initialTab={notesModalTab}/>}
+      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} plannedStart={projectMap[notesModal]?.plannedStart||""} plannedEnd={projectMap[notesModal]?.plannedEnd||""} onSaveTimeline={(s,e)=>saveTimeline(notesModal,s,e)} sessions={sessions} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject} initialTab={notesModalTab} status={projectMap[notesModal]?.status||"active"} onStatusChange={(name,s)=>updateProjectStatus(name,s)}/>}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
