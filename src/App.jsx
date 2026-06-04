@@ -1004,19 +1004,32 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
               )}
             </div>
 
-            {/* Dates chip */}
-            <button onClick={()=>setTlEditing(v=>!v)} style={{
-              display:"flex",alignItems:"center",gap:5,
-              fontSize:11,fontWeight:600,
-              color:hasTl?C.indigo:C.faint,
-              background:hasTl?C.accentAlpha:"transparent",
-              border:`1.5px solid ${hasTl?C.accentBorder:C.line}`,
-              borderRadius:20,padding:"3px 10px",cursor:"pointer",
-              fontFamily:"var(--font-sans)",lineHeight:1.4,whiteSpace:"nowrap",
-            }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke="currentColor" strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-              {hasTl?`${tlFmt(plannedStart)}${plannedEnd?` → ${tlFmt(plannedEnd)}`:""}` : "Set dates"}
-            </button>
+            {/* Dates chip + dropdown */}
+            {(()=>{
+              const tlRef=useRef(null);
+              useEffect(()=>{
+                if(!tlEditing)return;
+                const h=e=>{if(tlRef.current&&!tlRef.current.contains(e.target))setTlEditing(false);};
+                document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+              },[tlEditing]);
+              return(
+                <div ref={tlRef} style={{position:"relative"}}>
+                  <button onClick={()=>setTlEditing(v=>!v)} style={{
+                    display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,
+                    color:hasTl?C.indigo:C.faint,background:hasTl?C.accentAlpha:"transparent",
+                    border:`1.5px solid ${hasTl?C.accentBorder:C.line}`,
+                    borderRadius:20,padding:"3px 10px",cursor:"pointer",
+                    fontFamily:"var(--font-sans)",lineHeight:1.4,whiteSpace:"nowrap",
+                  }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke="currentColor" strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                    {hasTl?`${tlFmt(plannedStart)}${plannedEnd?` → ${tlFmt(plannedEnd)}`:""}` : "Set dates"}
+                  </button>
+                  <RangePicker open={tlEditing} start={tlStart} end={tlEnd}
+                    onChange={(s,e)=>{setTlStart(s);setTlEnd(e);if(s&&e){onSaveTimeline?.(s,e);setTlEditing(false);}else if(s){onSaveTimeline?.(s,"");}}}
+                    onClose={()=>setTlEditing(false)}/>
+                </div>
+              );
+            })()}
 
             {/* Stats */}
             {projectSessions.length>0&&(
@@ -1030,18 +1043,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
           </div>
         )}
 
-        {/* Timeline editor */}
-        {tlEditing&&!renamingProject&&(
-          <div style={{padding:"12px 20px 0"}}>
-            <RangePicker start={tlStart} end={tlEnd}
-              onChange={(s,e)=>{setTlStart(s);setTlEnd(e);}}
-              onClear={()=>{setTlStart("");setTlEnd("");}}/>
-            <div style={{display:"flex",gap:8,marginTop:12}}>
-              <button onClick={commitTimeline} style={{background:C.accentGrad,border:"none",borderRadius:9,color:"#fff",padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer",flex:1}}>Save dates</button>
-              <button onClick={()=>setTlEditing(false)} style={{background:"transparent",border:`1px solid ${C.lineS}`,borderRadius:9,color:C.muted,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-            </div>
-          </div>
-        )}
+        {/* Timeline dropdown — rendered relative to the dates chip in the metadata strip */}
 
         {/* Tab bar */}
         <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
@@ -1175,102 +1177,68 @@ function CalendarPicker({value,onChange}) {
 }
 
 /* ─── range date picker — single calendar, click start then end ─── */
-function RangePicker({start,end,onChange,onClear}) {
-  // onChange(newStart, newEnd) — either can be ""
-  // First click → start, second click → end; clicking before current start resets
+/* ─── compact range picker — same look as old PlanDatePicker, one calendar for start+end ─── */
+function RangePicker({start,end,onChange,open,onClose}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
-  const initView=()=>{
-    const ref=start||end||today;
-    const d=parseDate(ref);return{y:d.getFullYear(),m:d.getMonth()};
-  };
+  const initView=()=>{const ref=start||end||today;const d=parseDate(ref);return{y:d.getFullYear(),m:d.getMonth()};};
   const [view,setView]=useState(initView);
-  const [phase,setPhase]=useState(start?"end":"start"); // "start" | "end"
+  const [phase,setPhase]=useState(start?"end":"start");
   const [hover,setHover]=useState(null);
+  useEffect(()=>{if(open)setPhase(start&&!end?"end":"start");},[open]);// eslint-disable-line
 
   const pad=n=>String(n).padStart(2,"0");
   const mk=d=>`${view.y}-${pad(view.m+1)}-${pad(d)}`;
   const firstDay=new Date(view.y,view.m,1),startOffset=(firstDay.getDay()+6)%7,dim=new Date(view.y,view.m+1,0).getDate();
   const cells=[...Array(startOffset).fill(null),...Array.from({length:dim},(_,i)=>mk(i+1))];
   const step=dir=>setView(({y,m})=>{const nm=m+dir;return nm<0?{y:y-1,m:11}:nm>11?{y:y+1,m:0}:{y,m:nm};});
-  const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"—";
 
   const pick=ds=>{
-    if(phase==="start"||!start){
-      onChange(ds,"");setPhase("end");
-    } else {
-      // second click → set end; swap if needed
-      if(ds<start){onChange(ds,start);}
-      else{onChange(start,ds);}
-      setPhase("start");setHover(null);
-    }
+    if(phase==="start"||!start){onChange(ds,"");setPhase("end");}
+    else{const s=ds<start?ds:start,e=ds<start?start:ds;onChange(s,e);setPhase("start");setHover(null);onClose?.();}
   };
 
-  // range for highlight: use hover preview while picking end
-  const rangeStart=start;
-  const rangeEnd=phase==="end"&&hover?hover:end;
-  const lo=rangeStart&&rangeEnd?(rangeStart<rangeEnd?rangeStart:rangeEnd):rangeStart;
-  const hi=rangeStart&&rangeEnd?(rangeStart<rangeEnd?rangeEnd:rangeStart):rangeEnd;
+  const pvLo=phase==="end"&&hover&&start?(start<hover?start:hover):null;
+  const pvHi=phase==="end"&&hover&&start?(start<hover?hover:start):null;
+  const lo=start&&end?(start<end?start:end):start;
+  const hi=start&&end?(start<end?end:start):end;
 
-  const isStart=ds=>ds===start;
-  const isEnd=ds=>end&&ds===end;
-  const inRange=ds=>lo&&hi&&ds>lo&&ds<hi;
-  const isCap=ds=>ds===lo||ds===hi;
-
+  if(!open)return null;
   return(
-    <div>
-      {/* Selected range display + clear */}
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-        <div style={{flex:1,display:"flex",alignItems:"center",gap:6,background:C.surf2,borderRadius:10,padding:"7px 12px"}}>
-          <span style={{fontSize:12,fontWeight:600,color:start?C.indigo:C.dim}}>{start?fmt(start):"Start"}</span>
-          <span style={{fontSize:12,color:C.dim}}>→</span>
-          <span style={{fontSize:12,fontWeight:600,color:end?C.indigo:C.dim}}>{end?fmt(end):"End"}</span>
-        </div>
-        {(start||end)&&<button type="button" onClick={()=>{onChange("","");setPhase("start");onClear?.();}}
-          style={{...iconBtn,width:28,height:28,flexShrink:0}}>{Icon.trash()}</button>}
-      </div>
-      {/* Hint */}
-      <div style={{fontSize:10.5,color:C.dim,marginBottom:8,textAlign:"center",letterSpacing:"0.02em"}}>
-        {phase==="start"?"Tap a day to set the start date":"Tap a day to set the end date"}
-      </div>
+    <div style={{marginTop:6,background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:12,
+      position:"absolute",zIndex:40,boxShadow:`0 8px 28px -6px rgba(0,0,0,0.3)`,minWidth:230,right:0}}>
       {/* Month nav */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <button type="button" onClick={()=>step(-1)} style={iconBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
         <span style={{fontSize:13,fontWeight:700,color:C.text}}>{monthNames[view.m]} {view.y}</span>
         <button type="button" onClick={()=>step(1)} style={iconBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
       </div>
-      {/* Day headers */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
-        {DAYS_MON.map((d,i)=><div key={i} style={{fontSize:9.5,color:C.dim,textAlign:"center",fontWeight:600}}>{d}</div>)}
+        {DAYS_MON.map((d,i)=><div key={i} style={{fontSize:9.5,color:C.dim,textAlign:"center"}}>{d}</div>)}
       </div>
-      {/* Grid */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
         {cells.map((ds,i)=>{
           if(!ds)return<div key={i}/>;
-          const cap=isCap(ds),inR=inRange(ds),isT=ds===today;
-          const isSt=isStart(ds),isEn=isEnd(ds);
-          // preview range while hovering for end
-          const previewEnd=phase==="end"&&hover&&start;
-          const previewLo=previewEnd?(start<hover?start:hover):null;
-          const previewHi=previewEnd?(start<hover?hover:start):null;
-          const inPreview=previewLo&&previewHi&&ds>previewLo&&ds<previewHi;
-          const previewCap=previewLo&&previewHi&&(ds===previewLo||ds===previewHi);
-          const filled=cap||isSt||isEn;
+          const isCap=ds===lo||ds===hi,isT=ds===today;
+          const inR=lo&&hi&&ds>lo&&ds<hi;
+          const inPv=pvLo&&pvHi&&ds>pvLo&&ds<pvHi;
+          const isPvCap=pvLo&&pvHi&&(ds===pvLo||ds===pvHi);
+          const filled=isCap||isPvCap;
           return(
-            <button key={ds} type="button"
-              onClick={()=>pick(ds)}
+            <button key={ds} type="button" onClick={()=>pick(ds)}
               onMouseEnter={()=>phase==="end"&&setHover(ds)}
               onMouseLeave={()=>setHover(null)}
-              style={{
-                aspectRatio:"1",borderRadius:filled?999:inR||inPreview||previewCap?4:8,
-                border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:12,
-                fontWeight:filled?700:400,position:"relative",
-                background:filled?C.accentGrad:inR?"rgba(99,102,241,0.12)":previewCap?"rgba(99,102,241,0.2)":inPreview?"rgba(99,102,241,0.08)":"transparent",
+              style={{aspectRatio:"1",borderRadius:8,border:isT&&!filled?`1.5px solid ${C.indigo}`:"1.5px solid transparent",
+                background:filled?C.accentGrad:inR||inPv?C.accentAlpha2:"transparent",
                 color:filled?"#fff":isT?C.indigo:C.text,
-                outline:isT&&!filled?`1.5px solid ${C.indigo}`:"none",
-                outlineOffset:"-1.5px",
+                fontSize:11.5,fontWeight:filled?700:400,cursor:"pointer",fontFamily:"var(--font-sans)",
               }}>{Number(ds.slice(8))}</button>
           );
         })}
+      </div>
+      {/* Hint + clear */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,paddingTop:8,borderTop:`1px solid ${C.line}`}}>
+        <span style={{fontSize:10.5,color:C.dim}}>{phase==="start"?"Pick start date":"Pick end date"}</span>
+        {(start||end)&&<button type="button" onClick={()=>{onChange("","");setPhase("start");}} style={{fontSize:11,color:C.faint,background:"none",border:"none",cursor:"pointer",padding:0}}>Clear</button>}
       </div>
     </div>
   );
@@ -2670,17 +2638,25 @@ export default function App() {
             <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
           </button>
           <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-            {tlLabel?(
-              <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlColor,fontWeight:500,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlColor} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlColor} strokeWidth="2" strokeLinecap="round"/></svg>
-                {tlLabel}
-              </button>
-            ):(
-              <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.dim,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
-                dates
-              </button>
-            )}
+            {(()=>{
+              const rowTlRef=useRef(null);
+              useEffect(()=>{
+                if(!tlOpen)return;
+                const h=e=>{if(rowTlRef.current&&!rowTlRef.current.contains(e.target))setTlOpen(false);};
+                document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+              },[tlOpen]);
+              return(
+                <div ref={rowTlRef} style={{position:"relative"}}>
+                  <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlLabel?tlColor:C.dim,fontWeight:tlLabel?500:400,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlLabel?tlColor:C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlLabel?tlColor:C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
+                    {tlLabel||"dates"}
+                  </button>
+                  <RangePicker open={tlOpen} start={tlS} end={tlE}
+                    onChange={(s,e)=>{setTlS(s);setTlE(e);saveTimeline(p.name,s,e);if(s&&e)setTlOpen(false);}}
+                    onClose={()=>setTlOpen(false)}/>
+                </div>
+              );
+            })()}
             <span style={{color:C.dim}}>·</span>
             <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
             {audioCount>0&&<><span style={{color:C.dim}}>·</span>
@@ -2703,17 +2679,6 @@ export default function App() {
         }
       </div>
       {/* Inline timeline editor — full width below the main row */}
-      {tlOpen&&(
-        <div style={{marginTop:10,paddingTop:12,borderTop:`1px solid ${C.line}`}}>
-          <RangePicker start={tlS} end={tlE}
-            onChange={(s,e)=>{setTlS(s);setTlE(e);}}
-            onClear={()=>{setTlS("");setTlE("");}}/>
-          <div style={{display:"flex",gap:8,marginTop:12}}>
-            <button onClick={saveTl} style={{background:C.accentGrad,border:"none",borderRadius:9,color:"#fff",padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer",flex:1}}>Save dates</button>
-            <button onClick={()=>{setTlS(p.plannedStart||"");setTlE(p.plannedEnd||"");setTlOpen(false);}} style={{background:"transparent",border:`1px solid ${C.lineS}`,borderRadius:9,color:C.muted,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-          </div>
-        </div>
-      )}
     </div>
   );};
 
