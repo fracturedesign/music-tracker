@@ -39,9 +39,8 @@ const STATUS_CFG = {
 };
 
 const GROUP_TYPE_CFG = {
-  album:  { label:"Album",  dot:"#c084fc" },
-  ep:     { label:"EP",     dot:"#60a5fa" },
-  single: { label:"Single", dot:"#fbbf24" },
+  album: { label:"Album", dot:"#c084fc" },
+  ep:    { label:"EP",    dot:"#60a5fa" },
 };
 
 const MILESTONES = [
@@ -913,7 +912,7 @@ function NotesEditor({value,onChange}) {
   );
 }
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,canGoBack=false}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [tab,setTab]=useState(initialTab||"open");
   const [versionsCount,setVersionsCount]=useState(null);
@@ -948,7 +947,9 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const clearTimeline=()=>{setTlStart("");setTlEnd("");onSaveTimeline?.("","");setTlEditing(false);};
   const [text,setText]=useState(notes||"");
   const [historyOpen,setHistoryOpen]=useState(false);
-  const close=()=>{onSave(text);onClose();};
+  const [addTrackOpen,setAddTrackOpen]=useState(false);
+  const isGroup=!!GROUP_TYPE_CFG[type];
+  const close=()=>{onSave(text);onClose()};
 
   const projectSessions=(sessions||[]).filter(s=>s.project===name).sort((a,b)=>b.date.localeCompare(a.date)||((b.hour??0)-(a.hour??0)));
   const totalProjMins=projectSessions.reduce((a,s)=>a+s.duration,0);
@@ -1049,7 +1050,11 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
 
         {/* Tab bar */}
         <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
-          {[["open","Notes"],["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"]].map(([t,l])=>(
+          {[
+            ["open","Notes"],
+            ...(isGroup?[["tracks",`Tracks · ${childProjects.length}`]]:[]),
+            ["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"],
+          ].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
               padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
               borderBottom:`2px solid ${tab===t?C.indigo:"transparent"}`,background:"transparent",
@@ -1108,6 +1113,52 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
               <button onClick={close} style={{background:C.accentGrad,border:"none",borderRadius:12,color:"#fff",padding:"11px 22px",fontSize:14,fontWeight:600,cursor:"pointer"}}>Save &amp; close</button>
             </div>
           </>
+        )}
+
+        {/* Tracks tab — group projects only */}
+        {tab==="tracks"&&(
+          <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:8}}>
+            {childProjects.map(c=>(
+              <div key={c.name} style={{display:"flex",alignItems:"center",gap:8,background:C.surf2,borderRadius:12,padding:"10px 12px"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+                  <div style={{fontSize:11,color:C.dim,marginTop:1}}>{STATUS_CFG[c.status||"active"]?.label}</div>
+                </div>
+                <button onClick={()=>onOpenProject?.(c.name)} style={{fontSize:12,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)"}}>Open</button>
+                <button onClick={()=>onRemoveFromGroup?.(c.name)} title="Remove from group" style={{background:"none",border:"none",cursor:"pointer",color:C.faint,padding:4,borderRadius:6,display:"flex",alignItems:"center"}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke={C.faint} strokeWidth="2" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            ))}
+            {childProjects.length===0&&(
+              <div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"16px 0",fontStyle:"italic"}}>No tracks yet</div>
+            )}
+            {/* Add track selector */}
+            {ungroupedProjects.length>0&&(
+              <div style={{marginTop:4}}>
+                {!addTrackOpen?(
+                  <button onClick={()=>setAddTrackOpen(true)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px dashed ${C.lineS}`,borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.dim,fontSize:13,fontWeight:600,width:"100%",fontFamily:"var(--font-sans)"}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
+                    Add track to group
+                  </button>
+                ):(
+                  <div style={{background:C.surf2,borderRadius:12,padding:8,display:"flex",flexDirection:"column",gap:4}}>
+                    {ungroupedProjects.map(p=>(
+                      <button key={p.name} onClick={()=>{onAddToGroup?.(p.name,name);setAddTrackOpen(false);}} style={{
+                        display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                        borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
+                        fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
+                      }}>
+                        <span style={{width:7,height:7,borderRadius:"50%",background:C.indigo,flexShrink:0}}/>
+                        {p.name}
+                      </button>
+                    ))}
+                    <button onClick={()=>setAddTrackOpen(false)} style={{fontSize:12,color:C.faint,background:"none",border:"none",cursor:"pointer",padding:"4px 12px",textAlign:"left",fontFamily:"var(--font-sans)"}}>Cancel</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Versions tab */}
@@ -2254,9 +2305,10 @@ export default function App() {
   const [newProjectDatesOpen,setNewProjectDatesOpen]=useState(false);
   const [newProjectTypeOpen,setNewProjectTypeOpen]=useState(false);
   const addTypeRef=useRef(null);
-  const [notesModal,setNotesModal]=useState(null);
-  const [notesModalTab,setNotesModalTab]=useState("open");
-  const openProject=(name,tab="open")=>{setNotesModal(name);setNotesModalTab(tab);};
+  const [panelStack,setPanelStack]=useState([]);
+  const openProject=(name,tab="open")=>setPanelStack(s=>[...s,{name,tab}]);
+  const closeTopPanel=()=>setPanelStack(s=>s.slice(0,-1));
+  const currentPanel=panelStack[panelStack.length-1]||null;
   const [sheet,setSheet]=useState(null);
   const [allOpen,setAllOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
@@ -2570,8 +2622,8 @@ export default function App() {
     }catch{}
     // Update audio counts map
     setAudioFileCounts(prev=>{const next={...prev};if(next[oldName]!==undefined){next[newName]=next[oldName];delete next[oldName];}return next;});
-    // Keep panel open with new name
-    openProject(newName);
+    // Keep panel open with new name (replace top of stack)
+    setPanelStack(s=>s.length?[...s.slice(0,-1),{name:newName,tab:s[s.length-1]?.tab||"open"}]:s);
   };
 
   const downloadBackup=async()=>{
@@ -2640,6 +2692,7 @@ export default function App() {
     const cfg=GROUP_TYPE_CFG[p.type]||GROUP_TYPE_CFG.album;
     const dot=cfg.dot;
     const [collapsed,setCollapsed]=useState(false);
+    const [confirmDel,setConfirmDel]=useState(false);
     const children=childrenOf(p.name);
     const isDoneOrReleased=["done","released"].includes(p.status||"active");
     const totalSessions=children.reduce((s,c)=>s+(projectCounts[c.name]||0),0)+(projectCounts[p.name]||0);
@@ -2653,26 +2706,31 @@ export default function App() {
             </svg>
           </button>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:7}}>
-              <span style={{fontSize:10,fontWeight:700,color:dot,background:`${dot}1a`,border:`1.5px solid ${dot}55`,borderRadius:20,padding:"1px 7px",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>{cfg.label}</span>
-              <button onClick={()=>openProject(p.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",minWidth:0}}>
-                <span style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.name}</span>
-              </button>
-            </div>
+            <button onClick={()=>openProject(p.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",width:"100%"}}>
+              <span style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.name}</span>
+            </button>
             <div style={{fontSize:11.5,color:C.dim,marginTop:2}}>
               {children.length} track{children.length!==1?"s":""}{totalSessions>0&&` · ${totalSessions} session${totalSessions!==1?"s":""}`}
             </div>
           </div>
+          {/* Type badge next to status */}
+          <span style={{fontSize:10,fontWeight:700,color:dot,background:`${dot}1a`,border:`1.5px solid ${dot}55`,borderRadius:20,padding:"2px 8px",letterSpacing:"0.04em",whiteSpace:"nowrap",flexShrink:0}}>{cfg.label}</span>
           <StatusDropdown name={p.name} status={p.status||"active"}/>
           <button onClick={()=>openProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
             {Icon.note(C.indigo)}
           </button>
-          {isDoneOrReleased
-            ?<button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
-              </button>
-            :<button onClick={()=>removeProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
-          }
+          {confirmDel?(
+            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+              <button onClick={()=>removeProject(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
+              <button onClick={()=>setConfirmDel(false)} style={{fontSize:11.5,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.lineS}`,borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Cancel</button>
+            </div>
+          ):isDoneOrReleased?(
+            <button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+            </button>
+          ):(
+            <button onClick={()=>setConfirmDel(true)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
+          )}
         </div>
         {/* Children */}
         {!collapsed&&children.length>0&&(
@@ -2692,6 +2750,7 @@ export default function App() {
   const ProjectRow=({p,insideGroup=false})=>{
     const isDoneOrReleased=["done","released"].includes(p.status||"active");
     const [moveOpen,setMoveOpen]=useState(false);
+    const [confirmDel,setConfirmDel]=useState(false);
     const moveRef=useRef(null);
     useEffect(()=>{
       if(!moveOpen)return;
@@ -2802,12 +2861,18 @@ export default function App() {
             )}
           </div>
         )}
-        {isDoneOrReleased
-          ?<button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
-            </button>
-          :<button onClick={()=>removeProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
-        }
+        {confirmDel?(
+          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+            <button onClick={()=>removeProject(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
+            <button onClick={()=>setConfirmDel(false)} style={{fontSize:11.5,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.lineS}`,borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Cancel</button>
+          </div>
+        ):isDoneOrReleased?(
+          <button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+          </button>
+        ):(
+          <button onClick={()=>setConfirmDel(true)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
+        )}
       </div>
       {/* Inline timeline editor — full width below the main row */}
     </div>
@@ -2818,7 +2883,24 @@ export default function App() {
     <ThemeCtx.Provider value={C}>
     <div className="app" style={{background:C.bg}}>
 
-      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} plannedStart={projectMap[notesModal]?.plannedStart||""} plannedEnd={projectMap[notesModal]?.plannedEnd||""} onSaveTimeline={(s,e)=>saveTimeline(notesModal,s,e)} sessions={sessions} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject} initialTab={notesModalTab} status={projectMap[notesModal]?.status||"active"} onStatusChange={(name,s)=>updateProjectStatus(name,s)}/>}
+      {panelStack.map((entry,idx)=>{
+        const pname=entry.name;const proj=projectMap[pname]||{};
+        const isGroup=!!GROUP_TYPE_CFG[proj.type];
+        const children=isGroup?projects.filter(p=>p.parentGroup===pname):[];
+        const ungrouped=projects.filter(p=>(!p.type||p.type==="track")&&!p.parentGroup&&p.name!==pname);
+        return(
+          <ProjectPanel key={pname+idx} name={pname} notes={proj.notes||""} onSave={n=>saveNotes(pname,n)}
+            plannedStart={proj.plannedStart||""} plannedEnd={proj.plannedEnd||""}
+            onSaveTimeline={(s,e)=>saveTimeline(pname,s,e)} sessions={sessions}
+            onClose={closeTopPanel} globalAudioFolder={globalAudioFolder}
+            onRename={renameProject} initialTab={entry.tab}
+            status={proj.status||"active"} onStatusChange={(name,s)=>updateProjectStatus(name,s)}
+            type={proj.type} childProjects={children} ungroupedProjects={ungrouped}
+            onOpenProject={openProject} onAddToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup}
+            canGoBack={idx>0}
+          />
+        );
+      })}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
