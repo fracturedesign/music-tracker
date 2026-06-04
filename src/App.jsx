@@ -810,25 +810,22 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const commitTimeline=()=>{onSaveTimeline?.(tlStart,tlEnd);setTlEditing(false);};
   const clearTimeline=()=>{setTlStart("");setTlEnd("");onSaveTimeline?.("","");setTlEditing(false);};
   const [text,setText]=useState(notes||"");
-  const [lines,setLines]=useState(()=>parseLines(notes));
-  const [mode,setMode]=useState("preview");
-  const toPreview=()=>{setLines(parseLines(text));setMode("preview");};
-  const toEdit=()=>{setText(serializeLines(lines));setMode("edit");};
-  const toggle=i=>setLines(prev=>prev.map((l,idx)=>idx===i?{...l,checked:!l.checked}:l));
-  const close=()=>{onSave(mode==="edit"?text:serializeLines(lines));onClose();};
-  const empty=lines.length===0||(lines.length===1&&lines[0].content==="");
+  const notesRef=useRef(null);
+  const close=()=>{onSave(text);onClose();};
+  const insertCheckbox=()=>{
+    const el=notesRef.current;if(!el)return;
+    const s=el.selectionStart,v=el.value;
+    // Insert at start of current line
+    const lineStart=v.lastIndexOf("\n",s-1)+1;
+    const insert="- ";
+    const next=v.slice(0,lineStart)+insert+v.slice(lineStart);
+    setText(next);
+    setTimeout(()=>{el.selectionStart=el.selectionEnd=lineStart+insert.length+(s-lineStart);el.focus();},0);
+  };
 
-  // History tab — sessions for this project sorted newest first
+  // History — sessions for this project sorted newest first
   const today=toDateStr(new Date());
   const projectSessions=(sessions||[]).filter(s=>s.project===name).sort((a,b)=>b.date.localeCompare(a.date)||((b.hour??0)-(a.hour??0)));
-
-  const fmtSessionDate=s=>{
-    const rel=fmtRelativeDate(s.date);
-    const h=s.hour!=null?new Date(0).toLocaleTimeString("en",{hour:"numeric",hour12:true}).replace(/^.*\b/,""):"";
-    const tod=s.hour!=null?`${s.hour<12?"AM":"PM"}`:"";
-    const hourFmt=s.hour!=null?` · ${s.hour%12||12}${s.hour<12?"am":"pm"}`:"";
-    return (rel||s.date)+hourFmt;
-  };
 
   const tlFmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric",year:"numeric"}):"";
   const hasTl=plannedStart||plannedEnd;
@@ -879,86 +876,63 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
 
         {/* Tab bar */}
         <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
-          {[["open","Notes"],["history",`History · ${projectSessions.length}`],["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"]].map(([t,l])=>(
+          {[["open","Notes"],["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"]].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
-              padding:"8px 14px",fontSize:13,fontWeight:600,border:"none",cursor:"pointer",
+              padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
               borderBottom:`2px solid ${tab===t?C.indigo:"transparent"}`,background:"transparent",
               color:tab===t?C.indigo:C.faint,marginBottom:"-1px",fontFamily:"var(--font-sans)",whiteSpace:"nowrap",
             }}>{l}</button>
           ))}
         </div>
 
-        {/* Notes tab */}
+        {/* Notes + History tab */}
         {tab==="open"&&(
           <>
-            <div style={{display:"flex",alignItems:"center",gap:4,padding:"12px 20px 10px"}}>
-              {[["preview","Preview"],["edit","Edit"]].map(([m,label])=>(
-                <button key={m} onClick={m==="preview"?toPreview:toEdit}
-                  style={{fontSize:12.5,fontWeight:600,padding:"6px 14px",borderRadius:10,border:"none",cursor:"pointer",
-                    background:mode===m?C.accentAlpha:"transparent",color:mode===m?C.indigo:C.faint}}>{label}</button>
-              ))}
-              <span style={{fontSize:11,color:C.dim,marginLeft:6}}>start a line with <span className="mono" style={{color:C.indigo}}>-</span> for a checkbox</span>
-            </div>
-            <div style={{flex:1,overflowY:"auto",minHeight:200,maxHeight:"50vh",borderTop:`1px solid ${C.line}`}}>
-              {mode==="preview"?(
-                <div style={{padding:"16px 20px"}}>
-                  {empty?<div style={{color:C.dim,fontSize:13.5}}>No notes yet — switch to Edit to add some.</div>
-                    :lines.map((l,i)=>(
-                      <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                        {l.type==="check"?(
-                          <>
-                            <button onClick={()=>toggle(i)} style={{flexShrink:0,marginTop:2,width:18,height:18,borderRadius:5,
-                              border:`1.5px solid ${l.checked?C.deep:"#3a3a52"}`,background:l.checked?C.deep:"transparent",
-                              cursor:"pointer",display:"grid",placeItems:"center",padding:0}}>
-                              {l.checked&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                            </button>
-                            <span style={{fontSize:14,lineHeight:1.5,color:l.checked?C.dim:C.text,textDecoration:l.checked?"line-through":"none"}}>{l.content}</span>
-                          </>
-                        ):<span className="mono" style={{fontSize:13,lineHeight:1.6,color:C.muted,paddingLeft:28}}>{l.content||" "}</span>}
+            <div style={{flex:1,overflowY:"auto",maxHeight:"58vh"}}>
+              {/* Notes */}
+              <div style={{padding:"10px 16px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <span style={{fontSize:11,color:C.dim}}>Notes &amp; to-dos</span>
+                <button onClick={insertCheckbox} title="Insert checkbox"
+                  style={{fontSize:11,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:"none",borderRadius:7,padding:"4px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2.5" stroke={C.indigo} strokeWidth="1.5"/><path d="M3.5 7l2.5 2.5 4-5" stroke={C.indigo} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  checkbox
+                </button>
+              </div>
+              <textarea ref={notesRef} className="mt" value={text} onChange={e=>setText(e.target.value)}
+                placeholder={"Notes and to-dos…\n\n- Record main melody\n- Mix bass"}
+                style={{minHeight:120,borderRadius:0,border:"none",borderTop:`1px solid ${C.line}`,background:"transparent",fontFamily:"var(--font-mono)",fontSize:13,lineHeight:1.7,padding:"12px 16px",width:"100%",boxSizing:"border-box"}}/>
+              {/* Session history */}
+              {projectSessions.length>0&&(
+                <div style={{borderTop:`1px solid ${C.line}`}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",padding:"10px 16px 6px"}}>Session history</div>
+                  {projectSessions.map((s,i)=>{
+                    const tagCol=s.tag?TAG_COLOR[s.tag]:null;
+                    const isNewDate=i===0||projectSessions[i-1].date!==s.date;
+                    return(
+                      <div key={s.id}>
+                        {isNewDate&&<div style={{fontSize:11,color:C.faint,padding:"6px 16px 2px",fontWeight:600}}>{fmtRelativeDate(s.date)||s.date}</div>}
+                        <div style={{display:"flex",gap:10,padding:"6px 16px",borderTop:`1px solid ${C.line}`}}>
+                          <div style={{width:3,borderRadius:2,background:tagCol||C.indigo,flexShrink:0,alignSelf:"stretch",minHeight:28}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                              <span style={{fontSize:11.5,color:C.muted}}>{fmtDur(s.duration)}</span>
+                              {s.hour!=null&&<span style={{fontSize:11,color:C.dim}}>{`${s.hour%12||12}${s.hour<12?"am":"pm"}`}</span>}
+                              {s.mood!=null&&<span style={{fontSize:11}}>{MOOD_EMOJI[s.mood]}</span>}
+                              {s.tag&&<span style={{fontSize:10,fontWeight:600,color:tagCol,background:`${tagCol}1e`,borderRadius:4,padding:"1px 6px"}}>{s.tag}</span>}
+                            </div>
+                            {s.note&&<div style={{fontSize:12.5,color:C.text,lineHeight:1.5}}>{s.note}</div>}
+                          </div>
+                        </div>
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
-              ):(
-                <textarea className="mt" value={text} onChange={e=>setText(e.target.value)}
-                  placeholder={"Notes and to-dos…\n\n- Record main melody\n- Mix bass"}
-                  style={{minHeight:200,borderRadius:0,border:"none",background:"transparent",fontFamily:"var(--font-mono)",fontSize:13,lineHeight:1.7,padding:"16px 20px",width:"100%",boxSizing:"border-box"}}/>
               )}
             </div>
             <div style={{display:"flex",justifyContent:"flex-end",padding:"14px 20px",borderTop:`1px solid ${C.line}`}}>
               <button onClick={close} style={{background:C.accentGrad,border:"none",borderRadius:12,color:"#fff",padding:"11px 22px",fontSize:14,fontWeight:600,cursor:"pointer"}}>Save &amp; close</button>
             </div>
           </>
-        )}
-
-        {/* History tab */}
-        {tab==="history"&&(
-          <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:0}}>
-            {projectSessions.length===0
-              ?<div style={{color:C.dim,fontSize:13.5,textAlign:"center",padding:"20px 0"}}>No sessions logged for this project yet.</div>
-              :projectSessions.map((s,i)=>{
-                const tagCol=s.tag?TAG_COLOR[s.tag]:null;
-                const isFirst=i===0||projectSessions[i-1].date!==s.date;
-                const hourStr=s.hour!=null?` · ${s.hour%12||12}${s.hour<12?"am":"pm"}`:"";
-                return(
-                  <div key={s.id}>
-                    {isFirst&&<div style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",padding:"12px 0 6px",borderTop:i>0?`1px solid ${C.line}`:"none"}}>{fmtRelativeDate(s.date)||s.date}</div>}
-                    <div style={{display:"flex",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.line}`}}>
-                      <div style={{width:3,borderRadius:2,background:tagCol||C.indigo,flexShrink:0,alignSelf:"stretch",minHeight:36}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                          <span style={{fontSize:11.5,color:C.muted}}>{fmtDur(s.duration)}</span>
-                          {s.hour!=null&&<span style={{fontSize:11.5,color:C.dim}}>{`${s.hour%12||12}${s.hour<12?"am":"pm"}`}</span>}
-                          {s.mood!=null&&<span style={{fontSize:12}}>{MOOD_EMOJI[s.mood]}</span>}
-                          {s.tag&&<span style={{fontSize:10.5,fontWeight:600,color:tagCol,background:`${tagCol}1e`,borderRadius:5,padding:"2px 7px"}}>{s.tag}</span>}
-                        </div>
-                        {s.note?<div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{s.note}</div>
-                          :<div style={{fontSize:12,color:C.dim,fontStyle:"italic"}}>no note</div>}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
         )}
 
         {/* Versions tab */}
@@ -1673,7 +1647,7 @@ export default function App() {
   const [newProject,setNewProject]=useState("");
   const [newProjectStart,setNewProjectStart]=useState("");
   const [newProjectEnd,setNewProjectEnd]=useState("");
-  const [newProjectInputFocused,setNewProjectInputFocused]=useState(false);
+  const [newProjectDatesOpen,setNewProjectDatesOpen]=useState(false);
   const [notesModal,setNotesModal]=useState(null);
   const [sheet,setSheet]=useState(null);
   const [allOpen,setAllOpen]=useState(false);
@@ -1795,7 +1769,7 @@ export default function App() {
   const timerElapsed=Math.max(0,timer.target-timerRemaining);
   const timerProgress=timer.target?Math.min(1,timerElapsed/timer.target):0;
   const timerTargetMin=Math.round(timer.target/60000);
-  const timerLogMin=Math.min(480,Math.max(1,Math.round(timerElapsed/60000)));
+  const timerLogMin=timer.phase==="done"?timerTargetMin:Math.min(480,Math.max(1,Math.floor(timerElapsed/60000)));
   const showTimerUI=timer.phase!=="idle";
 
   const openTimerSetup=()=>{setCustomMin("");setTimer({phase:"setup",target:0,endsAt:0,remaining:0});};
@@ -1879,7 +1853,7 @@ export default function App() {
     if(newProjectEnd)proj.plannedEnd=newProjectEnd;
     const next=[...projects,proj];
     setProjects(next);await persistProjects(next);
-    setNewProject("");setNewProjectStart("");setNewProjectEnd("");setNewProjectInputFocused(false);
+    setNewProject("");setNewProjectStart("");setNewProjectEnd("");setNewProjectDatesOpen(false);
   };
   const saveTimeline=async(name,plannedStart,plannedEnd)=>{
     const next=projects.map(p=>p.name===name?{...p,plannedStart,plannedEnd}:p);
@@ -2194,12 +2168,17 @@ export default function App() {
           {calCells.map((ds,i)=>{
             if(!ds)return<div key={i}/>;
             const isPast=ds<today,isToday=ds===today,hasSess=!!sessionsByDate[ds],missed=isPast&&!hasSess;
-            const tlProj=projects.find(p=>p.plannedStart&&p.plannedEnd&&p.plannedStart<=ds&&ds<=p.plannedEnd);
-            const tlColor=tlProj?(tlProj.plannedEnd<today?C.flame:tlProj.plannedStart<=today?C.green:C.indigo):null;
+            const tlProjects=projects.filter(p=>p.plannedStart&&p.plannedEnd&&p.plannedStart<=ds&&ds<=p.plannedEnd);
+            const tlBarColor=p=>p.plannedEnd<today?C.flame:p.plannedStart<=today?C.green:C.indigo;
             return(
-              <button key={ds} onClick={()=>setSheet({form:newForm(ds),editing:false,id:null})} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:"pointer",padding:0,background:isToday?C.accentAlpha:hasSess?C.accentAlpha2:"transparent",border:isToday?`1.5px solid ${C.indigo}`:tlProj?`1.5px solid ${tlColor}44`:"1.5px solid transparent"}}>
+              <button key={ds} onClick={()=>setSheet({form:newForm(ds),editing:false,id:null})} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:"pointer",padding:0,position:"relative",background:isToday?C.accentAlpha:hasSess?C.accentAlpha2:"transparent",border:isToday?`1.5px solid ${C.indigo}`:"1.5px solid transparent"}}>
                 <span style={{fontSize:12.5,color:isToday?C.indigo:hasSess?C.text:C.faint,fontWeight:hasSess?600:400}}>{Number(ds.slice(8))}</span>
-                {hasSess?<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>:missed?<span style={{width:5,height:5,borderRadius:"50%",background:C.surf2}}/>:tlProj?<span style={{width:5,height:5,borderRadius:"50%",background:tlColor,opacity:0.6}}/>:<span style={{height:5}}/>}
+                {hasSess?<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>:missed?<span style={{width:5,height:5,borderRadius:"50%",background:C.surf2}}/>:<span style={{height:5}}/>}
+                {tlProjects.length>0&&(
+                  <div style={{position:"absolute",bottom:0,left:0,right:0,height:3,display:"flex",borderRadius:"0 0 8px 8px",overflow:"hidden"}}>
+                    {tlProjects.map(p=><div key={p.name} style={{flex:1,background:tlBarColor(p)}}/>)}
+                  </div>
+                )}
               </button>
             );
           })}
@@ -2215,22 +2194,23 @@ export default function App() {
           <span style={eyebrow}>Projects</span>
           {activeProjects.length>0&&<span style={{fontSize:12.5,color:C.faint}}>{activeProjects.length} active</span>}
         </div>
-        <div style={{display:"flex",gap:8,marginBottom:(newProjectInputFocused||newProjectStart||newProjectEnd)?8:activeProjects.length?16:0}}>
+        <div style={{display:"flex",gap:8,marginBottom:newProjectDatesOpen?8:activeProjects.length?16:0}}>
           <input type="text" className="mt-text" value={newProject} placeholder="Track or project name…"
             onChange={e=>setNewProject(e.target.value)}
-            onFocus={()=>setNewProjectInputFocused(true)}
-            onBlur={()=>setNewProjectInputFocused(false)}
             onKeyDown={e=>e.key==="Enter"&&addProject()} style={{flex:1}}/>
+          <button onClick={()=>setNewProjectDatesOpen(v=>!v)} title="Set planned dates"
+            style={{...iconBtn,width:38,height:38,flexShrink:0,background:(newProjectStart||newProjectEnd)?C.accentAlpha:"transparent",border:(newProjectStart||newProjectEnd)?`1px solid ${C.accentBorder}`:`1px solid ${C.lineS}`}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={(newProjectStart||newProjectEnd)?C.indigo:C.muted} strokeWidth="1.7"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={(newProjectStart||newProjectEnd)?C.indigo:C.muted} strokeWidth="1.7" strokeLinecap="round"/></svg>
+          </button>
           <button onClick={addProject} disabled={!newProject.trim()} style={{border:"none",borderRadius:12,color:"#fff",padding:"0 18px",fontSize:14,fontWeight:600,cursor:"pointer",background:C.accentGrad,opacity:newProject.trim()?1:0.4,whiteSpace:"nowrap"}}>Add</button>
         </div>
-        {(newProjectInputFocused||newProjectStart||newProjectEnd)&&(
-          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:activeProjects.length?16:0,animation:"fadeIn .15s ease"}}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,color:C.dim}}><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={C.dim} strokeWidth="1.7"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round"/></svg>
+        {newProjectDatesOpen&&(
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:activeProjects.length?16:0}}>
             <input type="date" value={newProjectStart} onChange={e=>setNewProjectStart(e.target.value)}
-              className="mt-text" style={{flex:1,fontSize:12,padding:"6px 10px"}} placeholder="Start date"/>
+              className="mt-text" style={{flex:1,fontSize:12,padding:"6px 10px"}}/>
             <span style={{fontSize:12,color:C.dim}}>→</span>
             <input type="date" value={newProjectEnd} onChange={e=>setNewProjectEnd(e.target.value)}
-              className="mt-text" style={{flex:1,fontSize:12,padding:"6px 10px"}} placeholder="End date"/>
+              className="mt-text" style={{flex:1,fontSize:12,padding:"6px 10px"}}/>
           </div>
         )}
         {activeProjects.length>0&&(
