@@ -330,16 +330,27 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
     return()=>audioEventBus.removeEventListener("audioplay",handler);
   },[file.id]);
 
-  // Receive position handback from MiniPlayer when this card starts playing
+  // Announce mount so MiniPlayer can hand back position + auto-resume
   const handbackPosRef=useRef(null);
+  const handbackAutoplayRef=useRef(false);
+  useEffect(()=>{
+    audioEventBus.dispatchEvent(new CustomEvent("audiomounted",{detail:{id:file.id}}));
+  },[]);// eslint-disable-line
+
+  // Receive position handback from MiniPlayer
   useEffect(()=>{
     const handler=e=>{
       if(e.detail.id!==file.id)return;
       const pos=e.detail.position||0;
-      if(wsRef.current&&wsRef.current.getDuration?.()>0){
-        wsRef.current.seekTo(Math.min(1,pos/wsRef.current.getDuration()));
+      const auto=e.detail.autoplay||false;
+      const ws=wsRef.current;
+      const dur=ws?.getDuration?.();
+      if(ws&&dur>0){
+        ws.seekTo(Math.min(1,pos/dur));
+        if(auto)ws.play();
       } else {
-        handbackPosRef.current=pos; // apply on ready
+        handbackPosRef.current=pos;
+        handbackAutoplayRef.current=auto;
       }
     };
     audioEventBus.addEventListener("audiohandback",handler);
@@ -363,11 +374,13 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
       setWsReady(true);
       setLoadProgress(100);
       setBuffering(false);
-      // Apply position handed back from MiniPlayer
+      // Apply position + optional autoplay handed back from MiniPlayer
       if(handbackPosRef.current!=null){
         const dur=ws.getDuration?.();
         if(dur>0)ws.seekTo(Math.min(1,handbackPosRef.current/dur));
-        handbackPosRef.current=null;
+        const shouldAutoplay=handbackAutoplayRef.current;
+        handbackPosRef.current=null;handbackAutoplayRef.current=false;
+        if(shouldAutoplay){ws.play();return;}
       }
       // If user clicked play while loading, start now
       if(pendingPlayRef.current){
@@ -1550,18 +1563,26 @@ function MiniPlayer({nowPlaying,onEnd,onClear}) {
     return()=>a.removeEventListener("loadedmetadata",onMeta);
   },[nowPlaying?.src]);// eslint-disable-line
 
-  // When an AudioFileCard starts playing, hand position back and disappear
+  // When the matching AudioFileCard mounts (Versions tab opened), auto hand back if playing
+  const playingRef=useRef(false);
+  useEffect(()=>{playingRef.current=playing;},[playing]);
   useEffect(()=>{
     const h=e=>{
-      const a=audioRef.current;
       const np=nowPlayingRef.current;
-      if(!np)return;
+      if(!np||e.detail.id!==np.file.id)return;
+      const a=audioRef.current;
       const pos=a?.currentTime||0;
-      // dispatch handback so AudioFileCard can resume from this position
-      audioEventBus.dispatchEvent(new CustomEvent("audiohandback",{detail:{id:np.file.id,position:pos}}));
+      audioEventBus.dispatchEvent(new CustomEvent("audiohandback",{detail:{id:np.file.id,position:pos,autoplay:playingRef.current}}));
       a.pause();a.src="";
       onClear();
     };
+    audioEventBus.addEventListener("audiomounted",h);
+    return()=>audioEventBus.removeEventListener("audiomounted",h);
+  },[]);// eslint-disable-line
+
+  // When any card starts playing manually, just hide the mini player
+  useEffect(()=>{
+    const h=()=>{const a=audioRef.current;a.pause();a.src="";onClear();};
     audioEventBus.addEventListener("audioplay",h);
     return()=>audioEventBus.removeEventListener("audioplay",h);
   },[]);// eslint-disable-line
