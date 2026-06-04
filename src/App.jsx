@@ -853,28 +853,25 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
                   justifyContent:"center",fontFamily:"var(--font-sans)"}}>
                 {uploading?<Spinner/>:"+"}
               </button>
-              {addMenuOpen&&(
-                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:50,
-                  background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,
-                  minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-                  <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
+              <SmartDropdown anchorRef={addMenuRef} open={addMenuOpen} align="right" minHeight={100}
+                style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
+                  display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
+                  border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
+                  fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Upload file
+                </button>
+                {files.length>=2&&(
+                  <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
                     display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
                     border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
                     fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    Upload file
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    A/B compare
                   </button>
-                  {files.length>=2&&(
-                    <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
-                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
-                      border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
-                      fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      A/B compare
-                    </button>
-                  )}
-                </div>
-              )}
+                )}
+              </SmartDropdown>
             </div>
           </div>
 
@@ -891,49 +888,46 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
       ) : (
         /* ── STANDALONE MODE: folder badge + + menu ── */
         <>
-          <div style={{display:"flex",gap:7,marginBottom:10}}>
-            {/* Folder badge */}
+          <div style={{display:"flex",gap:6,marginBottom:12,justifyContent:"flex-end"}}>
+            {/* Folder badge — matches group mode style */}
             <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
               title={hasPerProjectPath?`Folder: ${scanPath}`:"Set scan folder"}
-              style={{width:38,height:38,borderRadius:10,flexShrink:0,cursor:"pointer",display:"flex",
+              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",
                 alignItems:"center",justifyContent:"center",
                 border:`1px solid ${hasPerProjectPath?C.accentBorder:C.lineS}`,
                 background:hasPerProjectPath?C.accentAlpha:C.surf2}}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                 <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
                   stroke={hasPerProjectPath?C.indigo:C.faint} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-            {/* + menu: upload + A/B */}
-            <div ref={addMenuRef} style={{position:"relative",flex:1}}>
+            {/* + menu: upload + A/B — matches group mode style */}
+            <div ref={addMenuRef} style={{position:"relative",flexShrink:0}}>
               <button onClick={()=>setAddMenuOpen(v=>!v)} disabled={uploading}
-                style={{width:"100%",height:38,borderRadius:10,border:`1px solid ${C.lineS}`,background:C.surf2,
-                  color:C.faint,fontSize:13,fontWeight:600,cursor:uploading?"default":"pointer",
-                  display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontFamily:"var(--font-sans)"}}>
-                {uploading?<><Spinner/>Analyzing…</>:<><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.faint} strokeWidth="2" strokeLinecap="round"/></svg>Add file</>}
+                style={{width:26,height:26,borderRadius:7,border:`1px solid ${C.lineS}`,background:C.surf2,
+                  color:C.faint,fontSize:15,lineHeight:1,cursor:uploading?"default":"pointer",
+                  display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-sans)"}}>
+                {uploading?<Spinner/>:"+"}
               </button>
-              {addMenuOpen&&(
-                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:50,
-                  background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,
-                  boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-                  <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
+              <SmartDropdown anchorRef={addMenuRef} open={addMenuOpen} align="left" minHeight={100}
+                style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,left:0,right:0,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
+                  display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:8,
+                  border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
+                  fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Upload file
+                </button>
+                {files.length>=2&&(
+                  <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
                     display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:8,
                     border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
                     fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    Upload file
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    A/B compare
                   </button>
-                  {files.length>=2&&(
-                    <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
-                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:8,
-                      border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
-                      fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      A/B compare
-                    </button>
-                  )}
-                </div>
-              )}
+                )}
+              </SmartDropdown>
             </div>
           </div>
           {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
@@ -1177,10 +1171,8 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
                 border:`1.5px solid ${statusDot}55`,borderRadius:20,padding:"3px 10px",
                 cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4,
               }}>{statusCfg.label}</button>
-              {statusDropOpen&&(
-                <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:30,
-                  background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
-                  minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+              <SmartDropdown anchorRef={statusDropRef} open={statusDropOpen} align="left" minHeight={240}
+                style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
                   {STATUS_ORDER.map(s=>{
                     const sc=STATUS_CFG[s],sd=sc.dot||C.indigo,isActive=s===curStatus;
                     return(
@@ -1196,8 +1188,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
                       </button>
                     );
                   })}
-                </div>
-              )}
+                </SmartDropdown>
             </div>
 
             {/* Dates chip + dropdown */}
@@ -1380,6 +1371,22 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── smart dropdown: auto-flips up/down based on available viewport space ─── */
+function SmartDropdown({anchorRef,open,align="right",minHeight=220,style={},children}) {
+  const [up,setUp]=useState(false);
+  useEffect(()=>{
+    if(!open||!anchorRef?.current)return;
+    const rect=anchorRef.current.getBoundingClientRect();
+    setUp(window.innerHeight-rect.bottom<minHeight);
+  },[open]);// eslint-disable-line
+  if(!open)return null;
+  return(
+    <div style={{position:"absolute",[up?"bottom":"top"]:"calc(100% + 6px)",[align==="right"?"right":"left"]:0,zIndex:50,...style}}>
+      {children}
     </div>
   );
 }
@@ -2970,27 +2977,24 @@ export default function App() {
         <button onClick={()=>setOpen(v=>!v)} style={{...iconBtn,width:28,height:28,borderRadius:8,fontSize:10,fontWeight:700,color:dot,borderColor:`${dot}55`,background:`${dot}15`}}>
           {cfg.badge}
         </button>
-        {open&&(
-          <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:40,
-            background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
-            minWidth:130,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-            {Object.entries(GROUP_TYPE_CFG).map(([t,c])=>{
-              const active=t===type;
-              return(
-                <button key={t} onClick={()=>{onUpdate(name,t);setOpen(false);}} style={{
-                  display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                  borderRadius:9,border:"none",background:active?`${c.dot}18`:"transparent",
-                  cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
-                  color:active?c.dot:C.text,textAlign:"left",
-                }}>
-                  <span style={{width:8,height:8,borderRadius:"50%",background:c.dot,flexShrink:0}}/>
-                  {c.label}
-                  {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={c.dot} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <SmartDropdown anchorRef={ref} open={open} align="right" minHeight={120}
+          style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:130,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+          {Object.entries(GROUP_TYPE_CFG).map(([t,c])=>{
+            const active=t===type;
+            return(
+              <button key={t} onClick={()=>{onUpdate(name,t);setOpen(false);}} style={{
+                display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                borderRadius:9,border:"none",background:active?`${c.dot}18`:"transparent",
+                cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
+                color:active?c.dot:C.text,textAlign:"left",
+              }}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:c.dot,flexShrink:0}}/>
+                {c.label}
+                {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={c.dot} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </button>
+            );
+          })}
+        </SmartDropdown>
       </div>
     );
   };
@@ -3020,27 +3024,24 @@ export default function App() {
           cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4,
         }}>{cfg.label}</button>
         )}
-        {open&&(
-          <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:30,
-            background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
-            minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-            {STATUS_ORDER.map(s=>{
-              const sc=STATUS_CFG[s],sd=sc.dot||C.indigo,active=s===status;
-              return(
-                <button key={s} onClick={()=>{updateProjectStatus(name,s);setOpen(false);}} style={{
-                  display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                  borderRadius:9,border:"none",background:active?`${sd}18`:"transparent",
-                  cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
-                  color:active?sd:C.text,textAlign:"left",
-                }}>
-                  <span style={{width:8,height:8,borderRadius:"50%",background:sd,flexShrink:0}}/>
-                  {sc.label}
-                  {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={sd} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <SmartDropdown anchorRef={ref} open={open} align="left" minHeight={260}
+          style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+          {STATUS_ORDER.map(s=>{
+            const sc=STATUS_CFG[s],sd=sc.dot||C.indigo,active=s===status;
+            return(
+              <button key={s} onClick={()=>{updateProjectStatus(name,s);setOpen(false);}} style={{
+                display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                borderRadius:9,border:"none",background:active?`${sd}18`:"transparent",
+                cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
+                color:active?sd:C.text,textAlign:"left",
+              }}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:sd,flexShrink:0}}/>
+                {sc.label}
+                {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={sd} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </button>
+            );
+          })}
+        </SmartDropdown>
       </div>
     );
   };
@@ -3175,10 +3176,8 @@ export default function App() {
                 <path d="M12 11v4M10 13h4" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round"/>
               </svg>
             </button>
-            {moveOpen&&(
-              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:40,
-                background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
-                minWidth:160,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+            <SmartDropdown anchorRef={moveRef} open={moveOpen} align="right" minHeight={160}
+              style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:160,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
                 {insideGroup&&(
                   <button onClick={()=>{removeFromGroup(p.name);setMoveOpen(false);}} style={{
                     display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
@@ -3203,8 +3202,7 @@ export default function App() {
                     </button>
                   );
                 })}
-              </div>
-            )}
+            </SmartDropdown>
           </div>
         )}
         {confirmDel?(
@@ -3325,7 +3323,8 @@ export default function App() {
                     const closeDropdown=()=>{setTimerProjDropOpen(false);setTimerCreatingProj(false);setTimerNewProjInput("");};
                     const availProjects=projects.filter(p=>!["done","released","archived"].includes(p.status||"active")&&!GROUP_TYPE_CFG[p.type]);
                     return(
-                      <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:30,background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:180,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}
+                      <SmartDropdown anchorRef={timerProjRef} open={timerProjDropOpen} align="right" minHeight={220}
+                        style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:180,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}
                         onMouseDown={e=>e.stopPropagation()}>
                         {timerCreatingProj?(
                           <div style={{padding:"6px 8px",display:"flex",gap:6}}>
@@ -3358,7 +3357,7 @@ export default function App() {
                             </button>
                           </>
                         )}
-                      </div>
+                      </SmartDropdown>
                     );
                   })()}
                 </div>
@@ -3526,22 +3525,19 @@ export default function App() {
             <button onClick={()=>setNewProjectTypeOpen(v=>!v)} disabled={!newProject.trim()} title="Add as Album / EP / Single" style={{border:"none",borderRadius:"0 12px 12px 0",color:"#fff",padding:"0 9px",fontSize:14,fontWeight:600,cursor:"pointer",background:C.accentGrad,display:"flex",alignItems:"center"}}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
-            {newProjectTypeOpen&&(
-              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:40,
-                background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
-                minWidth:148,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-                {Object.entries(GROUP_TYPE_CFG).map(([type,cfg])=>(
-                  <button key={type} onClick={()=>addProject(type)} style={{
-                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                    borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
-                    fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
-                  }}>
-                    <span style={{width:8,height:8,borderRadius:"50%",background:cfg.dot,flexShrink:0}}/>
-                    {cfg.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            <SmartDropdown anchorRef={addTypeRef} open={newProjectTypeOpen} align="right" minHeight={100}
+              style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:148,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+              {Object.entries(GROUP_TYPE_CFG).map(([type,cfg])=>(
+                <button key={type} onClick={()=>addProject(type)} style={{
+                  display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                  borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
+                  fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
+                }}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:cfg.dot,flexShrink:0}}/>
+                  {cfg.label}
+                </button>
+              ))}
+            </SmartDropdown>
           </div>
         </div>
         {newProjectDatesOpen&&(
