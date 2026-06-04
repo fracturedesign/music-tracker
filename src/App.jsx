@@ -3151,12 +3151,17 @@ export default function App() {
                     : `${fmtDur(Math.round(Math.max(0,goalHours-thisWeekH)*60))} to go`}
                 </div>
                 <div style={{display:"flex",gap:6}}>
-                  {weekStrip.map((d,i)=>(
+                  {weekStrip.map((d,i)=>{
+                    const dayMins=sessionsByDate[d.ds]||0;
+                    const dayLabel=dayMins>=60?`${Math.floor(dayMins/60)}h${dayMins%60?`${dayMins%60}m`:""}`:dayMins>0?`${dayMins}m`:"";
+                    return(
                     <button key={d.ds} onClick={()=>setSheet({form:newForm(d.ds),editing:false,id:null})} style={{flex:1,textAlign:"center",background:"transparent",border:"none",cursor:"pointer",padding:0}}>
                       <div style={{fontSize:10,color:C.dim,marginBottom:5}}>{DAYS_MON[i]}</div>
                       <div style={{aspectRatio:"1",borderRadius:10,display:"grid",placeItems:"center",fontSize:12.5,fontWeight:600,background:d.logged?C.accentGrad:d.isToday?C.accentAlpha:C.surf2,border:d.isToday&&!d.logged?`1.5px solid ${C.indigo}`:"1.5px solid transparent",color:d.logged?"#fff":d.isToday?C.indigo:C.dim,opacity:d.future?0.45:1}}>{d.logged?"✓":d.dn}</div>
+                      <div style={{fontSize:9,color:d.logged?C.green:C.faint,marginTop:4,fontWeight:600,minHeight:11}}>{dayLabel}</div>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -3182,7 +3187,10 @@ export default function App() {
             // Assign each timed project a fixed lane (consistent vertical position across all days)
             // A project with only a start date is treated as a single-day range
             const timedProjects=projects.filter(p=>p.plannedStart);
-            const tlColor=p=>{const end=p.plannedEnd||p.plannedStart;return end<today?C.flame:p.plannedStart<=today?C.green:C.indigo;};
+            // 8-color palette — deterministic per project name
+            const TL_PALETTE=["#60a5fa","#34d399","#fb923c","#f472b6","#a78bfa","#fbbf24","#4ade80","#38bdf8"];
+            const strHash=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;};
+            const projColor=p=>TL_PALETTE[strHash(p.name)%TL_PALETTE.length];
             return calCells.map((ds,i)=>{
               if(!ds)return<div key={i}/>;
               const isPast=ds<today,isToday=ds===today,hasSess=!!sessionsByDate[ds],missed=isPast&&!hasSess;
@@ -3193,17 +3201,17 @@ export default function App() {
               const handleClick=()=>{if(firstProject)openProject(firstProject.name);};
               return(
                 <button key={ds} onClick={handleClick} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:hasProject?"pointer":"default",padding:0,position:"relative",overflow:"hidden",background:"transparent",border:"1.5px solid transparent"}}>
+                  {/* Bands behind date */}
+                  {dayTl.map(({p,li})=>(
+                    <div key={p.name} style={{position:"absolute",left:0,right:0,height:5,bottom:2+li*7,background:projColor(p),opacity:0.75,zIndex:0}}/>
+                  ))}
                   <span style={{
-                    fontSize:12.5,fontWeight:isToday||hasSess?600:400,
+                    fontSize:13,fontWeight:isToday||hasSess?700:500,
                     position:"relative",zIndex:1,textAlign:"center",
-                    lineHeight:"24px",width:24,height:24,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                    color:isToday?"#fff":hasSess?C.green:C.faint,
+                    lineHeight:"26px",width:26,height:26,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    color:isToday?"#fff":hasSess?C.green:C.text,
                     background:isToday?C.accentGrad:hasSess?`${C.green}22`:"transparent",
                   }}>{Number(ds.slice(8))}</span>
-                  {/* One horizontal band per project, stacked from bottom upward */}
-                  {dayTl.map(({p,li})=>(
-                    <div key={p.name} style={{position:"absolute",left:0,right:0,height:6,bottom:3+li*8,background:tlColor(p),opacity:0.72}}/>
-                  ))}
                 </button>
               );
             });
