@@ -2853,9 +2853,20 @@ export default function App() {
               const firstProject=hasProject?dayTl[0].p:null;
               const handleClick=()=>{if(firstProject)openProject(firstProject.name);};
               return(
-                <button key={ds} onClick={handleClick} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:hasProject?"pointer":"default",padding:0,position:"relative",overflow:"hidden",background:isToday?C.accentAlpha:hasSess?C.accentAlpha2:"transparent",border:isToday?`1.5px solid ${C.indigo}`:"1.5px solid transparent"}}>
-                  <span style={{fontSize:12.5,color:isToday?C.indigo:hasSess?C.text:C.faint,fontWeight:hasSess?600:400,position:"relative",zIndex:1}}>{Number(ds.slice(8))}</span>
-                  {hasSess?<span style={{width:5,height:5,borderRadius:"50%",background:C.green,position:"relative",zIndex:1}}/>:missed?<span style={{width:5,height:5,borderRadius:"50%",background:C.surf2,position:"relative",zIndex:1}}/>:<span style={{height:5,position:"relative",zIndex:1}}/>}
+                <button key={ds} onClick={handleClick} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:hasProject?"pointer":"default",padding:0,position:"relative",overflow:"hidden",background:hasSess?C.accentAlpha2:"transparent",border:"1.5px solid transparent"}}>
+                  <span style={{fontSize:12.5,fontWeight:isToday||hasSess?600:400,position:"relative",zIndex:1,
+                    color:isToday?"#fff":hasSess?C.text:C.faint,
+                    background:isToday?C.accentGrad:"transparent",
+                    borderRadius:isToday?999:0,
+                    minWidth:isToday?22:0,textAlign:"center",
+                    padding:isToday?"1px 0":0,
+                    lineHeight:"22px",display:"block"}}>{Number(ds.slice(8))}</span>
+                  {hasSess
+                    ?<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{position:"relative",zIndex:1}}><path d="M1.5 5.5l2.5 2.5 4.5-5" stroke={C.green} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    :missed
+                      ?<span style={{width:5,height:5,borderRadius:"50%",background:C.surf2,position:"relative",zIndex:1}}/>
+                      :<span style={{height:5,position:"relative",zIndex:1}}/>
+                  }
                   {/* One horizontal band per project, stacked from bottom upward */}
                   {dayTl.map(({p,li})=>(
                     <div key={p.name} style={{position:"absolute",left:0,right:0,height:6,bottom:3+li*8,background:tlColor(p),opacity:0.72}}/>
