@@ -2669,7 +2669,7 @@ export default function App() {
     },[open]);
     return(
       <div ref={ref} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
-        <button onClick={()=>setOpen(v=>!v)} style={{...iconBtn,width:32,height:32,borderRadius:9,fontSize:10,fontWeight:700,color:dot,borderColor:`${dot}55`,background:`${dot}15`}}>
+        <button onClick={()=>setOpen(v=>!v)} style={{...iconBtn,width:28,height:28,borderRadius:8,fontSize:10,fontWeight:700,color:dot,borderColor:`${dot}55`,background:`${dot}15`}}>
           {cfg.badge}
         </button>
         {open&&(
