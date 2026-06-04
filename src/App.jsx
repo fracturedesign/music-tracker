@@ -2769,7 +2769,7 @@ export default function App() {
   const GroupRow=({p})=>{
     const cfg=GROUP_TYPE_CFG[p.type]||GROUP_TYPE_CFG.album;
     const dot=cfg.dot;
-    const [collapsed,setCollapsed]=useState(false);
+    const [collapsed,setCollapsed]=useState(true);
     const [confirmDel,setConfirmDel]=useState(false);
     const children=childrenOf(p.name);
     const isDoneOrReleased=["done","released"].includes(p.status||"active");
