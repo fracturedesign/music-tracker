@@ -2125,6 +2125,10 @@ export default function App() {
   const TIMER_PRESETS=[30,45,60,90];
   const [timer,setTimer]=useState({phase:"idle",target:0,endsAt:0,remaining:0});
   const [customMin,setCustomMin]=useState("");
+  const [timerProject,setTimerProject]=useState("");
+  const [timerNote,setTimerNote]=useState("");
+  const [timerCreatingProj,setTimerCreatingProj]=useState(false);
+  const [timerNewProjInput,setTimerNewProjInput]=useState("");
   const [prompt]=useState(()=>PROMPTS[Math.floor(Math.random()*PROMPTS.length)]);
   const [tick,setTick]=useState(0);
 
@@ -2145,12 +2149,18 @@ export default function App() {
   const timerLogMin=timer.phase==="done"?timerTargetMin:Math.min(480,Math.max(1,Math.floor(timerElapsed/60000)));
   const showTimerUI=timer.phase!=="idle";
 
-  const openTimerSetup=()=>{setCustomMin("");setTimer({phase:"setup",target:0,endsAt:0,remaining:0});};
-  const cancelTimer=()=>setTimer({phase:"idle",target:0,endsAt:0,remaining:0});
+  const resetTimerExtras=()=>{setTimerProject("");setTimerNote("");setTimerCreatingProj(false);setTimerNewProjInput("");};
+  const openTimerSetup=()=>{setCustomMin("");resetTimerExtras();setTimer({phase:"setup",target:0,endsAt:0,remaining:0});};
+  const cancelTimer=()=>{resetTimerExtras();setTimer({phase:"idle",target:0,endsAt:0,remaining:0});};
+  const createTimerProject=async()=>{
+    const name=timerNewProjInput.trim();if(!name)return;
+    if(!projects.find(p=>p.name===name)){const proj={name,notes:"",status:"active"};const next=[...projects,proj];setProjects(next);await persistProjects(next);}
+    setTimerProject(name);setTimerCreatingProj(false);setTimerNewProjInput("");
+  };
   const startCountdown=mins=>{const ms=Math.min(480,Math.max(1,Math.round(mins)))*60000;setTimer({phase:"running",target:ms,endsAt:Date.now()+ms,remaining:ms});};
   const pauseCountdown=()=>setTimer(t=>({...t,phase:"paused",remaining:Math.max(0,t.endsAt-Date.now()),endsAt:0}));
   const resumeCountdown=()=>setTimer(t=>({...t,phase:"running",endsAt:Date.now()+t.remaining}));
-  const logCountdown=()=>{setTimer(t=>({...t,phase:t.phase==="running"?"paused":t.phase,remaining:timerRemaining,endsAt:0}));setSheet({form:{...newForm(),duration:timerLogMin},editing:false,id:null,fromTimer:true});};
+  const logCountdown=()=>{setTimer(t=>({...t,phase:t.phase==="running"?"paused":t.phase,remaining:timerRemaining,endsAt:0}));setSheet({form:{...newForm(),duration:timerLogMin,project:timerProject,note:timerNote},editing:false,id:null,fromTimer:true});};
 
   /* derived */
   const sessionsByDate=sessions.reduce((acc,s)=>{acc[s.date]=(acc[s.date]||0)+s.duration;return acc;},{});
@@ -2499,6 +2509,26 @@ export default function App() {
               <button onClick={()=>{const v=Number(customMin);if(v>0)startCountdown(v);}} disabled={!(Number(customMin)>0)}
                 style={{border:"none",borderRadius:12,color:"#fff",padding:"0 22px",fontSize:15,fontWeight:700,cursor:"pointer",background:C.accentGrad,opacity:Number(customMin)>0?1:0.4,fontFamily:"var(--font-sans)"}}>Start</button>
             </div>
+            <div style={{borderTop:`1px solid ${C.line}`,paddingTop:12,marginTop:4}}>
+              <div style={{fontSize:11,color:C.faint,marginBottom:7}}>Project <span style={{opacity:0.6}}>(optional)</span></div>
+              {timerCreatingProj?(
+                <div style={{display:"flex",gap:8}}>
+                  <input value={timerNewProjInput} onChange={e=>setTimerNewProjInput(e.target.value)} placeholder="Project name…" className="mt-text" style={{flex:1}}
+                    onKeyDown={e=>{if(e.key==="Enter")createTimerProject();if(e.key==="Escape"){setTimerCreatingProj(false);setTimerNewProjInput("");}}}
+                    autoFocus/>
+                  <button onClick={createTimerProject} disabled={!timerNewProjInput.trim()} style={{border:"none",borderRadius:10,color:"#fff",padding:"0 14px",fontSize:14,fontWeight:700,cursor:"pointer",background:C.accentGrad,opacity:timerNewProjInput.trim()?1:0.4}}>✓</button>
+                  <button onClick={()=>{setTimerCreatingProj(false);setTimerNewProjInput("");}} style={{border:`1px solid ${C.line}`,borderRadius:10,background:"transparent",color:C.muted,padding:"0 12px",fontSize:14,cursor:"pointer"}}>✕</button>
+                </div>
+              ):(
+                <div style={{display:"flex",gap:8}}>
+                  <select value={timerProject} onChange={e=>setTimerProject(e.target.value)} className="mt-text" style={{flex:1}}>
+                    <option value="">No project</option>
+                    {projects.filter(p=>p.status!=="archived").map(p=><option key={p.name} value={p.name}>{p.name}</option>)}
+                  </select>
+                  <button onClick={()=>setTimerCreatingProj(true)} style={{border:`1px solid ${C.line}`,borderRadius:10,background:"transparent",color:C.muted,padding:"0 12px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>＋ New</button>
+                </div>
+              )}
+            </div>
           </>
         ):showTimerUI?(
           <>
@@ -2510,8 +2540,32 @@ export default function App() {
               <button onClick={cancelTimer} style={{fontSize:12.5,fontWeight:600,color:C.faint,background:"transparent",border:"none",cursor:"pointer"}}>Discard</button>
             </div>
             <div className="mono" style={{fontSize:50,fontWeight:700,letterSpacing:"-0.02em",margin:"10px 0 12px",color:timer.phase==="done"?C.greenS:C.text}}>{fmtClock(timerRemaining)}</div>
-            <div style={{height:5,borderRadius:5,background:"rgba(255,255,255,0.08)",overflow:"hidden",marginBottom:16}}>
+            <div style={{height:5,borderRadius:5,background:"rgba(255,255,255,0.08)",overflow:"hidden",marginBottom:14}}>
               <div style={{height:"100%",width:`${timerProgress*100}%`,borderRadius:5,background:timer.phase==="done"?"linear-gradient(90deg,#6ee7b7,#34d399)":C.accentGrad,transition:"width .3s linear"}}/>
+            </div>
+            {/* Project + notes during timer */}
+            <div style={{marginBottom:14}}>
+              {timerCreatingProj?(
+                <div style={{display:"flex",gap:8,marginBottom:timerProject?8:0}}>
+                  <input value={timerNewProjInput} onChange={e=>setTimerNewProjInput(e.target.value)} placeholder="Project name…" className="mt-text" style={{flex:1}}
+                    onKeyDown={e=>{if(e.key==="Enter")createTimerProject();if(e.key==="Escape"){setTimerCreatingProj(false);setTimerNewProjInput("");}}}
+                    autoFocus/>
+                  <button onClick={createTimerProject} disabled={!timerNewProjInput.trim()} style={{border:"none",borderRadius:10,color:"#fff",padding:"0 14px",fontSize:14,fontWeight:700,cursor:"pointer",background:C.accentGrad,opacity:timerNewProjInput.trim()?1:0.4}}>✓</button>
+                  <button onClick={()=>{setTimerCreatingProj(false);setTimerNewProjInput("");}} style={{border:`1px solid ${C.line}`,borderRadius:10,background:"transparent",color:C.muted,padding:"0 12px",fontSize:14,cursor:"pointer"}}>✕</button>
+                </div>
+              ):(
+                <div style={{display:"flex",gap:8,marginBottom:timerProject?8:0}}>
+                  <select value={timerProject} onChange={e=>setTimerProject(e.target.value)} className="mt-text" style={{flex:1,fontSize:13}}>
+                    <option value="">No project</option>
+                    {projects.filter(p=>p.status!=="archived").map(p=><option key={p.name} value={p.name}>{p.name}</option>)}
+                  </select>
+                  <button onClick={()=>setTimerCreatingProj(true)} title="New project" style={{border:`1px solid ${C.line}`,borderRadius:10,background:"transparent",color:C.muted,padding:"0 12px",fontSize:13,fontWeight:600,cursor:"pointer"}}>＋</button>
+                </div>
+              )}
+              {timerProject&&(
+                <textarea value={timerNote} onChange={e=>setTimerNote(e.target.value)} placeholder="Quick notes for this session…" className="mt-text"
+                  style={{width:"100%",resize:"none",minHeight:58,fontSize:13,lineHeight:1.5,boxSizing:"border-box"}} rows={2}/>
+              )}
             </div>
             {timer.phase==="done"?(
               <button onClick={logCountdown} style={{width:"100%",padding:15,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:700,color:"#0b0b10",background:"linear-gradient(135deg,#6ee7b7,#34d399)"}}>✓ Log {timerTargetMin}m session</button>
