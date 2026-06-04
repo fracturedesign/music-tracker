@@ -1494,32 +1494,17 @@ function MiniPlayer({nowPlaying,onEnd,onClear}) {
   const C=useTheme();
   const audioRef=useRef(null);
   const [playing,setPlaying]=useState(false);
-  const [currentTime,setCurrentTime]=useState(nowPlaying?.position||0);
-  const [duration,setDuration]=useState(nowPlaying?.file?.duration||0);
+  const [currentTime,setCurrentTime]=useState(0);
+  const [duration,setDuration]=useState(0);
 
-  // Load + seek + play whenever nowPlaying changes
+  // Attach all audio listeners once — audioRef is always in the DOM
   useEffect(()=>{
-    if(!nowPlaying||!audioRef.current)return;
     const a=audioRef.current;
-    a.src=nowPlaying.src;
-    a.currentTime=nowPlaying.position||0;
-    a.play().catch(()=>{});
-  },[nowPlaying?.src]);// eslint-disable-line
-
-  // Pause mini player when any AudioFileCard starts playing
-  useEffect(()=>{
-    const h=()=>{audioRef.current?.pause();};
-    audioEventBus.addEventListener("audioplay",h);
-    return()=>audioEventBus.removeEventListener("audioplay",h);
-  },[]);
-
-  useEffect(()=>{
-    const a=audioRef.current;if(!a)return;
     const onTime=()=>setCurrentTime(a.currentTime);
-    const onDur=()=>setDuration(a.duration||0);
+    const onDur=()=>setDuration(isFinite(a.duration)?a.duration:0);
     const onPlay=()=>setPlaying(true);
     const onPause=()=>setPlaying(false);
-    const onEnded=()=>{setPlaying(false);setCurrentTime(0);onEnd();};
+    const onEnded=()=>{setPlaying(false);setCurrentTime(0);setDuration(0);onEnd();};
     a.addEventListener("timeupdate",onTime);
     a.addEventListener("durationchange",onDur);
     a.addEventListener("play",onPlay);
@@ -1528,46 +1513,66 @@ function MiniPlayer({nowPlaying,onEnd,onClear}) {
     return()=>{a.removeEventListener("timeupdate",onTime);a.removeEventListener("durationchange",onDur);a.removeEventListener("play",onPlay);a.removeEventListener("pause",onPause);a.removeEventListener("ended",onEnded);};
   },[]);// eslint-disable-line
 
-  const pct=duration>0?Math.min(1,currentTime/duration):0;
-  const seekTo=ratio=>{if(audioRef.current)audioRef.current.currentTime=ratio*(audioRef.current.duration||0);};
+  // Load + seek + play when nowPlaying changes
+  useEffect(()=>{
+    const a=audioRef.current;
+    if(!nowPlaying){a.pause();a.src="";return;}
+    a.src=nowPlaying.src;
+    setCurrentTime(nowPlaying.position||0);
+    setDuration(nowPlaying.file?.duration||0);
+    // seek after enough metadata loaded
+    const onMeta=()=>{a.currentTime=nowPlaying.position||0;a.play().catch(()=>{});};
+    a.addEventListener("loadedmetadata",onMeta,{once:true});
+    a.load();
+    return()=>a.removeEventListener("loadedmetadata",onMeta);
+  },[nowPlaying?.src]);// eslint-disable-line
 
-  if(!nowPlaying)return null;
+  // Pause when any AudioFileCard starts playing
+  useEffect(()=>{
+    const h=()=>audioRef.current?.pause();
+    audioEventBus.addEventListener("audioplay",h);
+    return()=>audioEventBus.removeEventListener("audioplay",h);
+  },[]);
+
+  const dur=duration||nowPlaying?.file?.duration||0;
+  const pct=dur>0?Math.min(1,currentTime/dur):0;
+  const seekTo=e=>{const r=e.currentTarget.getBoundingClientRect();const a=audioRef.current;if(a&&a.duration)a.currentTime=(e.clientX-r.left)/r.width*a.duration;};
 
   return(
-    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:60,
-      background:C.surf,borderTop:`1px solid ${C.lineS}`,
-      boxShadow:"0 -8px 24px -6px rgba(0,0,0,0.22)",
-      paddingBottom:"env(safe-area-inset-bottom,0px)"}}>
+    <>
+      {/* audio always in DOM so refs/listeners are stable */}
       <audio ref={audioRef}/>
-      {/* Seekable progress bar */}
-      <div onClick={e=>{const r=e.currentTarget.getBoundingClientRect();seekTo((e.clientX-r.left)/r.width);}}
-        style={{height:3,background:C.surf2,cursor:"pointer",position:"relative"}}>
-        <div style={{position:"absolute",inset:0,width:`${pct*100}%`,background:C.accentGrad,transition:"width .25s linear"}}/>
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px 10px"}}>
-        {/* Play/pause */}
-        <button onClick={()=>playing?audioRef.current.pause():audioRef.current.play().catch(()=>{})}
-          style={{width:32,height:32,borderRadius:9,border:`1px solid ${C.accentBorder}`,background:C.accentAlpha,
-            cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0,padding:0}}>
-          {playing
-            ?<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
-            :<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
-          }
-        </button>
-        {/* Track + project */}
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nowPlaying.file.name}</div>
-          <div style={{fontSize:11,color:C.faint,marginTop:1}}>{nowPlaying.projectName}</div>
+      {nowPlaying&&(
+        <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:60,
+          background:C.surf,borderTop:`1px solid ${C.lineS}`,
+          boxShadow:"0 -8px 24px -6px rgba(0,0,0,0.22)",
+          paddingBottom:"env(safe-area-inset-bottom,0px)"}}>
+          {/* Seekable progress bar */}
+          <div onClick={seekTo} style={{height:3,background:C.surf2,cursor:"pointer",position:"relative"}}>
+            <div style={{position:"absolute",top:0,left:0,bottom:0,width:`${pct*100}%`,background:C.accentGrad,transition:"width .25s linear"}}/>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px 10px"}}>
+            <button onClick={()=>playing?audioRef.current.pause():audioRef.current.play().catch(()=>{})}
+              style={{width:32,height:32,borderRadius:9,border:`1px solid ${C.accentBorder}`,background:C.accentAlpha,
+                cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0,padding:0}}>
+              {playing
+                ?<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+                :<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+              }
+            </button>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nowPlaying.file.name}</div>
+              <div style={{fontSize:11,color:C.faint,marginTop:1}}>{nowPlaying.projectName}</div>
+            </div>
+            <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0}}>{fmtSeconds(currentTime)} / {fmtSeconds(dur)}</span>
+            <button onClick={()=>{audioRef.current.pause();audioRef.current.src="";onClear();}}
+              style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",display:"grid",placeItems:"center",padding:0,color:C.faint}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+            </button>
+          </div>
         </div>
-        {/* Time */}
-        <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0}}>{fmtSeconds(currentTime)} / {fmtSeconds(duration||nowPlaying.file.duration)}</span>
-        {/* Close */}
-        <button onClick={()=>{audioRef.current?.pause();onClear();}}
-          style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",display:"grid",placeItems:"center",padding:0,color:C.faint}}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-        </button>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
