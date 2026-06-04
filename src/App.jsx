@@ -1949,12 +1949,15 @@ export default function App() {
     const s=sessions.filter(x=>x.project===name);
     return s.length?s.reduce((best,x)=>x.date>best?x.date:best,""):"";
   };
+  // Sort: projects with a start date come first (earliest date = top).
+  // Projects without a start date fall to the bottom, ordered by insertion
+  // (rawActive preserves creation order, newest first since addProject prepends).
   const activeProjects=[...rawActive].sort((a,b)=>{
-    const da=lastSessionDateOf(a.name),db=lastSessionDateOf(b.name);
-    if(da&&db)return db.localeCompare(da);
-    if(da)return -1;
-    if(db)return 1;
-    return rawActive.indexOf(a)-rawActive.indexOf(b);
+    const sa=a.plannedStart,sb=b.plannedStart;
+    if(sa&&sb)return sa.localeCompare(sb); // earlier start = higher
+    if(sa)return -1;                        // a has date, b doesn't → a first
+    if(sb)return 1;                         // b has date, a doesn't → b first
+    return rawActive.indexOf(a)-rawActive.indexOf(b); // both undated: keep insertion order
   });
   const doneProjects=projects.filter(p=>p.status==="done");
   const releasedProjects=projects.filter(p=>p.status==="released");
@@ -2153,8 +2156,8 @@ export default function App() {
             <span style={{color:C.dim}}>·</span>
             <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
             {audioCount>0&&<><span style={{color:C.dim}}>·</span>
-              <button onClick={()=>openProject(p.name,"versions")} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.dim,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
+              <button onClick={()=>openProject(p.name,"versions")} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.green,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.green} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
               </button>
             </>}
           </div>
