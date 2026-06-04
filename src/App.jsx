@@ -789,12 +789,15 @@ function parseLines(text) {
 }
 function serializeLines(lines){return lines.map(l=>l.type==="check"?(l.checked?"-x ":"- ")+l.content:l.content).join("\n");}
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [tab,setTab]=useState("open");
   const [versionsCount,setVersionsCount]=useState(null);
   const [renamingProject,setRenamingProject]=useState(false);
   const [renameVal,setRenameVal]=useState(name);
+  const [tlStart,setTlStart]=useState(plannedStart||"");
+  const [tlEnd,setTlEnd]=useState(plannedEnd||"");
+  const [tlEditing,setTlEditing]=useState(false);
   useEffect(()=>{
     fetch(`/api/audio/${encodeURIComponent(name)}`).then(r=>r.json())
       .then(d=>setVersionsCount(d.files?.length??0)).catch(()=>{});
@@ -804,6 +807,8 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename}) {
     if(trimmed&&trimmed!==name)onRename?.(name,trimmed);
     setRenamingProject(false);
   };
+  const commitTimeline=()=>{onSaveTimeline?.(tlStart,tlEnd);setTlEditing(false);};
+  const clearTimeline=()=>{setTlStart("");setTlEnd("");onSaveTimeline?.("","");setTlEditing(false);};
   const [text,setText]=useState(notes||"");
   const [lines,setLines]=useState(()=>parseLines(notes));
   const [mode,setMode]=useState("preview");
@@ -812,6 +817,22 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename}) {
   const toggle=i=>setLines(prev=>prev.map((l,idx)=>idx===i?{...l,checked:!l.checked}:l));
   const close=()=>{onSave(mode==="edit"?text:serializeLines(lines));onClose();};
   const empty=lines.length===0||(lines.length===1&&lines[0].content==="");
+
+  // History tab — sessions for this project sorted newest first
+  const today=toDateStr(new Date());
+  const projectSessions=(sessions||[]).filter(s=>s.project===name).sort((a,b)=>b.date.localeCompare(a.date)||((b.hour??0)-(a.hour??0)));
+
+  const fmtSessionDate=s=>{
+    const rel=fmtRelativeDate(s.date);
+    const h=s.hour!=null?new Date(0).toLocaleTimeString("en",{hour:"numeric",hour12:true}).replace(/^.*\b/,""):"";
+    const tod=s.hour!=null?`${s.hour<12?"AM":"PM"}`:"";
+    const hourFmt=s.hour!=null?` · ${s.hour%12||12}${s.hour<12?"am":"pm"}`:"";
+    return (rel||s.date)+hourFmt;
+  };
+
+  const tlFmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric",year:"numeric"}):"";
+  const hasTl=plannedStart||plannedEnd;
+
   return (
     <div className="overlay" style={{alignItems:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&close()}>
       <div style={{background:C.surf,borderRadius:22,border:`1px solid ${C.lineS}`,width:"100%",maxWidth:500,display:"flex",flexDirection:"column",animation:"mtmodal .22s ease",maxHeight:"88vh"}}>
@@ -830,23 +851,44 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename}) {
             <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
               <div style={{fontSize:16,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
               <button onClick={()=>{setRenameVal(name);setRenamingProject(true);}} style={{...iconBtn,flexShrink:0,width:26,height:26,borderRadius:7}} title="Rename project">{Icon.pencil()}</button>
+              {/* Timeline button */}
+              <button onClick={()=>setTlEditing(v=>!v)}
+                style={{...iconBtn,flexShrink:0,width:"auto",padding:"0 8px",gap:4,display:"flex",alignItems:"center",height:26,borderRadius:7,
+                  background:hasTl?C.accentAlpha:"transparent",border:hasTl?`1px solid ${C.accentBorder}`:`1px solid ${C.lineS}`}}
+                title="Set planned dates">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={hasTl?C.indigo:C.muted} strokeWidth="1.8"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={hasTl?C.indigo:C.muted} strokeWidth="1.8" strokeLinecap="round"/></svg>
+                {hasTl&&<span style={{fontSize:10.5,fontWeight:600,color:C.indigo,whiteSpace:"nowrap"}}>{tlFmt(plannedStart)}{plannedEnd?` → ${tlFmt(plannedEnd)}`:""}</span>}
+              </button>
             </div>
           )}
           {!renamingProject&&<button onClick={close} style={{...iconBtn,flexShrink:0}}>{Icon.close()}</button>}
         </div>
 
+        {/* Timeline editor (inline, below header) */}
+        {tlEditing&&!renamingProject&&(
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px 0",flexWrap:"wrap"}}>
+            <input type="date" value={tlStart} onChange={e=>setTlStart(e.target.value)}
+              className="mt-text" style={{flex:1,minWidth:120,fontSize:12,padding:"6px 10px"}}/>
+            <span style={{fontSize:12,color:C.dim}}>→</span>
+            <input type="date" value={tlEnd} onChange={e=>setTlEnd(e.target.value)}
+              className="mt-text" style={{flex:1,minWidth:120,fontSize:12,padding:"6px 10px"}}/>
+            <button onClick={commitTimeline} style={{background:C.accentGrad,border:"none",borderRadius:9,color:"#fff",padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Save</button>
+            {hasTl&&<button onClick={clearTimeline} style={{...iconBtn,width:28,height:28}}>{Icon.trash()}</button>}
+          </div>
+        )}
+
         {/* Tab bar */}
         <div style={{display:"flex",gap:0,padding:"12px 20px 0",borderBottom:`1px solid ${C.line}`}}>
-          {[["open","Notes"],["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"]].map(([t,l])=>(
+          {[["open","Notes"],["history",`History · ${projectSessions.length}`],["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"]].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
-              padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
+              padding:"8px 14px",fontSize:13,fontWeight:600,border:"none",cursor:"pointer",
               borderBottom:`2px solid ${tab===t?C.indigo:"transparent"}`,background:"transparent",
-              color:tab===t?C.indigo:C.faint,marginBottom:"-1px",fontFamily:"var(--font-sans)",
+              color:tab===t?C.indigo:C.faint,marginBottom:"-1px",fontFamily:"var(--font-sans)",whiteSpace:"nowrap",
             }}>{l}</button>
           ))}
         </div>
 
-        {/* Open (notes) tab */}
+        {/* Notes tab */}
         {tab==="open"&&(
           <>
             <div style={{display:"flex",alignItems:"center",gap:4,padding:"12px 20px 10px"}}>
@@ -886,6 +928,37 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename}) {
               <button onClick={close} style={{background:C.accentGrad,border:"none",borderRadius:12,color:"#fff",padding:"11px 22px",fontSize:14,fontWeight:600,cursor:"pointer"}}>Save &amp; close</button>
             </div>
           </>
+        )}
+
+        {/* History tab */}
+        {tab==="history"&&(
+          <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:0}}>
+            {projectSessions.length===0
+              ?<div style={{color:C.dim,fontSize:13.5,textAlign:"center",padding:"20px 0"}}>No sessions logged for this project yet.</div>
+              :projectSessions.map((s,i)=>{
+                const tagCol=s.tag?TAG_COLOR[s.tag]:null;
+                const isFirst=i===0||projectSessions[i-1].date!==s.date;
+                const hourStr=s.hour!=null?` · ${s.hour%12||12}${s.hour<12?"am":"pm"}`:"";
+                return(
+                  <div key={s.id}>
+                    {isFirst&&<div style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",padding:"12px 0 6px",borderTop:i>0?`1px solid ${C.line}`:"none"}}>{fmtRelativeDate(s.date)||s.date}</div>}
+                    <div style={{display:"flex",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.line}`}}>
+                      <div style={{width:3,borderRadius:2,background:tagCol||C.indigo,flexShrink:0,alignSelf:"stretch",minHeight:36}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                          <span style={{fontSize:11.5,color:C.muted}}>{fmtDur(s.duration)}</span>
+                          {s.hour!=null&&<span style={{fontSize:11.5,color:C.dim}}>{`${s.hour%12||12}${s.hour<12?"am":"pm"}`}</span>}
+                          {s.mood!=null&&<span style={{fontSize:12}}>{MOOD_EMOJI[s.mood]}</span>}
+                          {s.tag&&<span style={{fontSize:10.5,fontWeight:600,color:tagCol,background:`${tagCol}1e`,borderRadius:5,padding:"2px 7px"}}>{s.tag}</span>}
+                        </div>
+                        {s.note?<div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{s.note}</div>
+                          :<div style={{fontSize:12,color:C.dim,fontStyle:"italic"}}>no note</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         )}
 
         {/* Versions tab */}
@@ -1039,7 +1112,7 @@ function LogSheet({initial,editing,projects,onSubmit,onDelete,onClose}) {
               <span style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint}}>Duration</span>
               <span className="mono" style={{fontSize:16,fontWeight:700,color:C.indigo}}>{fmtDur(form.duration)}</span>
             </div>
-            <input type="range" className="mt" min="5" max="480" step="5" value={form.duration} onChange={e=>set({duration:Number(e.target.value)})}/>
+            <input type="range" className="mt" min="1" max="480" step="1" value={form.duration} onChange={e=>set({duration:Number(e.target.value)})}/>
             <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.dim,marginTop:7}}>
               <span>5m</span><span>2h</span><span>4h</span><span>8h</span>
             </div>
@@ -1598,6 +1671,9 @@ export default function App() {
   const [unlockedMilestones,setUnlockedMilestones]=useState([]);
   const [calMonth,setCalMonth]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
   const [newProject,setNewProject]=useState("");
+  const [newProjectStart,setNewProjectStart]=useState("");
+  const [newProjectEnd,setNewProjectEnd]=useState("");
+  const [newProjectInputFocused,setNewProjectInputFocused]=useState(false);
   const [notesModal,setNotesModal]=useState(null);
   const [sheet,setSheet]=useState(null);
   const [allOpen,setAllOpen]=useState(false);
@@ -1719,7 +1795,7 @@ export default function App() {
   const timerElapsed=Math.max(0,timer.target-timerRemaining);
   const timerProgress=timer.target?Math.min(1,timerElapsed/timer.target):0;
   const timerTargetMin=Math.round(timer.target/60000);
-  const timerLogMin=Math.min(480,Math.max(5,Math.round(timerElapsed/60000/5)*5));
+  const timerLogMin=Math.min(480,Math.max(1,Math.round(timerElapsed/60000)));
   const showTimerUI=timer.phase!=="idle";
 
   const openTimerSetup=()=>{setCustomMin("");setTimer({phase:"setup",target:0,endsAt:0,remaining:0});};
@@ -1798,8 +1874,16 @@ export default function App() {
 
   const addProject=async()=>{
     const name=newProject.trim();if(!name||projects.find(p=>p.name===name))return;
-    const next=[...projects,{name,notes:"",status:"active"}];
-    setProjects(next);await persistProjects(next);setNewProject("");
+    const proj={name,notes:"",status:"active"};
+    if(newProjectStart)proj.plannedStart=newProjectStart;
+    if(newProjectEnd)proj.plannedEnd=newProjectEnd;
+    const next=[...projects,proj];
+    setProjects(next);await persistProjects(next);
+    setNewProject("");setNewProjectStart("");setNewProjectEnd("");setNewProjectInputFocused(false);
+  };
+  const saveTimeline=async(name,plannedStart,plannedEnd)=>{
+    const next=projects.map(p=>p.name===name?{...p,plannedStart,plannedEnd}:p);
+    setProjects(next);await persistProjects(next);
   };
   const updateProjectStatus=async(name,status)=>{
     const next=projects.map(p=>p.name===name?{...p,status}:p);
@@ -1916,6 +2000,19 @@ export default function App() {
 
   const ProjectRow=({p})=>{
     const isDoneOrReleased=["done","released"].includes(p.status||"active");
+    const timelineColor=(()=>{
+      if(!p.plannedStart&&!p.plannedEnd)return null;
+      if(p.plannedEnd&&p.plannedEnd<today)return C.flame;
+      if(p.plannedStart&&p.plannedStart<=today&&(!p.plannedEnd||p.plannedEnd>=today))return C.green;
+      return C.indigo;
+    })();
+    const timelineLabel=(()=>{
+      const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
+      if(p.plannedStart&&p.plannedEnd)return`${fmt(p.plannedStart)} → ${fmt(p.plannedEnd)}`;
+      if(p.plannedStart)return`from ${fmt(p.plannedStart)}`;
+      if(p.plannedEnd)return`due ${fmt(p.plannedEnd)}`;
+      return null;
+    })();
     return(
     <div style={{background:C.surf2,borderRadius:14,padding:"12px 15px"}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1930,6 +2027,10 @@ export default function App() {
                 {audioFileCounts[p.name]}
               </span>
             )}
+            {timelineLabel&&<span style={{display:"flex",alignItems:"center",gap:3,color:timelineColor,fontWeight:500}}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={timelineColor} strokeWidth="1.9"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={timelineColor} strokeWidth="1.9" strokeLinecap="round"/></svg>
+              {timelineLabel}
+            </span>}
             <StatusDropdown name={p.name} status={p.status||"active"}/>
           </div>
         </div>
@@ -1951,7 +2052,7 @@ export default function App() {
     <ThemeCtx.Provider value={C}>
     <div className="app" style={{background:C.bg}}>
 
-      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject}/>}
+      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} plannedStart={projectMap[notesModal]?.plannedStart||""} plannedEnd={projectMap[notesModal]?.plannedEnd||""} onSaveTimeline={(s,e)=>saveTimeline(notesModal,s,e)} sessions={sessions} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject}/>}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
@@ -2093,10 +2194,12 @@ export default function App() {
           {calCells.map((ds,i)=>{
             if(!ds)return<div key={i}/>;
             const isPast=ds<today,isToday=ds===today,hasSess=!!sessionsByDate[ds],missed=isPast&&!hasSess;
+            const tlProj=projects.find(p=>p.plannedStart&&p.plannedEnd&&p.plannedStart<=ds&&ds<=p.plannedEnd);
+            const tlColor=tlProj?(tlProj.plannedEnd<today?C.flame:tlProj.plannedStart<=today?C.green:C.indigo):null;
             return(
-              <button key={ds} onClick={()=>setSheet({form:newForm(ds),editing:false,id:null})} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:"pointer",padding:0,background:isToday?C.accentAlpha:hasSess?C.accentAlpha2:"transparent",border:isToday?`1.5px solid ${C.indigo}`:"1.5px solid transparent"}}>
+              <button key={ds} onClick={()=>setSheet({form:newForm(ds),editing:false,id:null})} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:"pointer",padding:0,background:isToday?C.accentAlpha:hasSess?C.accentAlpha2:"transparent",border:isToday?`1.5px solid ${C.indigo}`:tlProj?`1.5px solid ${tlColor}44`:"1.5px solid transparent"}}>
                 <span style={{fontSize:12.5,color:isToday?C.indigo:hasSess?C.text:C.faint,fontWeight:hasSess?600:400}}>{Number(ds.slice(8))}</span>
-                {hasSess?<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>:missed?<span style={{width:5,height:5,borderRadius:"50%",background:C.surf2}}/>:<span style={{height:5}}/>}
+                {hasSess?<span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>:missed?<span style={{width:5,height:5,borderRadius:"50%",background:C.surf2}}/>:tlProj?<span style={{width:5,height:5,borderRadius:"50%",background:tlColor,opacity:0.6}}/>:<span style={{height:5}}/>}
               </button>
             );
           })}
@@ -2112,11 +2215,24 @@ export default function App() {
           <span style={eyebrow}>Projects</span>
           {activeProjects.length>0&&<span style={{fontSize:12.5,color:C.faint}}>{activeProjects.length} active</span>}
         </div>
-        <div style={{display:"flex",gap:8,marginBottom:activeProjects.length?16:0}}>
+        <div style={{display:"flex",gap:8,marginBottom:(newProjectInputFocused||newProjectStart||newProjectEnd)?8:activeProjects.length?16:0}}>
           <input type="text" className="mt-text" value={newProject} placeholder="Track or project name…"
-            onChange={e=>setNewProject(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addProject()} style={{flex:1}}/>
+            onChange={e=>setNewProject(e.target.value)}
+            onFocus={()=>setNewProjectInputFocused(true)}
+            onBlur={()=>setNewProjectInputFocused(false)}
+            onKeyDown={e=>e.key==="Enter"&&addProject()} style={{flex:1}}/>
           <button onClick={addProject} disabled={!newProject.trim()} style={{border:"none",borderRadius:12,color:"#fff",padding:"0 18px",fontSize:14,fontWeight:600,cursor:"pointer",background:C.accentGrad,opacity:newProject.trim()?1:0.4,whiteSpace:"nowrap"}}>Add</button>
         </div>
+        {(newProjectInputFocused||newProjectStart||newProjectEnd)&&(
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:activeProjects.length?16:0,animation:"fadeIn .15s ease"}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,color:C.dim}}><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={C.dim} strokeWidth="1.7"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round"/></svg>
+            <input type="date" value={newProjectStart} onChange={e=>setNewProjectStart(e.target.value)}
+              className="mt-text" style={{flex:1,fontSize:12,padding:"6px 10px"}} placeholder="Start date"/>
+            <span style={{fontSize:12,color:C.dim}}>→</span>
+            <input type="date" value={newProjectEnd} onChange={e=>setNewProjectEnd(e.target.value)}
+              className="mt-text" style={{flex:1,fontSize:12,padding:"6px 10px"}} placeholder="End date"/>
+          </div>
+        )}
         {activeProjects.length>0&&(
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {activeProjects.map(p=><ProjectRow key={p.name} p={p}/>)}
