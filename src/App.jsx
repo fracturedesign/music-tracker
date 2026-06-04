@@ -868,7 +868,7 @@ function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCount
   );
 }
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,audioFileCounts={},canGoBack=false}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,audioFileCounts={},projectColorMap={},canGoBack=false}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const isGroupType=!!GROUP_TYPE_CFG[type];
   const [tab,setTab]=useState(initialTab&&initialTab!=="open"?initialTab:isGroupType?"tracks":"open");
@@ -1110,13 +1110,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
                 if(c.plannedEnd)return`due ${fmt(c.plannedEnd)}`;
                 return null;
               })();
-              const today2=new Date().toISOString().slice(0,10);
-              const tlColor=(()=>{
-                if(!c.plannedStart&&!c.plannedEnd)return C.dim;
-                if(c.plannedEnd&&c.plannedEnd<today2)return C.flame;
-                if(c.plannedStart&&c.plannedStart<=today2&&(!c.plannedEnd||c.plannedEnd>=today2))return C.green;
-                return C.indigo;
-              })();
+              const tlColor=(c.plannedStart||c.plannedEnd)?(projectColorMap[c.name]||C.indigo):C.dim;
               const cnt=sessions?.filter(s=>s.project===c.name).length||0;
               const audioCount=audioFileCounts[c.name]||0;
               return(
@@ -2512,6 +2506,22 @@ export default function App() {
   const todayHasSession=(sessionsByDate[today]||0)>0;
   const projectMap=Object.fromEntries(projects.map(p=>[p.name,p]));
   const projectCounts=sessions.reduce((acc,s)=>{if(s.project)acc[s.project]=(acc[s.project]||0)+1;return acc;},{});
+
+  // Deterministic per-project color: try hash-preferred slot, skip if already taken
+  const TL_PALETTE=["#60a5fa","#34d399","#fb923c","#f472b6","#a78bfa","#fbbf24","#4ade80","#38bdf8"];
+  const projectColorMap=(()=>{
+    const strHash=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;};
+    const used=new Set();const map={};
+    projects.forEach(p=>{
+      let idx=strHash(p.name)%TL_PALETTE.length;
+      for(let t=0;t<TL_PALETTE.length;t++){
+        if(!used.has(TL_PALETTE[idx]))break;
+        idx=(idx+1)%TL_PALETTE.length;
+      }
+      map[p.name]=TL_PALETTE[idx];used.add(TL_PALETTE[idx]);
+    });
+    return map;
+  })();
   const recent=[...sessions].sort((a,b)=>b.date.localeCompare(a.date));
 
   const rawActive=projects.filter(p=>!["done","released"].includes(p.status||"active"));
@@ -2824,12 +2834,7 @@ export default function App() {
       const h=e=>{if(tlDropRef.current&&!tlDropRef.current.contains(e.target))setTlOpen(false);};
       document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
     },[tlOpen]);
-    const tlColor=(()=>{
-      if(!p.plannedStart&&!p.plannedEnd)return C.dim;
-      if(p.plannedEnd&&p.plannedEnd<today)return C.flame;
-      if(p.plannedStart&&p.plannedStart<=today&&(!p.plannedEnd||p.plannedEnd>=today))return C.green;
-      return C.indigo;
-    })();
+    const tlColor=(p.plannedStart||p.plannedEnd)?(projectColorMap[p.name]||C.indigo):C.dim;
     const tlLabel=(()=>{
       const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
       if(p.plannedStart&&p.plannedEnd&&p.plannedStart!==p.plannedEnd)return`${fmt(p.plannedStart)} → ${fmt(p.plannedEnd)}`;
@@ -2950,7 +2955,7 @@ export default function App() {
             status={proj.status||"active"} onStatusChange={(name,s)=>updateProjectStatus(name,s)}
             type={proj.type} childProjects={children} ungroupedProjects={ungrouped}
             onOpenProject={openProject} onAddToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup}
-            audioFileCounts={audioFileCounts} canGoBack={idx>0}
+            audioFileCounts={audioFileCounts} projectColorMap={projectColorMap} canGoBack={idx>0}
           />
         );
       })}
@@ -3187,10 +3192,6 @@ export default function App() {
             // Assign each timed project a fixed lane (consistent vertical position across all days)
             // A project with only a start date is treated as a single-day range
             const timedProjects=projects.filter(p=>p.plannedStart);
-            // 8-color palette — deterministic per project name
-            const TL_PALETTE=["#60a5fa","#34d399","#fb923c","#f472b6","#a78bfa","#fbbf24","#4ade80","#38bdf8"];
-            const strHash=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;};
-            const projColor=p=>TL_PALETTE[strHash(p.name)%TL_PALETTE.length];
             return calCells.map((ds,i)=>{
               if(!ds)return<div key={i}/>;
               const isPast=ds<today,isToday=ds===today,hasSess=!!sessionsByDate[ds],missed=isPast&&!hasSess;
@@ -3203,7 +3204,7 @@ export default function App() {
                 <button key={ds} onClick={handleClick} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:hasProject?"pointer":"default",padding:0,position:"relative",overflow:"hidden",background:"transparent",border:"1.5px solid transparent"}}>
                   {/* Bands behind date */}
                   {dayTl.map(({p,li})=>(
-                    <div key={p.name} style={{position:"absolute",left:0,right:0,height:5,bottom:2+li*7,background:projColor(p),opacity:0.75,zIndex:0}}/>
+                    <div key={p.name} style={{position:"absolute",left:0,right:0,height:5,bottom:2+li*7,background:projectColorMap[p.name]||C.indigo,opacity:0.75,zIndex:0}}/>
                   ))}
                   <span style={{
                     fontSize:13,fontWeight:isToday||hasSess?700:500,
