@@ -2507,19 +2507,12 @@ export default function App() {
   const projectMap=Object.fromEntries(projects.map(p=>[p.name,p]));
   const projectCounts=sessions.reduce((acc,s)=>{if(s.project)acc[s.project]=(acc[s.project]||0)+1;return acc;},{});
 
-  // Deterministic per-project color: try hash-preferred slot, skip if already taken
-  const TL_PALETTE=["#60a5fa","#34d399","#fb923c","#f472b6","#a78bfa","#fbbf24","#4ade80","#38bdf8"];
+  // Deterministic per-project color: sort by name → assign sequentially from 12-color palette.
+  // Guarantees uniqueness up to 12 projects, then cycles. Stable across re-renders.
+  const TL_PALETTE=["#60a5fa","#34d399","#fb923c","#f472b6","#a78bfa","#fbbf24","#4ade80","#38bdf8","#e879f9","#f87171","#2dd4bf","#facc15"];
   const projectColorMap=(()=>{
-    const strHash=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;};
-    const used=new Set();const map={};
-    projects.forEach(p=>{
-      let idx=strHash(p.name)%TL_PALETTE.length;
-      for(let t=0;t<TL_PALETTE.length;t++){
-        if(!used.has(TL_PALETTE[idx]))break;
-        idx=(idx+1)%TL_PALETTE.length;
-      }
-      map[p.name]=TL_PALETTE[idx];used.add(TL_PALETTE[idx]);
-    });
+    const sorted=[...projects].sort((a,b)=>a.name.localeCompare(b.name));
+    const map={};sorted.forEach((p,i)=>{map[p.name]=TL_PALETTE[i%TL_PALETTE.length];});
     return map;
   })();
   const recent=[...sessions].sort((a,b)=>b.date.localeCompare(a.date));
