@@ -2289,23 +2289,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Week strip */}
-      <div className="card" style={card}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:16}}>
-          <span style={eyebrow}>This week</span>
-          <span style={{fontSize:12.5,color:C.faint}}>{weekLogged} of 7 logged</span>
-        </div>
-        <div style={{display:"flex",gap:7}}>
-          {weekStrip.map((d,i)=>(
-            <button key={d.ds} onClick={()=>setSheet({form:newForm(d.ds),editing:false,id:null})} style={{flex:1,textAlign:"center",background:"transparent",border:"none",cursor:"pointer",padding:0}}>
-              <div style={{fontSize:11,color:C.dim,marginBottom:7}}>{DAYS_MON[i]}</div>
-              <div style={{aspectRatio:"1",borderRadius:12,display:"grid",placeItems:"center",fontSize:14,fontWeight:600,background:d.logged?C.accentGrad:d.isToday?C.accentAlpha:C.surf2,border:d.isToday&&!d.logged?`1.5px solid ${C.indigo}`:"1.5px solid transparent",color:d.logged?"#fff":d.isToday?C.indigo:C.dim,opacity:d.future?0.45:1}}>{d.logged?"✓":d.dn}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Stats */}
+      {/* All-time stats */}
       <div className="card" style={{...card,display:"flex",padding:"18px 8px"}}>
         {[[totalSessions,"sessions"],[fmtDur(tMins),"total"],[fmtDur(avgMins),"avg"],[bestDay,"best day"]].map(([v,k],i)=>(
           <div key={k} style={{flex:1,textAlign:"center",borderRight:i<3?`1px solid ${C.line}`:"none"}}>
@@ -2315,8 +2299,43 @@ export default function App() {
         ))}
       </div>
 
-      {/* Weekly goal */}
-      <WeeklyGoalCard sessions={sessions} goalHours={goalHours} onEditGoal={()=>setGoalEditOpen(true)}/>
+      {/* This week + Weekly goal (merged) */}
+      {(()=>{
+        const thisWeekH=weekHours(sessions,getWeekStart(0));
+        const pct=goalHours>0?thisWeekH/goalHours:0;
+        return (
+          <div className="card" style={card}>
+            {/* Header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:16}}>
+              <span style={eyebrow}>This week</span>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:12.5,color:C.faint}}>{weekLogged} of 7 logged</span>
+                <button onClick={()=>setGoalEditOpen(true)} style={{fontSize:12,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer"}}>
+                  {goalHours}h / week
+                </button>
+              </div>
+            </div>
+            {/* Day tiles */}
+            <div style={{display:"flex",gap:7,marginBottom:20}}>
+              {weekStrip.map((d,i)=>(
+                <button key={d.ds} onClick={()=>setSheet({form:newForm(d.ds),editing:false,id:null})} style={{flex:1,textAlign:"center",background:"transparent",border:"none",cursor:"pointer",padding:0}}>
+                  <div style={{fontSize:11,color:C.dim,marginBottom:7}}>{DAYS_MON[i]}</div>
+                  <div style={{aspectRatio:"1",borderRadius:12,display:"grid",placeItems:"center",fontSize:14,fontWeight:600,background:d.logged?C.accentGrad:d.isToday?C.accentAlpha:C.surf2,border:d.isToday&&!d.logged?`1.5px solid ${C.indigo}`:"1.5px solid transparent",color:d.logged?"#fff":d.isToday?C.indigo:C.dim,opacity:d.future?0.45:1}}>{d.logged?"✓":d.dn}</div>
+                </button>
+              ))}
+            </div>
+            {/* Goal ring */}
+            <div style={{display:"flex",alignItems:"center",gap:20}}>
+              <GoalRing pct={pct} label={fmtDur(Math.round(thisWeekH*60))} sub={`of ${goalHours}h`}/>
+              <div style={{fontSize:13,color:C.muted}}>
+                {pct>=1
+                  ? <span style={{color:C.green,fontWeight:600}}>✓ Goal reached this week!</span>
+                  : `${fmtDur(Math.round(Math.max(0,goalHours-thisWeekH)*60))} to go`}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Analytics */}
       <AnalyticsCard sessions={sessions}/>
