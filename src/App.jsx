@@ -1496,6 +1496,7 @@ function MiniPlayer({nowPlaying,onEnd,onClear}) {
   const [playing,setPlaying]=useState(false);
   const [currentTime,setCurrentTime]=useState(0);
   const [duration,setDuration]=useState(0);
+  const [expanded,setExpanded]=useState(true);
 
   // Attach all audio listeners once — audioRef is always in the DOM
   useEffect(()=>{
@@ -1517,10 +1518,10 @@ function MiniPlayer({nowPlaying,onEnd,onClear}) {
   useEffect(()=>{
     const a=audioRef.current;
     if(!nowPlaying){a.pause();a.src="";return;}
+    setExpanded(true);
     a.src=nowPlaying.src;
     setCurrentTime(nowPlaying.position||0);
     setDuration(nowPlaying.file?.duration||0);
-    // seek after enough metadata loaded
     const onMeta=()=>{a.currentTime=nowPlaying.position||0;a.play().catch(()=>{});};
     a.addEventListener("loadedmetadata",onMeta,{once:true});
     a.load();
@@ -1537,39 +1538,85 @@ function MiniPlayer({nowPlaying,onEnd,onClear}) {
   const dur=duration||nowPlaying?.file?.duration||0;
   const pct=dur>0?Math.min(1,currentTime/dur):0;
   const seekTo=e=>{const r=e.currentTarget.getBoundingClientRect();const a=audioRef.current;if(a&&a.duration)a.currentTime=(e.clientX-r.left)/r.width*a.duration;};
+  const togglePlay=()=>playing?audioRef.current.pause():audioRef.current.play().catch(()=>{});
+
+  const PlayPauseBtn=({size=32,iconSize=10,radius=9})=>(
+    <button onClick={togglePlay}
+      style={{width:size,height:size,borderRadius:radius,border:`1.5px solid ${C.accentBorder}`,background:C.accentAlpha,
+        cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0,padding:0}}>
+      {playing
+        ?<svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+        :<svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+      }
+    </button>
+  );
+
+  const cardStyle={
+    position:"fixed",bottom:"calc(16px + env(safe-area-inset-bottom,0px))",
+    left:"50%",transform:"translateX(-50%)",
+    width:"calc(100% - 32px)",maxWidth:420,zIndex:60,
+    background:C.surf,border:`1px solid ${C.lineS}`,
+    borderRadius:expanded?20:999,
+    boxShadow:"0 8px 32px -8px rgba(0,0,0,0.35), 0 2px 8px -2px rgba(0,0,0,0.18)",
+    overflow:"hidden",transition:"border-radius .25s ease",
+  };
 
   return(
     <>
-      {/* audio always in DOM so refs/listeners are stable */}
       <audio ref={audioRef}/>
       {nowPlaying&&(
-        <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:60,
-          background:C.surf,borderTop:`1px solid ${C.lineS}`,
-          boxShadow:"0 -8px 24px -6px rgba(0,0,0,0.22)",
-          paddingBottom:"env(safe-area-inset-bottom,0px)"}}>
-          {/* Seekable progress bar */}
-          <div onClick={seekTo} style={{height:3,background:C.surf2,cursor:"pointer",position:"relative"}}>
-            <div style={{position:"absolute",top:0,left:0,bottom:0,width:`${pct*100}%`,background:C.accentGrad,transition:"width .25s linear"}}/>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px 10px"}}>
-            <button onClick={()=>playing?audioRef.current.pause():audioRef.current.play().catch(()=>{})}
-              style={{width:32,height:32,borderRadius:9,border:`1px solid ${C.accentBorder}`,background:C.accentAlpha,
-                cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0,padding:0}}>
-              {playing
-                ?<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
-                :<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
-              }
-            </button>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nowPlaying.file.name}</div>
-              <div style={{fontSize:11,color:C.faint,marginTop:1}}>{nowPlaying.projectName}</div>
+        <div style={cardStyle}>
+          {/* Expanded view */}
+          {expanded&&(
+            <>
+              {/* Seekable bar */}
+              <div onClick={seekTo} style={{height:3,background:C.surf2,cursor:"pointer",position:"relative",userSelect:"none"}}>
+                <div style={{position:"absolute",top:0,left:0,bottom:0,width:`${pct*100}%`,background:C.accentGrad,transition:"width .25s linear"}}/>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px 12px"}}>
+                <PlayPauseBtn/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nowPlaying.file.name}</div>
+                  <div style={{fontSize:11,color:C.faint,marginTop:1}}>{nowPlaying.projectName}</div>
+                </div>
+                <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0}}>{fmtSeconds(currentTime)} / {fmtSeconds(dur)}</span>
+                {/* Collapse */}
+                <button onClick={()=>setExpanded(false)} title="Collapse"
+                  style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",display:"grid",placeItems:"center",padding:0,color:C.faint}}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 15l6 6 6-6M6 9l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+                {/* Close */}
+                <button onClick={()=>{audioRef.current.pause();audioRef.current.src="";onClear();}}
+                  style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",display:"grid",placeItems:"center",padding:0,color:C.faint}}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            </>
+          )}
+          {/* Collapsed pill */}
+          {!expanded&&(
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px"}}>
+              <PlayPauseBtn size={36} iconSize={11} radius={999}/>
+              {/* Tiny inline progress arc replaced by a thin bar inside pill */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nowPlaying.file.name}</div>
+                <div style={{height:2,borderRadius:2,background:C.surf2,marginTop:4,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct*100}%`,background:C.accentGrad,transition:"width .25s linear"}}/>
+                </div>
+              </div>
+              <span className="mono" style={{fontSize:10.5,color:C.faint,flexShrink:0}}>{fmtSeconds(currentTime)}</span>
+              {/* Expand */}
+              <button onClick={()=>setExpanded(true)} title="Expand"
+                style={{width:26,height:26,borderRadius:999,border:"none",background:"transparent",cursor:"pointer",display:"grid",placeItems:"center",padding:0,color:C.faint}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {/* Close */}
+              <button onClick={()=>{audioRef.current.pause();audioRef.current.src="";onClear();}}
+                style={{width:26,height:26,borderRadius:999,border:"none",background:"transparent",cursor:"pointer",display:"grid",placeItems:"center",padding:0,color:C.faint}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              </button>
             </div>
-            <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0}}>{fmtSeconds(currentTime)} / {fmtSeconds(dur)}</span>
-            <button onClick={()=>{audioRef.current.pause();audioRef.current.src="";onClear();}}
-              style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",display:"grid",placeItems:"center",padding:0,color:C.faint}}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-            </button>
-          </div>
+          )}
         </div>
       )}
     </>
