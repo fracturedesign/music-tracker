@@ -594,7 +594,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
     document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
   },[addMenuOpen]);
 
-  useEffect(()=>{onCountChange?.(files.length);},[files.length]);// eslint-disable-line
+  useEffect(()=>{if(!loading)onCountChange?.(files.length);},[loading,files.length]);// eslint-disable-line
 
   useEffect(()=>{
     (async()=>{
@@ -889,31 +889,52 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
           )}
         </>
       ) : (
-        /* ── STANDALONE MODE: original layout ── */
+        /* ── STANDALONE MODE: folder badge + + menu ── */
         <>
           <div style={{display:"flex",gap:7,marginBottom:10}}>
-            <button onClick={()=>fileInputRef.current?.click()} disabled={uploading}
-              style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
-                padding:"10px 0",borderRadius:10,cursor:uploading?"default":"pointer",
-                border:`1.5px dashed ${C.lineS}`,background:"transparent",
-                color:uploading?C.dim:C.faint,fontSize:12.5,fontWeight:600,fontFamily:"var(--font-sans)"}}>
-              {uploading?<><Spinner/>Analyzing…</>:<><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>Upload file</>}
-            </button>
+            {/* Folder badge */}
             <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
-              style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,
-                color:showScan||hasPerProjectPath?C.indigo:C.faint,gap:5,display:"flex",
-                borderColor:showScan||hasPerProjectPath?C.accentBorder:C.lineS,
-                background:showScan||hasPerProjectPath?C.accentAlpha:C.surf2}}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              {hasPerProjectPath?"Folder set":"Scan folder"}
+              title={hasPerProjectPath?`Folder: ${scanPath}`:"Set scan folder"}
+              style={{width:38,height:38,borderRadius:10,flexShrink:0,cursor:"pointer",display:"flex",
+                alignItems:"center",justifyContent:"center",
+                border:`1px solid ${hasPerProjectPath?C.accentBorder:C.lineS}`,
+                background:hasPerProjectPath?C.accentAlpha:C.surf2}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+                  stroke={hasPerProjectPath?C.indigo:C.faint} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
-            {files.length>=2&&(
-              <button onClick={()=>setAbOpen(true)}
-                style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,gap:5,display:"flex",
-                  color:C.faint,borderColor:C.lineS,background:C.surf2}}>
-                A/B
+            {/* + menu: upload + A/B */}
+            <div ref={addMenuRef} style={{position:"relative",flex:1}}>
+              <button onClick={()=>setAddMenuOpen(v=>!v)} disabled={uploading}
+                style={{width:"100%",height:38,borderRadius:10,border:`1px solid ${C.lineS}`,background:C.surf2,
+                  color:C.faint,fontSize:13,fontWeight:600,cursor:uploading?"default":"pointer",
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontFamily:"var(--font-sans)"}}>
+                {uploading?<><Spinner/>Analyzing…</>:<><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.faint} strokeWidth="2" strokeLinecap="round"/></svg>Add file</>}
               </button>
-            )}
+              {addMenuOpen&&(
+                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:50,
+                  background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,
+                  boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                  <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
+                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:8,
+                    border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
+                    fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Upload file
+                  </button>
+                  {files.length>=2&&(
+                    <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
+                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:8,
+                      border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
+                      fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      A/B compare
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
           {showScan&&ScanPanel}
@@ -935,13 +956,24 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
 function TrackCard({c,sessions,audioFileCounts,projectColorMap,onOpenProject,onRemoveFromGroup,onStatusChange}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [statusOpen,setStatusOpen]=useState(false);
+  const [dropUp,setDropUp]=useState(false);
   const dropRef=useRef(null);
+  const btnRef=useRef(null);
   useEffect(()=>{
     if(!statusOpen)return;
     const handler=e=>{if(dropRef.current&&!dropRef.current.contains(e.target))setStatusOpen(false);};
     document.addEventListener("mousedown",handler);
     return()=>document.removeEventListener("mousedown",handler);
   },[statusOpen]);
+  const handleStatusClick=e=>{
+    e.stopPropagation();
+    if(btnRef.current){
+      const rect=btnRef.current.getBoundingClientRect();
+      // dropdown is ~220px tall; open upward if less than 240px below
+      setDropUp(window.innerHeight-rect.bottom<240);
+    }
+    setStatusOpen(v=>!v);
+  };
   const sc=STATUS_CFG[c.status||"active"]||STATUS_CFG.active;
   const sd=sc.dot||C.indigo;
   const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
@@ -975,14 +1007,14 @@ function TrackCard({c,sessions,audioFileCounts,projectColorMap,onOpenProject,onR
           </>}
         </div>
       </div>
-      {/* Status pill — click opens dropdown */}
+      {/* Status pill — click opens dropdown, direction chosen by available space */}
       <div ref={dropRef} style={{position:"relative",flexShrink:0}}>
-        <button onClick={e=>{e.stopPropagation();setStatusOpen(v=>!v);}}
+        <button ref={btnRef} onClick={handleStatusClick}
           style={{fontSize:10.5,fontWeight:700,color:sd,background:`${sd}1a`,border:`1.5px solid ${sd}55`,borderRadius:20,padding:"2px 8px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4}}>
           {sc.label}
         </button>
         {statusOpen&&(
-          <div style={{position:"absolute",bottom:"calc(100% + 4px)",right:0,zIndex:50,
+          <div style={{position:"absolute",[dropUp?"bottom":"top"]:"calc(100% + 4px)",right:0,zIndex:50,
             background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,
             minWidth:130,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
             {STATUS_ORDER.map(s=>{
@@ -1055,6 +1087,16 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const [versionsCount,setVersionsCount]=useState(null);
   const [versionsCountMap,setVersionsCountMap]=useState({});
   const totalGroupVersions=Object.values(versionsCountMap).reduce((a,b)=>a+b,0);
+  // Pre-fetch audio counts for all group children on panel open so the tab label is populated immediately
+  useEffect(()=>{
+    if(!isGroup||childProjects.length===0)return;
+    childProjects.forEach(async c=>{
+      try{
+        const r=await fetch(`/api/audio/${encodeURIComponent(c.name)}`).then(x=>x.json());
+        setVersionsCountMap(prev=>({...prev,[c.name]:r.files?.length??0}));
+      }catch{}
+    });
+  },[]);// eslint-disable-line
   const [renamingProject,setRenamingProject]=useState(false);
   const [renameVal,setRenameVal]=useState(name);
   const [tlStart,setTlStart]=useState(plannedStart||"");
