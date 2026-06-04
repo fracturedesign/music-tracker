@@ -2992,7 +2992,7 @@ export default function App() {
             <img src="/icon-transparent.svg" alt="" style={{width:46,height:46,flexShrink:0}} />
             <div style={{fontSize:25,fontWeight:700,letterSpacing:"-0.02em",color:C.text}}>Orbit</div>
           </div>
-          <div style={{fontSize:13,color:C.faint,marginTop:4,paddingLeft:44}}>Keep the habit. One session at a time.</div>
+          <div style={{fontSize:13,color:C.faint,marginTop:4}}>Keep the habit. One session at a time.</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <button onClick={()=>setReviewOpen(true)} title="Analytics" style={iconBtn}>
