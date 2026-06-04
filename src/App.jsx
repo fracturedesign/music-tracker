@@ -890,7 +890,7 @@ function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCount
   );
 }
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,audioFileCounts={},projectColorMap={},canGoBack=false}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,onCreateTrack,audioFileCounts={},projectColorMap={},canGoBack=false}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const isGroupType=!!GROUP_TYPE_CFG[type];
   const [tab,setTab]=useState(initialTab&&initialTab!=="open"?initialTab:isGroupType?"tracks":"open");
@@ -927,6 +927,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const [text,setText]=useState(notes||"");
   const [historyOpen,setHistoryOpen]=useState(false);
   const [addTrackOpen,setAddTrackOpen]=useState(false);
+  const [newTrackName,setNewTrackName]=useState("");
   const isGroup=isGroupType;
   const close=()=>{onSave(text);onClose()};
 
@@ -1098,27 +1099,44 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
         {tab==="tracks"&&(
           <div style={{flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
             {/* Add track button — top */}
-            {ungroupedProjects.length>0&&(
-              !addTrackOpen?(
-                <button onClick={()=>setAddTrackOpen(true)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px dashed ${C.lineS}`,borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.dim,fontSize:13,fontWeight:600,width:"100%",fontFamily:"var(--font-sans)"}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
-                  Add track to group
-                </button>
-              ):(
-                <div style={{background:C.surf2,borderRadius:12,padding:8,display:"flex",flexDirection:"column",gap:4}}>
-                  {ungroupedProjects.map(p=>(
-                    <button key={p.name} onClick={()=>{onAddToGroup?.(p.name,name);setAddTrackOpen(false);}} style={{
-                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                      borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
-                      fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
-                    }}>
-                      <span style={{width:7,height:7,borderRadius:"50%",background:C.indigo,flexShrink:0}}/>
-                      {p.name}
-                    </button>
-                  ))}
-                  <button onClick={()=>setAddTrackOpen(false)} style={{fontSize:12,color:C.faint,background:"none",border:"none",cursor:"pointer",padding:"4px 12px",textAlign:"left",fontFamily:"var(--font-sans)"}}>Cancel</button>
+            {!addTrackOpen?(
+              <button onClick={()=>{setAddTrackOpen(true);setNewTrackName("");}} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px dashed ${C.lineS}`,borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.dim,fontSize:13,fontWeight:600,width:"100%",fontFamily:"var(--font-sans)"}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
+                Add track to group
+              </button>
+            ):(
+              <div style={{background:C.surf2,borderRadius:12,padding:10,display:"flex",flexDirection:"column",gap:6}}>
+                {/* Create new track */}
+                <div style={{display:"flex",gap:6}}>
+                  <input autoFocus className="mt-text" value={newTrackName} onChange={e=>setNewTrackName(e.target.value)}
+                    placeholder="New track name…"
+                    onKeyDown={e=>{if(e.key==="Enter"&&newTrackName.trim()){onCreateTrack?.(newTrackName.trim(),name);setAddTrackOpen(false);}
+                      else if(e.key==="Escape")setAddTrackOpen(false);}}
+                    style={{flex:1,fontSize:13,padding:"7px 11px"}}/>
+                  <button onClick={()=>{if(newTrackName.trim()){onCreateTrack?.(newTrackName.trim(),name);setAddTrackOpen(false);}}}
+                    disabled={!newTrackName.trim()}
+                    style={{border:"none",borderRadius:9,background:C.accentGrad,color:"#fff",fontSize:13,fontWeight:600,padding:"0 14px",cursor:"pointer",opacity:newTrackName.trim()?1:0.4,fontFamily:"var(--font-sans)"}}>
+                    Create
+                  </button>
                 </div>
-              )
+                {/* Add existing */}
+                {ungroupedProjects.length>0&&(
+                  <>
+                    <div style={{fontSize:10.5,fontWeight:600,color:C.faint,letterSpacing:"0.05em",textTransform:"uppercase",padding:"2px 4px"}}>Or add existing</div>
+                    {ungroupedProjects.map(p=>(
+                      <button key={p.name} onClick={()=>{onAddToGroup?.(p.name,name);setAddTrackOpen(false);}} style={{
+                        display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",
+                        borderRadius:9,border:"none",background:C.surf,cursor:"pointer",
+                        fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
+                      }}>
+                        <span style={{width:7,height:7,borderRadius:"50%",background:C.indigo,flexShrink:0}}/>
+                        {p.name}
+                      </button>
+                    ))}
+                  </>
+                )}
+                <button onClick={()=>setAddTrackOpen(false)} style={{fontSize:12,color:C.faint,background:"none",border:"none",cursor:"pointer",padding:"2px 4px",textAlign:"left",fontFamily:"var(--font-sans)"}}>Cancel</button>
+              </div>
             )}
             {/* Child project cards — ProjectRow style */}
             {childProjects.map(c=>{
@@ -2638,6 +2656,13 @@ export default function App() {
     const next=projects.map(p=>p.name===name?{...p,type}:p);
     setProjects(next);await persistProjects(next);
   };
+  const createTrackInGroup=async(trackName,groupName)=>{
+    if(!trackName||projects.find(p=>p.name===trackName))return;
+    const usedColors=new Set(projects.map(p=>p.color).filter(Boolean));
+    const proj={name:trackName,notes:"",status:"active",color:pickProjectColor(usedColors),parentGroup:groupName};
+    const next=[...projects,proj];
+    setProjects(next);await persistProjects(next);
+  };
   const moveToGroup=async(trackName,groupName)=>{
     const next=projects.map(p=>p.name===trackName?{...p,parentGroup:groupName}:p);
     setProjects(next);await persistProjects(next);
@@ -2972,7 +2997,7 @@ export default function App() {
             onRename={renameProject} initialTab={entry.tab}
             status={proj.status||"active"} onStatusChange={(name,s)=>updateProjectStatus(name,s)}
             type={proj.type} childProjects={children} ungroupedProjects={ungrouped}
-            onOpenProject={openProject} onAddToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup}
+            onOpenProject={openProject} onAddToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup} onCreateTrack={createTrackInGroup}
             audioFileCounts={audioFileCounts} projectColorMap={projectColorMap} canGoBack={idx>0}
           />
         );
