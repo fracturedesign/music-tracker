@@ -918,6 +918,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const [tlEditing,setTlEditing]=useState(false);
   const [statusDropOpen,setStatusDropOpen]=useState(false);
   const statusDropRef=useRef(null);
+  const tlDropRef=useRef(null);
   useEffect(()=>{
     fetch(`/api/audio/${encodeURIComponent(name)}`).then(r=>r.json())
       .then(d=>setVersionsCount(d.files?.length??0)).catch(()=>{});
@@ -927,6 +928,11 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
     const h=e=>{if(statusDropRef.current&&!statusDropRef.current.contains(e.target))setStatusDropOpen(false);};
     document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
   },[statusDropOpen]);
+  useEffect(()=>{
+    if(!tlEditing)return;
+    const h=e=>{if(tlDropRef.current&&!tlDropRef.current.contains(e.target))setTlEditing(false);};
+    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+  },[tlEditing]);
   const commitRename=()=>{
     const trimmed=renameVal.trim();
     if(trimmed&&trimmed!==name)onRename?.(name,trimmed);
@@ -1005,31 +1011,21 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
             </div>
 
             {/* Dates chip + dropdown */}
-            {(()=>{
-              const tlRef=useRef(null);
-              useEffect(()=>{
-                if(!tlEditing)return;
-                const h=e=>{if(tlRef.current&&!tlRef.current.contains(e.target))setTlEditing(false);};
-                document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
-              },[tlEditing]);
-              return(
-                <div ref={tlRef} style={{position:"relative"}}>
-                  <button onClick={()=>setTlEditing(v=>!v)} style={{
-                    display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,
-                    color:hasTl?C.indigo:C.faint,background:hasTl?C.accentAlpha:"transparent",
-                    border:`1.5px solid ${hasTl?C.accentBorder:C.line}`,
-                    borderRadius:20,padding:"3px 10px",cursor:"pointer",
-                    fontFamily:"var(--font-sans)",lineHeight:1.4,whiteSpace:"nowrap",
-                  }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke="currentColor" strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-                    {hasTl?`${tlFmt(plannedStart)}${plannedEnd?` → ${tlFmt(plannedEnd)}`:""}` : "Set dates"}
-                  </button>
-                  <RangePicker open={tlEditing} start={tlStart} end={tlEnd}
-                    onChange={(s,e)=>{setTlStart(s);setTlEnd(e);if(s&&e){onSaveTimeline?.(s,e);setTlEditing(false);}else if(s){onSaveTimeline?.(s,"");}}}
-                    onClose={()=>setTlEditing(false)}/>
-                </div>
-              );
-            })()}
+            <div ref={tlDropRef} style={{position:"relative"}}>
+              <button onClick={()=>setTlEditing(v=>!v)} style={{
+                display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,
+                color:hasTl?C.indigo:C.faint,background:hasTl?C.accentAlpha:"transparent",
+                border:`1.5px solid ${hasTl?C.accentBorder:C.line}`,
+                borderRadius:20,padding:"3px 10px",cursor:"pointer",
+                fontFamily:"var(--font-sans)",lineHeight:1.4,whiteSpace:"nowrap",
+              }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke="currentColor" strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                {hasTl?`${tlFmt(plannedStart)}${plannedEnd?` → ${tlFmt(plannedEnd)}`:""}` : "Set dates"}
+              </button>
+              <RangePicker open={tlEditing} start={tlStart} end={tlEnd}
+                onChange={(s,e)=>{setTlStart(s);setTlEnd(e);if(s&&e){onSaveTimeline?.(s,e);setTlEditing(false);}else if(s&&e===s){onSaveTimeline?.(s,e);setTlEditing(false);}}}
+                onClose={()=>setTlEditing(false)}/>
+            </div>
 
             {/* Stats */}
             {projectSessions.length>0&&(
@@ -1193,8 +1189,15 @@ function RangePicker({start,end,onChange,open,onClose}) {
   const step=dir=>setView(({y,m})=>{const nm=m+dir;return nm<0?{y:y-1,m:11}:nm>11?{y:y+1,m:0}:{y,m:nm};});
 
   const pick=ds=>{
-    if(phase==="start"||!start){onChange(ds,"");setPhase("end");}
-    else{const s=ds<start?ds:start,e=ds<start?start:ds;onChange(s,e);setPhase("start");setHover(null);onClose?.();}
+    if(phase==="start"||!start){
+      onChange(ds,"");setPhase("end");
+    } else if(ds===start){
+      // tap same date twice → single-day
+      onChange(ds,ds);setPhase("start");setHover(null);onClose?.();
+    } else {
+      const s=ds<start?ds:start,e=ds<start?start:ds;
+      onChange(s,e);setPhase("start");setHover(null);onClose?.();
+    }
   };
 
   const pvLo=phase==="end"&&hover&&start?(start<hover?start:hover):null;
@@ -2608,7 +2611,13 @@ export default function App() {
     const [tlOpen,setTlOpen]=useState(false);
     const [tlS,setTlS]=useState(p.plannedStart||"");
     const [tlE,setTlE]=useState(p.plannedEnd||"");
+    const tlDropRef=useRef(null);
     useEffect(()=>{setTlS(p.plannedStart||"");setTlE(p.plannedEnd||"");},[p.plannedStart,p.plannedEnd]);
+    useEffect(()=>{
+      if(!tlOpen)return;
+      const h=e=>{if(tlDropRef.current&&!tlDropRef.current.contains(e.target))setTlOpen(false);};
+      document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+    },[tlOpen]);
     const tlColor=(()=>{
       if(!p.plannedStart&&!p.plannedEnd)return C.dim;
       if(p.plannedEnd&&p.plannedEnd<today)return C.flame;
@@ -2638,25 +2647,15 @@ export default function App() {
             <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
           </button>
           <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-            {(()=>{
-              const rowTlRef=useRef(null);
-              useEffect(()=>{
-                if(!tlOpen)return;
-                const h=e=>{if(rowTlRef.current&&!rowTlRef.current.contains(e.target))setTlOpen(false);};
-                document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
-              },[tlOpen]);
-              return(
-                <div ref={rowTlRef} style={{position:"relative"}}>
-                  <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlLabel?tlColor:C.dim,fontWeight:tlLabel?500:400,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlLabel?tlColor:C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlLabel?tlColor:C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
-                    {tlLabel||"dates"}
-                  </button>
-                  <RangePicker open={tlOpen} start={tlS} end={tlE}
-                    onChange={(s,e)=>{setTlS(s);setTlE(e);saveTimeline(p.name,s,e);if(s&&e)setTlOpen(false);}}
-                    onClose={()=>setTlOpen(false)}/>
-                </div>
-              );
-            })()}
+            <div ref={tlDropRef} style={{position:"relative"}}>
+              <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlLabel?tlColor:C.dim,fontWeight:tlLabel?500:400,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlLabel?tlColor:C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlLabel?tlColor:C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
+                {tlLabel||"dates"}
+              </button>
+              <RangePicker open={tlOpen} start={tlS} end={tlE}
+                onChange={(s,e)=>{setTlS(s);setTlE(e);if(s&&e){saveTimeline(p.name,s,e);setTlOpen(false);}else if(s&&e===s){saveTimeline(p.name,s,s);setTlOpen(false);}}}
+                onClose={()=>setTlOpen(false)}/>
+            </div>
             <span style={{color:C.dim}}>·</span>
             <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
             {audioCount>0&&<><span style={{color:C.dim}}>·</span>
