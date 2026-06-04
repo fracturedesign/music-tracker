@@ -38,6 +38,12 @@ const STATUS_CFG = {
   released:  { label:"Released",   dot:"#fbbf24" },
 };
 
+const GROUP_TYPE_CFG = {
+  album:  { label:"Album",  dot:"#c084fc" },
+  ep:     { label:"EP",     dot:"#60a5fa" },
+  single: { label:"Single", dot:"#fbbf24" },
+};
+
 const MILESTONES = [
   { id:"s1",    emoji:"🎵", label:"First session",     check:(s)=>s.length>=1 },
   { id:"s10",   emoji:"🎶", label:"10 sessions",       check:(s)=>s.length>=10 },
@@ -2246,6 +2252,8 @@ export default function App() {
   const [newProjectStart,setNewProjectStart]=useState("");
   const [newProjectEnd,setNewProjectEnd]=useState("");
   const [newProjectDatesOpen,setNewProjectDatesOpen]=useState(false);
+  const [newProjectTypeOpen,setNewProjectTypeOpen]=useState(false);
+  const addTypeRef=useRef(null);
   const [notesModal,setNotesModal]=useState(null);
   const [notesModalTab,setNotesModalTab]=useState("open");
   const openProject=(name,tab="open")=>{setNotesModal(name);setNotesModalTab(tab);};
@@ -2319,6 +2327,12 @@ export default function App() {
       }catch{}
     })();
   },[loaded]);
+
+  useEffect(()=>{
+    if(!newProjectTypeOpen)return;
+    const h=e=>{if(addTypeRef.current&&!addTypeRef.current.contains(e.target))setNewProjectTypeOpen(false);};
+    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+  },[newProjectTypeOpen]);
 
   const persistSessions=useCallback(async next=>{try{await storage.set("music_sessions",JSON.stringify(next));}catch{}},[]);
   const persistProjects=useCallback(async next=>{try{await storage.set("music_projects",JSON.stringify(next));}catch{}},[]);
@@ -2460,6 +2474,10 @@ export default function App() {
   });
   const doneProjects=projects.filter(p=>p.status==="done");
   const releasedProjects=projects.filter(p=>p.status==="released");
+  const groupProjects=activeProjects.filter(p=>GROUP_TYPE_CFG[p.type]);
+  const topLevelActive=activeProjects.filter(p=>!p.parentGroup);
+  const dateSort=(a,b)=>{const sa=a.plannedStart,sb=b.plannedStart;if(sa&&sb)return sa.localeCompare(sb);if(sa)return -1;if(sb)return 1;return 0;};
+  const childrenOf=name=>[...activeProjects.filter(p=>p.parentGroup===name)].sort(dateSort);
 
   /* actions */
   const commitSession=async(form,id,fromTimer)=>{
@@ -2473,14 +2491,15 @@ export default function App() {
   const deleteSession=async id=>{const next=sessions.filter(s=>s.id!==id);setSessions(next);await persistSessions(next);setSheet(null);flash("Session deleted");};
   const startEdit=s=>setSheet({form:{date:s.date,duration:s.duration,mood:s.mood,note:s.note||"",project:s.project||"",tag:s.tag||"",hour:s.hour??new Date().getHours()},editing:true,id:s.id});
 
-  const addProject=async()=>{
+  const addProject=async(type="track")=>{
     const name=newProject.trim();if(!name||projects.find(p=>p.name===name))return;
     const proj={name,notes:"",status:"active"};
+    if(type&&type!=="track")proj.type=type;
     if(newProjectStart)proj.plannedStart=newProjectStart;
     if(newProjectEnd)proj.plannedEnd=newProjectEnd;
     const next=[...projects,proj];
     setProjects(next);await persistProjects(next);
-    setNewProject("");setNewProjectStart("");setNewProjectEnd("");setNewProjectDatesOpen(false);
+    setNewProject("");setNewProjectStart("");setNewProjectEnd("");setNewProjectDatesOpen(false);setNewProjectTypeOpen(false);
   };
   const saveTimeline=async(name,plannedStart,plannedEnd)=>{
     const next=projects.map(p=>p.name===name?{...p,plannedStart,plannedEnd}:p);
@@ -2516,7 +2535,18 @@ export default function App() {
     const next=archivedProjects.filter(p=>p.name!==name);
     setArchivedProjects(next);await persistArchived(next);
   };
-  const removeProject=async name=>{const next=projects.filter(p=>p.name!==name);setProjects(next);await persistProjects(next);};
+  const removeProject=async name=>{
+    const next=projects.filter(p=>p.name!==name).map(p=>p.parentGroup===name?{...p,parentGroup:undefined}:p);
+    setProjects(next);await persistProjects(next);
+  };
+  const moveToGroup=async(trackName,groupName)=>{
+    const next=projects.map(p=>p.name===trackName?{...p,parentGroup:groupName}:p);
+    setProjects(next);await persistProjects(next);
+  };
+  const removeFromGroup=async trackName=>{
+    const next=projects.map(p=>p.name===trackName?{...p,parentGroup:undefined}:p);
+    setProjects(next);await persistProjects(next);
+  };
   const saveNotes=async(name,notes)=>{const next=projects.map(p=>p.name===name?{...p,notes}:p);setProjects(next);await persistProjects(next);};
 
   const saveGoal=async v=>{setGoalHours(v);await persistGoal(v);setGoalEditOpen(false);};
@@ -2524,8 +2554,8 @@ export default function App() {
 
   const renameProject=async(oldName,newName)=>{
     if(!newName||newName===oldName||projects.find(p=>p.name===newName))return;
-    // Update projects list
-    const nextProjects=projects.map(p=>p.name===oldName?{...p,name:newName}:p);
+    // Update projects list (rename + update children's parentGroup)
+    const nextProjects=projects.map(p=>p.name===oldName?{...p,name:newName}:p.parentGroup===oldName?{...p,parentGroup:newName}:p);
     setProjects(nextProjects);await persistProjects(nextProjects);
     // Update sessions that reference this project
     const nextSessions=sessions.map(s=>s.project===oldName?{...s,project:newName}:s);
@@ -2606,8 +2636,68 @@ export default function App() {
     );
   };
 
-  const ProjectRow=({p})=>{
+  const GroupRow=({p})=>{
+    const cfg=GROUP_TYPE_CFG[p.type]||GROUP_TYPE_CFG.album;
+    const dot=cfg.dot;
+    const [collapsed,setCollapsed]=useState(false);
+    const children=childrenOf(p.name);
     const isDoneOrReleased=["done","released"].includes(p.status||"active");
+    const totalSessions=children.reduce((s,c)=>s+(projectCounts[c.name]||0),0)+(projectCounts[p.name]||0);
+    return(
+      <div style={{background:C.surf2,borderRadius:14,overflow:"visible"}}>
+        {/* Group header */}
+        <div style={{padding:"11px 13px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
+          <button onClick={()=>setCollapsed(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"flex",alignItems:"center",color:C.faint,flexShrink:0}}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .18s"}}>
+              <path d="M6 9l6 6 6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              <span style={{fontSize:10,fontWeight:700,color:dot,background:`${dot}1a`,border:`1.5px solid ${dot}55`,borderRadius:20,padding:"1px 7px",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>{cfg.label}</span>
+              <button onClick={()=>openProject(p.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",minWidth:0}}>
+                <span style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.name}</span>
+              </button>
+            </div>
+            <div style={{fontSize:11.5,color:C.dim,marginTop:2}}>
+              {children.length} track{children.length!==1?"s":""}{totalSessions>0&&` · ${totalSessions} session${totalSessions!==1?"s":""}`}
+            </div>
+          </div>
+          <StatusDropdown name={p.name} status={p.status||"active"}/>
+          <button onClick={()=>openProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+            {Icon.note(C.indigo)}
+          </button>
+          {isDoneOrReleased
+            ?<button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+              </button>
+            :<button onClick={()=>removeProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
+          }
+        </div>
+        {/* Children */}
+        {!collapsed&&children.length>0&&(
+          <div style={{borderTop:`1px solid ${C.line}`,paddingLeft:16,paddingRight:8,paddingBottom:8,display:"flex",flexDirection:"column",gap:6,marginTop:0,paddingTop:8}}>
+            {children.map(c=><ProjectRow key={c.name} p={c} insideGroup/>)}
+          </div>
+        )}
+        {!collapsed&&children.length===0&&(
+          <div style={{borderTop:`1px solid ${C.line}`,padding:"8px 14px 10px",fontSize:12,color:C.faint,fontStyle:"italic"}}>
+            No tracks yet — move a track here from the list below
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const ProjectRow=({p,insideGroup=false})=>{
+    const isDoneOrReleased=["done","released"].includes(p.status||"active");
+    const [moveOpen,setMoveOpen]=useState(false);
+    const moveRef=useRef(null);
+    useEffect(()=>{
+      if(!moveOpen)return;
+      const h=e=>{if(moveRef.current&&!moveRef.current.contains(e.target))setMoveOpen(false);};
+      document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+    },[moveOpen]);
     const [tlOpen,setTlOpen]=useState(false);
     const [tlS,setTlS]=useState(p.plannedStart||"");
     const [tlE,setTlE]=useState(p.plannedEnd||"");
@@ -2639,7 +2729,7 @@ export default function App() {
     const rel=fmtRelativeDate(lastSessionDateOf(p.name));
     const audioCount=audioFileCounts[p.name]||0;
     return(
-    <div style={{background:C.surf2,borderRadius:14,padding:"11px 13px 11px 14px"}}>
+    <div style={{background:insideGroup?C.bg:C.surf2,borderRadius:insideGroup?10:14,padding:"11px 13px 11px 14px"}}>
       <div style={{display:"flex",gap:10,alignItems:"center"}}>
         {/* Content */}
         <div style={{flex:1,minWidth:0}}>
@@ -2666,11 +2756,52 @@ export default function App() {
             </>}
           </div>
         </div>
-        {/* Status pill + Open button + action */}
+        {/* Status pill + Open button + move + action */}
         <StatusDropdown name={p.name} status={p.status||"active"}/>
         <button onClick={()=>openProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
           {Icon.note(C.indigo)}
         </button>
+        {/* Move to group / remove from group */}
+        {(insideGroup||groupProjects.length>0)&&(
+          <div ref={moveRef} style={{position:"relative",flexShrink:0}}>
+            <button onClick={()=>setMoveOpen(v=>!v)} title={insideGroup?"Move / Remove from group":"Move to group"} style={{...iconBtn,width:28,height:28,borderRadius:8,background:moveOpen?C.accentAlpha:"transparent"}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M3 7h5l2-2h11v14H3V7z" stroke={C.muted} strokeWidth="1.7" strokeLinejoin="round"/>
+                <path d="M12 11v4M10 13h4" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round"/>
+              </svg>
+            </button>
+            {moveOpen&&(
+              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:40,
+                background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
+                minWidth:160,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                {insideGroup&&(
+                  <button onClick={()=>{removeFromGroup(p.name);setMoveOpen(false);}} style={{
+                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                    borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
+                    fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.dim,textAlign:"left",
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M5 12l7-7M5 12l7 7" stroke={C.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Remove from group
+                  </button>
+                )}
+                {groupProjects.filter(g=>g.name!==p.parentGroup).map(g=>{
+                  const gc=GROUP_TYPE_CFG[g.type];const gd=gc?.dot||C.indigo;
+                  return(
+                    <button key={g.name} onClick={()=>{moveToGroup(p.name,g.name);setMoveOpen(false);}} style={{
+                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                      borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
+                      fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
+                    }}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:gd,flexShrink:0}}/>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.name}</span>
+                      <span style={{marginLeft:"auto",fontSize:10,color:gd,fontWeight:700}}>{gc?.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
         {isDoneOrReleased
           ?<button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
@@ -2962,7 +3093,28 @@ export default function App() {
             style={{...iconBtn,width:38,height:38,flexShrink:0,background:(newProjectStart||newProjectEnd)?C.accentAlpha:"transparent",border:(newProjectStart||newProjectEnd)?`1px solid ${C.accentBorder}`:`1px solid ${C.lineS}`}}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={(newProjectStart||newProjectEnd)?C.indigo:C.muted} strokeWidth="1.7"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={(newProjectStart||newProjectEnd)?C.indigo:C.muted} strokeWidth="1.7" strokeLinecap="round"/></svg>
           </button>
-          <button onClick={addProject} disabled={!newProject.trim()} style={{border:"none",borderRadius:12,color:"#fff",padding:"0 18px",fontSize:14,fontWeight:600,cursor:"pointer",background:C.accentGrad,opacity:newProject.trim()?1:0.4,whiteSpace:"nowrap"}}>Add</button>
+          <div ref={addTypeRef} style={{position:"relative",display:"flex",borderRadius:12,overflow:"visible",flexShrink:0,opacity:newProject.trim()?1:0.4}}>
+            <button onClick={()=>addProject("track")} disabled={!newProject.trim()} style={{border:"none",borderRadius:"12px 0 0 12px",color:"#fff",padding:"0 14px",fontSize:14,fontWeight:600,cursor:"pointer",background:C.accentGrad,whiteSpace:"nowrap",borderRight:`1px solid rgba(255,255,255,0.2)`}}>Add</button>
+            <button onClick={()=>setNewProjectTypeOpen(v=>!v)} disabled={!newProject.trim()} title="Add as Album / EP / Single" style={{border:"none",borderRadius:"0 12px 12px 0",color:"#fff",padding:"0 9px",fontSize:14,fontWeight:600,cursor:"pointer",background:C.accentGrad,display:"flex",alignItems:"center"}}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            {newProjectTypeOpen&&(
+              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:40,
+                background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
+                minWidth:148,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                {Object.entries(GROUP_TYPE_CFG).map(([type,cfg])=>(
+                  <button key={type} onClick={()=>addProject(type)} style={{
+                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                    borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
+                    fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
+                  }}>
+                    <span style={{width:8,height:8,borderRadius:"50%",background:cfg.dot,flexShrink:0}}/>
+                    {cfg.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         {newProjectDatesOpen&&(
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:activeProjects.length?16:0}}>
@@ -2973,9 +3125,12 @@ export default function App() {
               className="mt-text" style={{flex:1,fontSize:12,padding:"6px 10px"}}/>
           </div>
         )}
-        {activeProjects.length>0&&(
+        {topLevelActive.length>0&&(
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {activeProjects.map(p=><ProjectRow key={p.name} p={p}/>)}
+            {topLevelActive.map(p=>GROUP_TYPE_CFG[p.type]
+              ?<GroupRow key={p.name} p={p}/>
+              :<ProjectRow key={p.name} p={p}/>
+            )}
           </div>
         )}
         {/* Done section */}
