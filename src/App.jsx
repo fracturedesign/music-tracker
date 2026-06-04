@@ -1436,22 +1436,22 @@ function ABCompare({files,projectName,onClose}) {
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
 
   const playingRef=useRef(false);
-  // Create audio elements eagerly so iOS can unlock them on first user tap
-  const audioA=useRef(new Audio());
-  const audioB=useRef(new Audio());
-  // Track whether each element has been unlocked by a user gesture
+  // One Audio ref per slot — replaced with a fresh element on each file change
+  // to avoid WaveSurfer receiving competing loadstart events on a reused element.
+  const audioA=useRef(null);
+  const audioB=useRef(null);
+  // Track whether iOS audio session has been unlocked by a user gesture
   const unlockedRef=useRef(false);
 
-  const initWS=(ref,wsRef,side,fileId,setReady)=>{
+  const initWS=(ref,wsRef,audioRef,side,fileId,setReady)=>{
     if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
+    if(audioRef.current){audioRef.current.pause();audioRef.current.src="";}
     setReady(false);
     const f=fileMap[fileId];if(!f||!ref.current)return;
-    const audio=side==="A"?audioA.current:audioB.current;
-    // Explicitly set src so iOS loads the correct file even after WaveSurfer destroy
+    // Fresh Audio element — clean state, no leftover src/event listeners
+    const audio=new Audio();
+    audioRef.current=audio;
     const url=audioUrl(f);
-    audio.pause();
-    audio.src=url;
-    audio.load();
     const ws=WaveSurfer.create({
       container:ref.current,media:audio,
       waveColor:C.dim,progressColor:side==="A"?C.indigo:C.green,
@@ -1464,11 +1464,11 @@ function ABCompare({files,projectName,onClose}) {
     ws.on("finish",()=>{playingRef.current=false;setPlaying(false);setCurrentTime(0);});
   };
 
-  useEffect(()=>{initWS(waveRefA,wsA,"A",slotA,setReadyA);},[slotA]);// eslint-disable-line
-  useEffect(()=>{initWS(waveRefB,wsB,"B",slotB,setReadyB);},[slotB]);// eslint-disable-line
+  useEffect(()=>{initWS(waveRefA,wsA,audioA,"A",slotA,setReadyA);},[slotA]);// eslint-disable-line
+  useEffect(()=>{initWS(waveRefB,wsB,audioB,"B",slotB,setReadyB);},[slotB]);// eslint-disable-line
   useEffect(()=>()=>{
     wsA.current?.destroy();wsB.current?.destroy();
-    audioA.current.pause();audioB.current.pause();
+    audioA.current?.pause();audioB.current?.pause();
   },[]);
 
   // iOS requires audio.play() to be called from a synchronous user gesture.
