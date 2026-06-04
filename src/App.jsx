@@ -39,8 +39,8 @@ const STATUS_CFG = {
 };
 
 const GROUP_TYPE_CFG = {
-  album: { label:"Album", dot:"#c084fc" },
-  ep:    { label:"EP",    dot:"#60a5fa" },
+  album: { label:"Album", badge:"LP", dot:"#c084fc" },
+  ep:    { label:"EP",    badge:"EP", dot:"#60a5fa" },
 };
 
 const MILESTONES = [
@@ -2606,6 +2606,10 @@ export default function App() {
     const next=projects.filter(p=>p.name!==name).map(p=>p.parentGroup===name?{...p,parentGroup:undefined}:p);
     setProjects(next);await persistProjects(next);
   };
+  const updateProjectType=async(name,type)=>{
+    const next=projects.map(p=>p.name===name?{...p,type}:p);
+    setProjects(next);await persistProjects(next);
+  };
   const moveToGroup=async(trackName,groupName)=>{
     const next=projects.map(p=>p.name===trackName?{...p,parentGroup:groupName}:p);
     setProjects(next);await persistProjects(next);
@@ -2652,6 +2656,46 @@ export default function App() {
   if(!loaded)return<ThemeCtx.Provider value={C}><div className="app" style={{background:C.bg}}><div style={{color:C.faint,padding:"40px 4px",fontSize:14}}>Loading…</div></div></ThemeCtx.Provider>;
 
   const {card,eyebrow,iconBtn}=getStyles(C);
+
+  const TypeDropdown=({name,type,onUpdate})=>{
+    const cfg=GROUP_TYPE_CFG[type]||GROUP_TYPE_CFG.album;
+    const dot=cfg.dot;
+    const [open,setOpen]=useState(false);
+    const ref=useRef(null);
+    useEffect(()=>{
+      if(!open)return;
+      const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+      document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+    },[open]);
+    return(
+      <div ref={ref} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+        <button onClick={()=>setOpen(v=>!v)} style={{...iconBtn,width:32,height:32,borderRadius:9,fontSize:10,fontWeight:700,color:dot,borderColor:`${dot}55`,background:`${dot}15`}}>
+          {cfg.badge}
+        </button>
+        {open&&(
+          <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:40,
+            background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,
+            minWidth:130,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+            {Object.entries(GROUP_TYPE_CFG).map(([t,c])=>{
+              const active=t===type;
+              return(
+                <button key={t} onClick={()=>{onUpdate(name,t);setOpen(false);}} style={{
+                  display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
+                  borderRadius:9,border:"none",background:active?`${c.dot}18`:"transparent",
+                  cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
+                  color:active?c.dot:C.text,textAlign:"left",
+                }}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:c.dot,flexShrink:0}}/>
+                  {c.label}
+                  {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={c.dot} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const StatusDropdown=({name,status,dotOnly})=>{
     const [open,setOpen]=useState(false);
@@ -2726,11 +2770,12 @@ export default function App() {
               {children.length} track{children.length!==1?"s":""}{totalSessions>0&&` · ${totalSessions} session${totalSessions!==1?"s":""}`}
             </div>
           </div>
-          {/* Type badge next to status */}
-          <span style={{fontSize:10,fontWeight:700,color:dot,background:`${dot}1a`,border:`1.5px solid ${dot}55`,borderRadius:20,padding:"2px 8px",letterSpacing:"0.04em",whiteSpace:"nowrap",flexShrink:0}}>{cfg.label}</span>
+          {/* Status left of type badge */}
           <div onClick={e=>e.stopPropagation()}>
             <StatusDropdown name={p.name} status={p.status||"active"}/>
           </div>
+          {/* Type badge — square button with dropdown */}
+          <TypeDropdown name={p.name} type={p.type||"album"} onUpdate={updateProjectType}/>
           {confirmDel?(
             <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>removeProject(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
