@@ -32,9 +32,9 @@ const STATUS_ORDER = ["idea","active","mixing","mastering","done","released"];
 const STATUS_CFG = {
   idea:      { label:"Idea",       dot:"#6b6b82" },
   active:    { label:"Active",     dot:"#34d399" },
-  mixing:    { label:"Mixing",     dot:"#60a5fa" },
+  mixing:    { label:"Mixing",     dot:"#818cf8" },
   mastering: { label:"Mastering",  dot:"#c084fc" },
-  done:      { label:"Done",       dot:null },   // uses theme accent
+  done:      { label:"Done",       dot:"#60a5fa" },
   released:  { label:"Released",   dot:"#fbbf24" },
 };
 
