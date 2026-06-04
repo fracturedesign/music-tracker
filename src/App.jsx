@@ -1404,6 +1404,22 @@ function WeeklyReviewSheet({sessions,goalHours,currentStreak,onClose}) {
 }
 
 /* ─── A/B comparison ─── */
+// Defined outside ABCompare so React sees a stable component reference across renders.
+// If defined inside, every render creates a new component type → select unmounts/remounts
+// on each currentTime tick, dropping onChange events on iOS.
+function ABSlotSelect({side,value,onChange,files,C}){
+  return(
+    <div style={{flex:1}}>
+      <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",color:side==="A"?C.indigo:C.green,marginBottom:6,textTransform:"uppercase"}}>{side}</div>
+      <select value={value||""} onChange={e=>onChange(e.target.value)}
+        style={{width:"100%",background:C.surf2,border:`1px solid ${side==="A"?C.accentBorder:"rgba(52,211,153,0.4)"}`,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:12,fontFamily:"var(--font-sans)",cursor:"pointer"}}>
+        <option value="">— pick a file —</option>
+        {files.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function ABCompare({files,projectName,onClose}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [slotA,setSlotA]=useState(files[0]?.id||null);
@@ -1416,32 +1432,33 @@ function ABCompare({files,projectName,onClose}) {
   const [readyB,setReadyB]=useState(false);
   const [currentTime,setCurrentTime]=useState(0);
   const activeRef=useRef("A");
-  const syncingRef=useRef(false);
   const fileMap=Object.fromEntries(files.map(f=>[f.id,f]));
   const audioUrl=f=>f.linkedPath?`/api/audio/${encodeURIComponent(projectName)}/stream/${f.id}`:`/api/audio/files/${encodeURIComponent(f.filename)}`;
 
   const playingRef=useRef(false);
-  // Native audio elements — iOS plays these reliably, one at a time
-  const audioA=useRef(null);
-  const audioB=useRef(null);
-  const getAudio=(side)=>{
-    if(side==="A"){if(!audioA.current)audioA.current=new Audio();return audioA.current;}
-    if(!audioB.current)audioB.current=new Audio();return audioB.current;
-  };
+  // Create audio elements eagerly so iOS can unlock them on first user tap
+  const audioA=useRef(new Audio());
+  const audioB=useRef(new Audio());
+  // Track whether each element has been unlocked by a user gesture
+  const unlockedRef=useRef(false);
 
   const initWS=(ref,wsRef,side,fileId,setReady)=>{
     if(wsRef.current){wsRef.current.destroy();wsRef.current=null;}
     setReady(false);
     const f=fileMap[fileId];if(!f||!ref.current)return;
-    const audio=getAudio(side);
-    // WaveSurfer uses the audio element for playback; renders waveform from URL
+    const audio=side==="A"?audioA.current:audioB.current;
+    // Explicitly set src so iOS loads the correct file even after WaveSurfer destroy
+    const url=audioUrl(f);
+    audio.pause();
+    audio.src=url;
+    audio.load();
     const ws=WaveSurfer.create({
       container:ref.current,media:audio,
       waveColor:C.dim,progressColor:side==="A"?C.indigo:C.green,
       height:40,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,
     });
     wsRef.current=ws;
-    ws.load(audioUrl(f));
+    ws.load(url);
     ws.on("ready",()=>setReady(true));
     ws.on("timeupdate",t=>{if(side===activeRef.current)setCurrentTime(t);});
     ws.on("finish",()=>{playingRef.current=false;setPlaying(false);setCurrentTime(0);});
@@ -1451,21 +1468,38 @@ function ABCompare({files,projectName,onClose}) {
   useEffect(()=>{initWS(waveRefB,wsB,"B",slotB,setReadyB);},[slotB]);// eslint-disable-line
   useEffect(()=>()=>{
     wsA.current?.destroy();wsB.current?.destroy();
-    audioA.current?.pause();audioB.current?.pause();
+    audioA.current.pause();audioB.current.pause();
   },[]);
+
+  // iOS requires audio.play() to be called from a synchronous user gesture.
+  // On first play we play+immediately pause both elements to unlock them,
+  // then resume the active one. Subsequent toggles can call play() freely.
+  const unlockAndPlay=(targetAudio)=>{
+    if(unlockedRef.current){targetAudio.play().catch(()=>{});return;}
+    const other=targetAudio===audioA.current?audioB.current:audioA.current;
+    // Unlock both in the same gesture
+    const pa=targetAudio.play().catch(()=>{});
+    const pb=other.play().then(()=>other.pause()).catch(()=>{});
+    Promise.all([pa,pb]).then(()=>{unlockedRef.current=true;}).catch(()=>{});
+  };
 
   const toggle=()=>{
     if(!readyA||!readyB)return;
     const next=active==="A"?"B":"A";
     const fromAudio=active==="A"?audioA.current:audioB.current;
     const toAudio=active==="A"?audioB.current:audioA.current;
-    // Sync position via native currentTime — instant for buffered audio
-    const t=fromAudio?.currentTime??0;
-    fromAudio?.pause();
-    if(toAudio&&!isNaN(toAudio.duration))toAudio.currentTime=Math.min(t,toAudio.duration);
+    const t=fromAudio.currentTime??0;
+    fromAudio.pause();
+    // Seek before play — safe because readyA/B guarantees duration is known
+    toAudio.currentTime=Math.min(t,isNaN(toAudio.duration)?t:toAudio.duration);
     activeRef.current=next;
     setActive(next);
-    if(playingRef.current)toAudio?.play();
+    if(playingRef.current)unlockAndPlay(toAudio);
+  };
+
+  const handleSlotChange=(side,id)=>{
+    if(playing){audioA.current.pause();audioB.current.pause();playingRef.current=false;setPlaying(false);}
+    if(side==="A")setSlotA(id); else setSlotB(id);
   };
 
   const handlePlay=()=>{
@@ -1473,26 +1507,15 @@ function ABCompare({files,projectName,onClose}) {
     const ready=active==="A"?readyA:readyB;
     if(!audio||!ready)return;
     if(playing){
-      audioA.current?.pause();audioB.current?.pause();
+      audioA.current.pause();audioB.current.pause();
       playingRef.current=false;setPlaying(false);
     }else{
-      audio.play();
+      unlockAndPlay(audio);
       playingRef.current=true;setPlaying(true);
     }
   };
 
   const fActive=fileMap[active==="A"?slotA:slotB];
-
-  const SlotSelect=({side,value,onChange})=>(
-    <div style={{flex:1}}>
-      <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",color:side==="A"?C.indigo:C.green,marginBottom:6,textTransform:"uppercase"}}>{side}</div>
-      <select value={value||""} onChange={e=>{onChange(e.target.value);setPlaying(false);}}
-        style={{width:"100%",background:C.surf2,border:`1px solid ${side==="A"?C.accentBorder:"rgba(52,211,153,0.4)"}`,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:12,fontFamily:"var(--font-sans)",cursor:"pointer"}}>
-        <option value="">— pick a file —</option>
-        {files.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-      </select>
-    </div>
-  );
 
   return(
     <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -1503,8 +1526,8 @@ function ABCompare({files,projectName,onClose}) {
           <button onClick={onClose} style={iconBtn}>{Icon.close()}</button>
         </div>
         <div style={{display:"flex",gap:10,marginBottom:16}}>
-          <SlotSelect side="A" value={slotA} onChange={setSlotA}/>
-          <SlotSelect side="B" value={slotB} onChange={setSlotB}/>
+          <ABSlotSelect side="A" value={slotA} onChange={id=>handleSlotChange("A",id)} files={files} C={C}/>
+          <ABSlotSelect side="B" value={slotB} onChange={id=>handleSlotChange("B",id)} files={files} C={C}/>
         </div>
         {/* Waveforms */}
         <div style={{marginBottom:12}}>
