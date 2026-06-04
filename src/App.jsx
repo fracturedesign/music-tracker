@@ -240,6 +240,7 @@ function AnalyticsCard({sessions}) {
         </div>
       </div>
 
+      <div style={{minHeight:120}}>
       {tab==="tags" && (
         <div style={{display:"flex",flexDirection:"column",gap:9}}>
           {tagRows.length===0
@@ -308,6 +309,7 @@ function AnalyticsCard({sessions}) {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -3249,10 +3251,6 @@ export default function App() {
           <input type="text" className="mt-text" value={newProject} placeholder="Track or project name…"
             onChange={e=>setNewProject(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&addProject()} style={{flex:1}}/>
-          <button onClick={()=>setNewProjectDatesOpen(v=>!v)} title="Set planned dates"
-            style={{...iconBtn,width:38,height:38,flexShrink:0,background:(newProjectStart||newProjectEnd)?C.accentAlpha:"transparent",border:(newProjectStart||newProjectEnd)?`1px solid ${C.accentBorder}`:`1px solid ${C.lineS}`}}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={(newProjectStart||newProjectEnd)?C.indigo:C.muted} strokeWidth="1.7"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={(newProjectStart||newProjectEnd)?C.indigo:C.muted} strokeWidth="1.7" strokeLinecap="round"/></svg>
-          </button>
           <div ref={addTypeRef} style={{position:"relative",display:"flex",borderRadius:12,overflow:"visible",flexShrink:0,opacity:newProject.trim()?1:0.4}}>
             <button onClick={()=>addProject("track")} disabled={!newProject.trim()} style={{border:"none",borderRadius:"12px 0 0 12px",color:"#fff",padding:"0 14px",fontSize:14,fontWeight:600,cursor:"pointer",background:C.accentGrad,whiteSpace:"nowrap",borderRight:`1px solid rgba(255,255,255,0.2)`}}>Add</button>
             <button onClick={()=>setNewProjectTypeOpen(v=>!v)} disabled={!newProject.trim()} title="Add as Album / EP / Single" style={{border:"none",borderRadius:"0 12px 12px 0",color:"#fff",padding:"0 9px",fontSize:14,fontWeight:600,cursor:"pointer",background:C.accentGrad,display:"flex",alignItems:"center"}}>
