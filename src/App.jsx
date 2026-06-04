@@ -609,7 +609,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
         const savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
         if(savedPath){
           setScanPath(savedPath);
-          setShowScan(true);
+          // don't auto-open the panel — path is shown as folder badge in group mode
           const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
           if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
         }
@@ -833,7 +833,19 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
             {!loading&&files.length===0&&(
               <span style={{fontSize:11,color:C.dim,fontStyle:"italic",flexShrink:0}}>no files</span>
             )}
-            {/* + action menu */}
+            {/* Folder badge — highlighted when a scan path is saved */}
+            <button onClick={e=>{e.stopPropagation();setShowScan(s=>!s);setScanMsg("");}}
+              title={hasPerProjectPath?`Folder: ${scanPath}`:"Set scan folder"}
+              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",
+                alignItems:"center",justifyContent:"center",
+                border:`1px solid ${hasPerProjectPath?C.accentBorder:C.lineS}`,
+                background:hasPerProjectPath?C.accentAlpha:C.surf2}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+                  stroke={hasPerProjectPath?C.indigo:C.faint} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            {/* + action menu (upload + A/B) */}
             <div ref={addMenuRef} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setAddMenuOpen(v=>!v)}
                 style={{width:26,height:26,borderRadius:7,border:`1px solid ${C.lineS}`,background:C.surf2,
@@ -844,20 +856,13 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
               {addMenuOpen&&(
                 <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:50,
                   background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,
-                  minWidth:148,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                  minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
                   <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
                     display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
                     border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
                     fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     Upload file
-                  </button>
-                  <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");setAddMenuOpen(false);}} style={{
-                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
-                    border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
-                    fontSize:13,fontWeight:600,color:hasPerProjectPath?C.indigo:C.text,textAlign:"left"}}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke={hasPerProjectPath?C.indigo:C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    {hasPerProjectPath?"Folder set":"Scan folder"}
                   </button>
                   {files.length>=2&&(
                     <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
@@ -977,7 +982,7 @@ function TrackCard({c,sessions,audioFileCounts,projectColorMap,onOpenProject,onR
           {sc.label}
         </button>
         {statusOpen&&(
-          <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:50,
+          <div style={{position:"absolute",bottom:"calc(100% + 4px)",right:0,zIndex:50,
             background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,
             minWidth:130,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
             {STATUS_ORDER.map(s=>{
@@ -1048,6 +1053,8 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const isGroupType=!!GROUP_TYPE_CFG[type];
   const [tab,setTab]=useState(initialTab&&initialTab!=="open"?initialTab:isGroupType?"tracks":"open");
   const [versionsCount,setVersionsCount]=useState(null);
+  const [versionsCountMap,setVersionsCountMap]=useState({});
+  const totalGroupVersions=Object.values(versionsCountMap).reduce((a,b)=>a+b,0);
   const [renamingProject,setRenamingProject]=useState(false);
   const [renameVal,setRenameVal]=useState(name);
   const [tlStart,setTlStart]=useState(plannedStart||"");
@@ -1187,7 +1194,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
           {[
             ...(isGroup?[["tracks",`Tracks · ${childProjects.length}`]]:[]),
             ["open","Notes"],
-            ["versions",versionsCount!=null?`Versions · ${versionsCount}`:"Versions"],
+            ["versions",isGroup?(totalGroupVersions>0?`Versions · ${totalGroupVersions}`:"Versions"):(versionsCount!=null?`Versions · ${versionsCount}`:"Versions")],
           ].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
               padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
@@ -1311,15 +1318,15 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
               <>
                 {childProjects.length>0&&(
                   <div style={{display:"flex",justifyContent:"flex-end",padding:"8px 16px 2px"}}>
-                    <button onClick={()=>setVersionsAllOpen(v=>v===false?true:false)}
+                    <button onClick={()=>setVersionsAllOpen(v=>v===true?false:true)}
                       style={{fontSize:11,fontWeight:600,color:C.faint,background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",padding:"2px 0"}}>
-                      {versionsAllOpen===false?"Expand all":"Collapse all"}
+                      {versionsAllOpen===true?"Collapse all":"Expand all"}
                     </button>
                   </div>
                 )}
                 {childProjects.map((c,i)=>(
                   <CollapsibleVersionsSection key={c.name} projectName={c.name} label={c.name}
-                    onCountChange={i===0?setVersionsCount:undefined}
+                    onCountChange={n=>setVersionsCountMap(prev=>({...prev,[c.name]:n}))}
                     globalAudioFolder={globalAudioFolder} borderTop={i>0}
                     forcedOpen={versionsAllOpen} onIndividualToggle={()=>setVersionsAllOpen(null)}/>
                 ))}
