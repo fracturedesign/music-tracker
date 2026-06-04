@@ -2598,12 +2598,17 @@ export default function App() {
                 <button onClick={logCountdown} style={{flex:1,padding:15,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:700,color:"#fff",background:C.accentGrad,boxShadow:`0 8px 22px -8px ${C.accentGlow}`}}>✓ Log {timerLogMin}m</button>
               </div>
             )}
-            {/* Notes textarea — shown when toggled */}
+            {/* Notes — auto-growing, no scroll */}
             {(timerNoteOpen||timerNote)&&(
-              <textarea value={timerNote} onChange={e=>setTimerNote(e.target.value)}
-                placeholder="Session notes…" className="mt-text"
-                style={{width:"100%",marginTop:10,resize:"none",minHeight:64,fontSize:13,lineHeight:1.55,boxSizing:"border-box"}}
-                rows={3} autoFocus={timerNoteOpen&&!timerNote}/>
+              <textarea value={timerNote}
+                onChange={e=>{setTimerNote(e.target.value);const el=e.target;el.style.height="auto";el.style.height=el.scrollHeight+"px";}}
+                ref={el=>{if(el){el.style.height="auto";el.style.height=el.scrollHeight+"px";if(timerNoteOpen&&!timerNote)el.focus();}}}
+                placeholder="Notes for this session…"
+                style={{width:"100%",marginTop:10,resize:"none",overflow:"hidden",boxSizing:"border-box",
+                  background:"transparent",border:"none",borderTop:`1px solid ${C.line}`,borderRadius:0,
+                  paddingTop:12,paddingBottom:4,paddingLeft:0,paddingRight:0,
+                  fontSize:13,lineHeight:1.6,color:C.text,fontFamily:"var(--font-sans)",
+                  outline:"none",caretColor:C.indigo}}/>
             )}
           </>
         ):(
