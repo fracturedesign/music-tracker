@@ -1032,14 +1032,14 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
 
         {/* Timeline editor */}
         {tlEditing&&!renamingProject&&(
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px 0",flexWrap:"wrap"}}>
-            <input type="date" value={tlStart} onChange={e=>setTlStart(e.target.value)}
-              className="mt-text" style={{flex:1,minWidth:120,fontSize:12,padding:"6px 10px"}}/>
-            <span style={{fontSize:12,color:C.dim}}>→</span>
-            <input type="date" value={tlEnd} onChange={e=>setTlEnd(e.target.value)}
-              className="mt-text" style={{flex:1,minWidth:120,fontSize:12,padding:"6px 10px"}}/>
-            <button onClick={commitTimeline} style={{background:C.accentGrad,border:"none",borderRadius:9,color:"#fff",padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Save</button>
-            {hasTl&&<button onClick={clearTimeline} style={{...iconBtn,width:28,height:28}}>{Icon.trash()}</button>}
+          <div style={{padding:"12px 20px 0"}}>
+            <RangePicker start={tlStart} end={tlEnd}
+              onChange={(s,e)=>{setTlStart(s);setTlEnd(e);}}
+              onClear={()=>{setTlStart("");setTlEnd("");}}/>
+            <div style={{display:"flex",gap:8,marginTop:12}}>
+              <button onClick={commitTimeline} style={{background:C.accentGrad,border:"none",borderRadius:9,color:"#fff",padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer",flex:1}}>Save dates</button>
+              <button onClick={()=>setTlEditing(false)} style={{background:"transparent",border:`1px solid ${C.lineS}`,borderRadius:9,color:C.muted,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            </div>
           </div>
         )}
 
@@ -1174,59 +1174,104 @@ function CalendarPicker({value,onChange}) {
   );
 }
 
-/* ─── plan date picker (allows any date, no future restriction) ─── */
-function PlanDatePicker({label,value,onChange,placeholder="Not set"}) {
+/* ─── range date picker — single calendar, click start then end ─── */
+function RangePicker({start,end,onChange,onClear}) {
+  // onChange(newStart, newEnd) — either can be ""
+  // First click → start, second click → end; clicking before current start resets
   const C=useTheme(); const {iconBtn}=getStyles(C);
-  const [open,setOpen]=useState(false);
-  const init=()=>{if(value){const d=parseDate(value);return{y:d.getFullYear(),m:d.getMonth()};}const d=new Date();return{y:d.getFullYear(),m:d.getMonth()};};
-  const [view,setView]=useState(init);
-  useEffect(()=>{if(value){const d=parseDate(value);setView({y:d.getFullYear(),m:d.getMonth()});}}, [value]);// eslint-disable-line
+  const initView=()=>{
+    const ref=start||end||today;
+    const d=parseDate(ref);return{y:d.getFullYear(),m:d.getMonth()};
+  };
+  const [view,setView]=useState(initView);
+  const [phase,setPhase]=useState(start?"end":"start"); // "start" | "end"
+  const [hover,setHover]=useState(null);
+
   const pad=n=>String(n).padStart(2,"0");
   const mk=d=>`${view.y}-${pad(view.m+1)}-${pad(d)}`;
   const firstDay=new Date(view.y,view.m,1),startOffset=(firstDay.getDay()+6)%7,dim=new Date(view.y,view.m+1,0).getDate();
   const cells=[...Array(startOffset).fill(null),...Array.from({length:dim},(_,i)=>mk(i+1))];
-  const pick=ds=>{onChange(ds);setOpen(false);};
   const step=dir=>setView(({y,m})=>{const nm=m+dir;return nm<0?{y:y-1,m:11}:nm>11?{y:y+1,m:0}:{y,m:nm};});
-  const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):placeholder;
+  const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"—";
+
+  const pick=ds=>{
+    if(phase==="start"||!start){
+      onChange(ds,"");setPhase("end");
+    } else {
+      // second click → set end; swap if needed
+      if(ds<start){onChange(ds,start);}
+      else{onChange(start,ds);}
+      setPhase("start");setHover(null);
+    }
+  };
+
+  // range for highlight: use hover preview while picking end
+  const rangeStart=start;
+  const rangeEnd=phase==="end"&&hover?hover:end;
+  const lo=rangeStart&&rangeEnd?(rangeStart<rangeEnd?rangeStart:rangeEnd):rangeStart;
+  const hi=rangeStart&&rangeEnd?(rangeStart<rangeEnd?rangeEnd:rangeStart):rangeEnd;
+
+  const isStart=ds=>ds===start;
+  const isEnd=ds=>end&&ds===end;
+  const inRange=ds=>lo&&hi&&ds>lo&&ds<hi;
+  const isCap=ds=>ds===lo||ds===hi;
+
   return(
-    <div style={{flex:1}}>
-      {label&&<div style={{fontSize:10,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:5}}>{label}</div>}
-      <button type="button" onClick={()=>setOpen(o=>!o)} style={{
-        width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-        background:C.surf2,border:`1px solid ${open?C.accentBorder:C.line}`,borderRadius:10,
-        color:value?C.indigo:C.dim,fontFamily:"var(--font-sans)",fontSize:12.5,fontWeight:600,
-        padding:"7px 10px",cursor:"pointer",gap:6}}>
-        <span>{fmt(value)}</span>
-        {value
-          ?<button type="button" onClick={e=>{e.stopPropagation();onChange("");}} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:C.dim,fontSize:14,lineHeight:1,flexShrink:0}}>×</button>
-          :<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={C.dim} strokeWidth="1.7"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round"/></svg>
-        }
-      </button>
-      {open&&(
-        <div style={{marginTop:6,background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:12,position:"absolute",zIndex:40,boxShadow:`0 8px 28px -6px rgba(0,0,0,0.3)`,minWidth:220}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <button type="button" onClick={()=>step(-1)} style={iconBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-            <span style={{fontSize:13,fontWeight:700,color:C.text}}>{monthNames[view.m]} {view.y}</span>
-            <button type="button" onClick={()=>step(1)} style={iconBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
-            {DAYS_MON.map((d,i)=><div key={i} style={{fontSize:9.5,color:C.dim,textAlign:"center"}}>{d}</div>)}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-            {cells.map((ds,i)=>{
-              if(!ds)return<div key={i}/>;
-              const isSel=ds===value,isToday=ds===today;
-              return(
-                <button key={ds} type="button" onClick={()=>pick(ds)} style={{
-                  aspectRatio:"1",borderRadius:8,border:isToday&&!isSel?`1.5px solid ${C.indigo}`:"1.5px solid transparent",
-                  background:isSel?C.accentGrad:"transparent",color:isSel?"#fff":isToday?C.indigo:C.text,
-                  fontSize:11.5,fontWeight:isSel?700:400,cursor:"pointer",fontFamily:"var(--font-sans)",
-                }}>{Number(ds.slice(8))}</button>
-              );
-            })}
-          </div>
+    <div>
+      {/* Selected range display + clear */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div style={{flex:1,display:"flex",alignItems:"center",gap:6,background:C.surf2,borderRadius:10,padding:"7px 12px"}}>
+          <span style={{fontSize:12,fontWeight:600,color:start?C.indigo:C.dim}}>{start?fmt(start):"Start"}</span>
+          <span style={{fontSize:12,color:C.dim}}>→</span>
+          <span style={{fontSize:12,fontWeight:600,color:end?C.indigo:C.dim}}>{end?fmt(end):"End"}</span>
         </div>
-      )}
+        {(start||end)&&<button type="button" onClick={()=>{onChange("","");setPhase("start");onClear?.();}}
+          style={{...iconBtn,width:28,height:28,flexShrink:0}}>{Icon.trash()}</button>}
+      </div>
+      {/* Hint */}
+      <div style={{fontSize:10.5,color:C.dim,marginBottom:8,textAlign:"center",letterSpacing:"0.02em"}}>
+        {phase==="start"?"Tap a day to set the start date":"Tap a day to set the end date"}
+      </div>
+      {/* Month nav */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <button type="button" onClick={()=>step(-1)} style={iconBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+        <span style={{fontSize:13,fontWeight:700,color:C.text}}>{monthNames[view.m]} {view.y}</span>
+        <button type="button" onClick={()=>step(1)} style={iconBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+      </div>
+      {/* Day headers */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+        {DAYS_MON.map((d,i)=><div key={i} style={{fontSize:9.5,color:C.dim,textAlign:"center",fontWeight:600}}>{d}</div>)}
+      </div>
+      {/* Grid */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+        {cells.map((ds,i)=>{
+          if(!ds)return<div key={i}/>;
+          const cap=isCap(ds),inR=inRange(ds),isT=ds===today;
+          const isSt=isStart(ds),isEn=isEnd(ds);
+          // preview range while hovering for end
+          const previewEnd=phase==="end"&&hover&&start;
+          const previewLo=previewEnd?(start<hover?start:hover):null;
+          const previewHi=previewEnd?(start<hover?hover:start):null;
+          const inPreview=previewLo&&previewHi&&ds>previewLo&&ds<previewHi;
+          const previewCap=previewLo&&previewHi&&(ds===previewLo||ds===previewHi);
+          const filled=cap||isSt||isEn;
+          return(
+            <button key={ds} type="button"
+              onClick={()=>pick(ds)}
+              onMouseEnter={()=>phase==="end"&&setHover(ds)}
+              onMouseLeave={()=>setHover(null)}
+              style={{
+                aspectRatio:"1",borderRadius:filled?999:inR||inPreview||previewCap?4:8,
+                border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:12,
+                fontWeight:filled?700:400,position:"relative",
+                background:filled?C.accentGrad:inR?"rgba(99,102,241,0.12)":previewCap?"rgba(99,102,241,0.2)":inPreview?"rgba(99,102,241,0.08)":"transparent",
+                color:filled?"#fff":isT?C.indigo:C.text,
+                outline:isT&&!filled?`1.5px solid ${C.indigo}`:"none",
+                outlineOffset:"-1.5px",
+              }}>{Number(ds.slice(8))}</button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2659,14 +2704,12 @@ export default function App() {
       </div>
       {/* Inline timeline editor — full width below the main row */}
       {tlOpen&&(
-        <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.line}`,display:"flex",flexDirection:"column",gap:8}}>
-          <div style={{display:"flex",gap:8,position:"relative"}}>
-            <PlanDatePicker label="Start" value={tlS} onChange={setTlS}/>
-            <PlanDatePicker label="End" value={tlE} onChange={setTlE}/>
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={saveTl} style={{background:C.accentGrad,border:"none",borderRadius:9,color:"#fff",padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
-            {(p.plannedStart||p.plannedEnd)&&<button onClick={()=>{saveTimeline(p.name,"","");setTlOpen(false);}} style={{...iconBtn,width:30,height:30}}>{Icon.trash()}</button>}
+        <div style={{marginTop:10,paddingTop:12,borderTop:`1px solid ${C.line}`}}>
+          <RangePicker start={tlS} end={tlE}
+            onChange={(s,e)=>{setTlS(s);setTlE(e);}}
+            onClear={()=>{setTlS("");setTlE("");}}/>
+          <div style={{display:"flex",gap:8,marginTop:12}}>
+            <button onClick={saveTl} style={{background:C.accentGrad,border:"none",borderRadius:9,color:"#fff",padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer",flex:1}}>Save dates</button>
             <button onClick={()=>{setTlS(p.plannedStart||"");setTlE(p.plannedEnd||"");setTlOpen(false);}} style={{background:"transparent",border:`1px solid ${C.lineS}`,borderRadius:9,color:C.muted,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
           </div>
         </div>
