@@ -2712,39 +2712,36 @@ export default function App() {
     const isDoneOrReleased=["done","released"].includes(p.status||"active");
     const totalSessions=children.reduce((s,c)=>s+(projectCounts[c.name]||0),0)+(projectCounts[p.name]||0);
     return(
-      <div style={{background:C.surf2,borderRadius:14,overflow:"visible"}}>
+      <div onClick={()=>openProject(p.name)} style={{background:C.surf2,borderRadius:14,overflow:"visible",cursor:"pointer"}}>
         {/* Group header */}
         <div style={{padding:"11px 13px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
-          <button onClick={()=>setCollapsed(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"flex",alignItems:"center",color:C.faint,flexShrink:0}}>
+          <button onClick={e=>{e.stopPropagation();setCollapsed(v=>!v);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"flex",alignItems:"center",color:C.faint,flexShrink:0}}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .18s"}}>
               <path d="M6 9l6 6 6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
           <div style={{flex:1,minWidth:0}}>
-            <button onClick={()=>openProject(p.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",width:"100%"}}>
-              <span style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.name}</span>
-            </button>
+            <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
             <div style={{fontSize:11.5,color:C.dim,marginTop:2}}>
               {children.length} track{children.length!==1?"s":""}{totalSessions>0&&` · ${totalSessions} session${totalSessions!==1?"s":""}`}
             </div>
           </div>
           {/* Type badge next to status */}
           <span style={{fontSize:10,fontWeight:700,color:dot,background:`${dot}1a`,border:`1.5px solid ${dot}55`,borderRadius:20,padding:"2px 8px",letterSpacing:"0.04em",whiteSpace:"nowrap",flexShrink:0}}>{cfg.label}</span>
-          <StatusDropdown name={p.name} status={p.status||"active"}/>
-          <button onClick={()=>openProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-            {Icon.note(C.indigo)}
-          </button>
+          <div onClick={e=>e.stopPropagation()}>
+            <StatusDropdown name={p.name} status={p.status||"active"}/>
+          </div>
           {confirmDel?(
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>removeProject(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
               <button onClick={()=>setConfirmDel(false)} style={{fontSize:11.5,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.lineS}`,borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Cancel</button>
             </div>
           ):isDoneOrReleased?(
-            <button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+            <button onClick={e=>{e.stopPropagation();archiveProject(p.name);}} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
             </button>
           ):(
-            <button onClick={()=>setConfirmDel(true)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
+            <button onClick={e=>{e.stopPropagation();setConfirmDel(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
           )}
         </div>
         {/* Children */}
