@@ -2557,8 +2557,58 @@ export default function App() {
     document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
   },[newProjectTypeOpen]);
 
+  /* ── real-time cross-device sync via SSE ── */
+  useEffect(()=>{
+    if(!loaded)return;
+    const es=new EventSource("/api/events");
+    es.onmessage=async e=>{
+      try{
+        const{key}=JSON.parse(e.data);
+        if(key==="music_projects"){
+          const r=await fetch("/api/data/music_projects").then(x=>x.json());
+          if(r?.value!=null)setProjects(JSON.parse(r.value));
+        } else if(key==="music_sessions"){
+          const r=await fetch("/api/data/music_sessions").then(x=>x.json());
+          if(r?.value!=null)setSessions(JSON.parse(r.value));
+        } else if(key==="music_goal"){
+          const r=await fetch("/api/data/music_goal").then(x=>x.json());
+          if(r?.value!=null)setGoalHours(Number(JSON.parse(r.value))||0);
+        } else if(key==="music_archived_projects"){
+          const r=await fetch("/api/data/music_archived_projects").then(x=>x.json());
+          if(r?.value!=null)setArchivedProjects(JSON.parse(r.value));
+        }
+      }catch{}
+    };
+    es.onerror=()=>{}; // browser auto-reconnects on error
+    return()=>es.close();
+  },[loaded]);// eslint-disable-line
+
   const persistSessions=useCallback(async next=>{try{await storage.set("music_sessions",JSON.stringify(next));}catch{}},[]);
-  const persistProjects=useCallback(async next=>{try{await storage.set("music_projects",JSON.stringify(next));}catch{}},[]);
+
+  // Names explicitly deleted this session — excluded from server merge so they don't resurrect
+  const deletedNamesRef=useRef(new Set());
+
+  // Merge-before-write: read server state, add any server projects this client doesn't know about
+  // (added by another device), except ones we just deleted. Returns the merged array.
+  const persistProjects=useCallback(async next=>{
+    try{
+      const res=await fetch("/api/data/music_projects").then(r=>r.json());
+      const serverList=res?.value?JSON.parse(res.value):[];
+      const nextNames=new Set(next.map(p=>p.name));
+      const merged=[...next];
+      for(const sp of serverList){
+        if(!nextNames.has(sp.name)&&!deletedNamesRef.current.has(sp.name)){
+          merged.push(sp);
+        }
+      }
+      await storage.set("music_projects",JSON.stringify(merged));
+      return merged;
+    }catch{
+      try{await storage.set("music_projects",JSON.stringify(next));}catch{}
+      return next;
+    }
+  },[]);
+
   const persistGoal=useCallback(async v=>{try{await storage.set("music_goal",JSON.stringify(v));}catch{}},[]);
 
   const flashNext=()=>{
@@ -2632,7 +2682,7 @@ export default function App() {
   const cancelTimer=()=>{resetTimerExtras();setTimer({phase:"idle",target:0,endsAt:0,remaining:0});};
   const createTimerProject=async()=>{
     const name=timerNewProjInput.trim();if(!name)return;
-    if(!projects.find(p=>p.name===name)){const proj={name,notes:"",status:"active"};const next=[...projects,proj];setProjects(next);await persistProjects(next);}
+    if(!projects.find(p=>p.name===name)){const proj={name,notes:"",status:"active"};await saveProjects([...projects,proj]);}
     setTimerProject(name);setTimerCreatingProj(false);setTimerNewProjInput("");
   };
   const startCountdown=mins=>{const ms=Math.min(480,Math.max(1,Math.round(mins)))*60000;setTimer({phase:"running",target:ms,endsAt:Date.now()+ms,remaining:ms});};
@@ -2746,6 +2796,13 @@ export default function App() {
   const deleteSession=async id=>{const next=sessions.filter(s=>s.id!==id);setSessions(next);await persistSessions(next);setSheet(null);flash("Session deleted");};
   const startEdit=s=>setSheet({form:{date:s.date,duration:s.duration,mood:s.mood,note:s.note||"",project:s.project||"",tag:s.tag||"",hour:s.hour??new Date().getHours()},editing:true,id:s.id});
 
+  // Helper: optimistic set + persist with merge, then reconcile if server had extra projects
+  const saveProjects=async next=>{
+    setProjects(next);
+    const merged=await persistProjects(next);
+    if(merged.length!==next.length)setProjects(merged);
+  };
+
   const addProject=async(type="track")=>{
     const name=newProject.trim();if(!name||projects.find(p=>p.name===name))return;
     const usedColors=new Set(projects.map(p=>p.color).filter(Boolean));
@@ -2753,17 +2810,15 @@ export default function App() {
     if(type&&type!=="track")proj.type=type;
     if(newProjectStart)proj.plannedStart=newProjectStart;
     if(newProjectEnd)proj.plannedEnd=newProjectEnd;
-    const next=[...projects,proj];
-    setProjects(next);await persistProjects(next);
+    await saveProjects([...projects,proj]);
     setNewProject("");setNewProjectStart("");setNewProjectEnd("");setNewProjectDatesOpen(false);setNewProjectTypeOpen(false);
   };
   const saveTimeline=async(name,plannedStart,plannedEnd)=>{
-    const next=projects.map(p=>p.name===name?{...p,plannedStart,plannedEnd}:p);
-    setProjects(next);await persistProjects(next);
+    await saveProjects(projects.map(p=>p.name===name?{...p,plannedStart,plannedEnd}:p));
   };
   const updateProjectStatus=async(name,status)=>{
     const next=projects.map(p=>p.name===name?{...p,status}:p);
-    setProjects(next);await persistProjects(next);
+    await saveProjects(next);
     if(status==="released"){flash("🚀 Project released!");checkMilestones(sessions,next,currentStreak,unlockedMilestones);}
     else if(status==="done")flash("✓ Project marked as done");
   };
@@ -2771,10 +2826,10 @@ export default function App() {
   const archiveProject=async name=>{
     const proj=projects.find(p=>p.name===name);
     if(!proj)return;
-    const nextProjects=projects.filter(p=>p.name!==name);
+    deletedNamesRef.current.add(name);
     const nextArchived=[{...proj,archivedAt:new Date().toISOString()},...archivedProjects];
-    setProjects(nextProjects);await persistProjects(nextProjects);
     setArchivedProjects(nextArchived);await persistArchived(nextArchived);
+    await saveProjects(projects.filter(p=>p.name!==name));
     flash("Project archived");
   };
   const restoreFromArchive=async name=>{
@@ -2782,9 +2837,8 @@ export default function App() {
     if(!proj)return;
     const{archivedAt:_,...restored}=proj;
     const nextArchived=archivedProjects.filter(p=>p.name!==name);
-    const nextProjects=[...projects,{...restored,status:"active"}];
     setArchivedProjects(nextArchived);await persistArchived(nextArchived);
-    setProjects(nextProjects);await persistProjects(nextProjects);
+    await saveProjects([...projects,{...restored,status:"active"}]);
     flash("Project restored");
   };
   const deleteArchived=async name=>{
@@ -2792,29 +2846,27 @@ export default function App() {
     setArchivedProjects(next);await persistArchived(next);
   };
   const removeProject=async name=>{
-    const next=projects.filter(p=>p.name!==name).map(p=>p.parentGroup===name?{...p,parentGroup:undefined}:p);
-    setProjects(next);await persistProjects(next);
+    deletedNamesRef.current.add(name);
+    // also mark children as deleted so they don't resurrect
+    projects.filter(p=>p.parentGroup===name).forEach(p=>deletedNamesRef.current.add(p.name));
+    await saveProjects(projects.filter(p=>p.name!==name).map(p=>p.parentGroup===name?{...p,parentGroup:undefined}:p));
   };
   const updateProjectType=async(name,type)=>{
-    const next=projects.map(p=>p.name===name?{...p,type}:p);
-    setProjects(next);await persistProjects(next);
+    await saveProjects(projects.map(p=>p.name===name?{...p,type}:p));
   };
   const createTrackInGroup=async(trackName,groupName)=>{
     if(!trackName||projects.find(p=>p.name===trackName))return;
     const usedColors=new Set(projects.map(p=>p.color).filter(Boolean));
     const proj={name:trackName,notes:"",status:"active",color:pickProjectColor(usedColors),parentGroup:groupName};
-    const next=[...projects,proj];
-    setProjects(next);await persistProjects(next);
+    await saveProjects([...projects,proj]);
   };
   const moveToGroup=async(trackName,groupName)=>{
-    const next=projects.map(p=>p.name===trackName?{...p,parentGroup:groupName}:p);
-    setProjects(next);await persistProjects(next);
+    await saveProjects(projects.map(p=>p.name===trackName?{...p,parentGroup:groupName}:p));
   };
   const removeFromGroup=async trackName=>{
-    const next=projects.map(p=>p.name===trackName?{...p,parentGroup:undefined}:p);
-    setProjects(next);await persistProjects(next);
+    await saveProjects(projects.map(p=>p.name===trackName?{...p,parentGroup:undefined}:p));
   };
-  const saveNotes=async(name,notes)=>{const next=projects.map(p=>p.name===name?{...p,notes}:p);setProjects(next);await persistProjects(next);};
+  const saveNotes=async(name,notes)=>{await saveProjects(projects.map(p=>p.name===name?{...p,notes}:p));};
 
   const saveGoal=async v=>{setGoalHours(v);await persistGoal(v);setGoalEditOpen(false);};
   const saveGlobalFolder=async v=>{setGlobalAudioFolder(v);try{await storage.set("music_global_audio_folder",v);}catch{}};
@@ -2822,8 +2874,9 @@ export default function App() {
   const renameProject=async(oldName,newName)=>{
     if(!newName||newName===oldName||projects.find(p=>p.name===newName))return;
     // Update projects list (rename + update children's parentGroup)
+    deletedNamesRef.current.add(oldName); // old name is gone; don't let merge resurrect it
     const nextProjects=projects.map(p=>p.name===oldName?{...p,name:newName}:p.parentGroup===oldName?{...p,parentGroup:newName}:p);
-    setProjects(nextProjects);await persistProjects(nextProjects);
+    await saveProjects(nextProjects);
     // Update sessions that reference this project
     const nextSessions=sessions.map(s=>s.project===oldName?{...s,project:newName}:s);
     setSessions(nextSessions);await persistSessions(nextSessions);

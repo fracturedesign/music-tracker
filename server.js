@@ -79,6 +79,16 @@ async function analyzeAudio(filePath) {
   return { duration, lufsIntegrated, lufsShort, dr, truePeak };
 }
 
+/* ── SSE broadcast ── */
+const sseClients = new Set();
+
+function broadcast(key) {
+  const msg = `data: ${JSON.stringify({ key })}\n\n`;
+  for (const client of sseClients) {
+    try { client.write(msg); } catch { sseClients.delete(client); }
+  }
+}
+
 /* ── express setup ── */
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -111,6 +121,20 @@ const upload = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
 });
 
+/* ── SSE endpoint ── */
+app.get("/api/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+  sseClients.add(res);
+  // Keep-alive ping every 25s so proxies/browsers don't close idle connections
+  const ping = setInterval(() => {
+    try { res.write(":ping\n\n"); } catch { sseClients.delete(res); clearInterval(ping); }
+  }, 25000);
+  req.on("close", () => { sseClients.delete(res); clearInterval(ping); });
+});
+
 /* ── key-value data API ── */
 app.get("/api/data/:key", (req, res) => {
   const data = readData();
@@ -121,6 +145,7 @@ app.post("/api/data/:key", (req, res) => {
   const data = readData();
   data[req.params.key] = req.body.value;
   writeData(data);
+  broadcast(req.params.key);
   res.json({ ok: true });
 });
 
