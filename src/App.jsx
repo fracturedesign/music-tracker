@@ -31,15 +31,15 @@ const TAG_COLOR = { Producing:"#818cf8", Mixing:"#60a5fa", Mastering:"#c084fc", 
 const STATUS_ORDER = ["idea","active","mixing","mastering","done","released"];
 const STATUS_CFG = {
   idea:      { label:"Idea",       dot:"#6b6b82" },
-  active:    { label:"Active",     dot:null },   // uses theme accent
+  active:    { label:"Active",     dot:"#34d399" },
   mixing:    { label:"Mixing",     dot:"#60a5fa" },
   mastering: { label:"Mastering",  dot:"#c084fc" },
-  done:      { label:"Done",       dot:"#34d399" },
+  done:      { label:"Done",       dot:null },   // uses theme accent
   released:  { label:"Released",   dot:"#fbbf24" },
 };
 
 const GROUP_TYPE_CFG = {
-  album: { label:"Album", badge:"LP", dot:"#c084fc" },
+  album: { label:"Album", badge:"LP", dot:"#fb923c" },
   ep:    { label:"EP",    badge:"EP", dot:"#60a5fa" },
 };
 
