@@ -935,7 +935,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
           ):(
             <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
               <div style={{fontSize:16,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
-              <button onClick={()=>{setRenameVal(name);setRenamingProject(true);}} style={{...iconBtn,flexShrink:0,width:26,height:26,borderRadius:7}} title="Rename project">{Icon.pencil()}</button>
+              <button onClick={()=>{setRenameVal(name);setRenamingProject(true);}} style={{background:"none",border:"none",padding:4,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center"}} title="Rename project">{Icon.pencil()}</button>
             </div>
           )}
           {!renamingProject&&<button onClick={close} style={{...iconBtn,flexShrink:0}}>{Icon.close()}</button>}
@@ -2803,16 +2803,13 @@ export default function App() {
     const rel=fmtRelativeDate(lastSessionDateOf(p.name));
     const audioCount=audioFileCounts[p.name]||0;
     return(
-    <div style={{background:insideGroup?C.bg:C.surf2,borderRadius:insideGroup?10:14,padding:"11px 13px 11px 14px"}}>
+    <div onClick={()=>openProject(p.name)} style={{background:insideGroup?C.bg:C.surf2,borderRadius:insideGroup?10:14,padding:"11px 13px 11px 14px",cursor:"pointer"}}>
       <div style={{display:"flex",gap:10,alignItems:"center"}}>
         {/* Content */}
         <div style={{flex:1,minWidth:0}}>
-          {/* Project name — clickable */}
-          <button onClick={()=>openProject(p.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",width:"100%"}}>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-          </button>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
           <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-            <div ref={tlDropRef} style={{position:"relative"}}>
+            <div ref={tlDropRef} style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlLabel?tlColor:C.dim,fontWeight:tlLabel?500:400,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlLabel?tlColor:C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlLabel?tlColor:C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
                 {tlLabel||"dates"}
@@ -2824,20 +2821,19 @@ export default function App() {
             <span style={{color:C.dim}}>·</span>
             <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
             {audioCount>0&&<><span style={{color:C.dim}}>·</span>
-              <button onClick={()=>openProject(p.name,"versions")} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.green,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+              <button onClick={e=>{e.stopPropagation();openProject(p.name,"versions");}} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.green,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.green} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
               </button>
             </>}
           </div>
         </div>
-        {/* Status pill + Open button + move + action */}
-        <StatusDropdown name={p.name} status={p.status||"active"}/>
-        <button onClick={()=>openProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-          {Icon.note(C.indigo)}
-        </button>
+        {/* Status pill + move + action */}
+        <div onClick={e=>e.stopPropagation()}>
+          <StatusDropdown name={p.name} status={p.status||"active"}/>
+        </div>
         {/* Move to group / remove from group */}
         {(insideGroup||groupProjects.length>0)&&(
-          <div ref={moveRef} style={{position:"relative",flexShrink:0}}>
+          <div ref={moveRef} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>setMoveOpen(v=>!v)} title={insideGroup?"Move / Remove from group":"Move to group"} style={{...iconBtn,width:28,height:28,borderRadius:8,background:moveOpen?C.accentAlpha:"transparent"}}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                 <path d="M3 7h5l2-2h11v14H3V7z" stroke={C.muted} strokeWidth="1.7" strokeLinejoin="round"/>
@@ -2877,16 +2873,16 @@ export default function App() {
           </div>
         )}
         {confirmDel?(
-          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>removeProject(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
             <button onClick={()=>setConfirmDel(false)} style={{fontSize:11.5,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.lineS}`,borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Cancel</button>
           </div>
         ):isDoneOrReleased?(
-          <button onClick={()=>archiveProject(p.name)} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+          <button onClick={e=>{e.stopPropagation();archiveProject(p.name);}} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
           </button>
         ):(
-          <button onClick={()=>setConfirmDel(true)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
+          <button onClick={e=>{e.stopPropagation();setConfirmDel(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
         )}
       </div>
       {/* Inline timeline editor — full width below the main row */}
@@ -2992,7 +2988,7 @@ export default function App() {
                   </button>
                   {timerProjDropOpen&&(()=>{
                     const closeDropdown=()=>{setTimerProjDropOpen(false);setTimerCreatingProj(false);setTimerNewProjInput("");};
-                    const availProjects=projects.filter(p=>!["done","released","archived"].includes(p.status||"active"));
+                    const availProjects=projects.filter(p=>!["done","released","archived"].includes(p.status||"active")&&!GROUP_TYPE_CFG[p.type]);
                     return(
                       <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:30,background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:180,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}
                         onMouseDown={e=>e.stopPropagation()}>
