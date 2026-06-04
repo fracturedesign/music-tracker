@@ -330,14 +330,10 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
     return()=>audioEventBus.removeEventListener("audioplay",handler);
   },[file.id]);
 
-  // Announce mount so MiniPlayer can hand back position + auto-resume
+  // Register handback listener first, then announce mount in the same effect
+  // so MiniPlayer's synchronous audiohandback response is already caught.
   const handbackPosRef=useRef(null);
   const handbackAutoplayRef=useRef(false);
-  useEffect(()=>{
-    audioEventBus.dispatchEvent(new CustomEvent("audiomounted",{detail:{id:file.id}}));
-  },[]);// eslint-disable-line
-
-  // Receive position handback from MiniPlayer
   useEffect(()=>{
     const handler=e=>{
       if(e.detail.id!==file.id)return;
@@ -354,8 +350,10 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
       }
     };
     audioEventBus.addEventListener("audiohandback",handler);
+    // Announce after listener is registered so we don't miss the response
+    audioEventBus.dispatchEvent(new CustomEvent("audiomounted",{detail:{id:file.id}}));
     return()=>audioEventBus.removeEventListener("audiohandback",handler);
-  },[file.id]);
+  },[]);// eslint-disable-line
 
   useEffect(()=>{
     const container=waveRef.current;
