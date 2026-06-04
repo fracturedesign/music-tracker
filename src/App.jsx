@@ -385,7 +385,14 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
     ws.on("pause",()=>{userPlayingRef.current=false;setPlaying(false);});
     ws.on("finish",()=>{userPlayingRef.current=false;setPlaying(false);setCurrentTime(0);setBuffering(false);});
 
-    return()=>{clearTimeout(bufferingTimer.current);ws.destroy();wsRef.current=null;};
+    return()=>{
+      clearTimeout(bufferingTimer.current);
+      if(userPlayingRef.current){
+        const pos=ws.getCurrentTime?.()??0;
+        audioEventBus.dispatchEvent(new CustomEvent("audiohandoff",{detail:{file,projectName,src:audioUrl,position:pos}}));
+      }
+      ws.destroy();wsRef.current=null;
+    };
   },[]);// eslint-disable-line
 
   // Ref mirror for pendingPlay (accessible inside the ready callback closure)
@@ -1482,6 +1489,88 @@ function GoalEditSheet({goalHours,onSave,onClose}) {
   );
 }
 
+/* ─── persistent mini player ─── */
+function MiniPlayer({nowPlaying,onEnd,onClear}) {
+  const C=useTheme();
+  const audioRef=useRef(null);
+  const [playing,setPlaying]=useState(false);
+  const [currentTime,setCurrentTime]=useState(nowPlaying?.position||0);
+  const [duration,setDuration]=useState(nowPlaying?.file?.duration||0);
+
+  // Load + seek + play whenever nowPlaying changes
+  useEffect(()=>{
+    if(!nowPlaying||!audioRef.current)return;
+    const a=audioRef.current;
+    a.src=nowPlaying.src;
+    a.currentTime=nowPlaying.position||0;
+    a.play().catch(()=>{});
+  },[nowPlaying?.src]);// eslint-disable-line
+
+  // Pause mini player when any AudioFileCard starts playing
+  useEffect(()=>{
+    const h=()=>{audioRef.current?.pause();};
+    audioEventBus.addEventListener("audioplay",h);
+    return()=>audioEventBus.removeEventListener("audioplay",h);
+  },[]);
+
+  useEffect(()=>{
+    const a=audioRef.current;if(!a)return;
+    const onTime=()=>setCurrentTime(a.currentTime);
+    const onDur=()=>setDuration(a.duration||0);
+    const onPlay=()=>setPlaying(true);
+    const onPause=()=>setPlaying(false);
+    const onEnded=()=>{setPlaying(false);setCurrentTime(0);onEnd();};
+    a.addEventListener("timeupdate",onTime);
+    a.addEventListener("durationchange",onDur);
+    a.addEventListener("play",onPlay);
+    a.addEventListener("pause",onPause);
+    a.addEventListener("ended",onEnded);
+    return()=>{a.removeEventListener("timeupdate",onTime);a.removeEventListener("durationchange",onDur);a.removeEventListener("play",onPlay);a.removeEventListener("pause",onPause);a.removeEventListener("ended",onEnded);};
+  },[]);// eslint-disable-line
+
+  const pct=duration>0?Math.min(1,currentTime/duration):0;
+  const seekTo=ratio=>{if(audioRef.current)audioRef.current.currentTime=ratio*(audioRef.current.duration||0);};
+
+  if(!nowPlaying)return null;
+
+  return(
+    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:60,
+      background:C.surf,borderTop:`1px solid ${C.lineS}`,
+      boxShadow:"0 -8px 24px -6px rgba(0,0,0,0.22)",
+      paddingBottom:"env(safe-area-inset-bottom,0px)"}}>
+      <audio ref={audioRef}/>
+      {/* Seekable progress bar */}
+      <div onClick={e=>{const r=e.currentTarget.getBoundingClientRect();seekTo((e.clientX-r.left)/r.width);}}
+        style={{height:3,background:C.surf2,cursor:"pointer",position:"relative"}}>
+        <div style={{position:"absolute",inset:0,width:`${pct*100}%`,background:C.accentGrad,transition:"width .25s linear"}}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px 10px"}}>
+        {/* Play/pause */}
+        <button onClick={()=>playing?audioRef.current.pause():audioRef.current.play().catch(()=>{})}
+          style={{width:32,height:32,borderRadius:9,border:`1px solid ${C.accentBorder}`,background:C.accentAlpha,
+            cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0,padding:0}}>
+          {playing
+            ?<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/><rect x="14" y="5" width="4" height="14" rx="1.5" fill={C.indigo}/></svg>
+            :<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
+          }
+        </button>
+        {/* Track + project */}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nowPlaying.file.name}</div>
+          <div style={{fontSize:11,color:C.faint,marginTop:1}}>{nowPlaying.projectName}</div>
+        </div>
+        {/* Time */}
+        <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0}}>{fmtSeconds(currentTime)} / {fmtSeconds(duration||nowPlaying.file.duration)}</span>
+        {/* Close */}
+        <button onClick={()=>{audioRef.current?.pause();onClear();}}
+          style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",display:"grid",placeItems:"center",padding:0,color:C.faint}}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── analytics sheet ─── */
 const MOOD_LABEL=["","Rough","Neutral","Good","Great","Flow"];
 function AnalyticsSheet({sessions,goalHours,currentStreak,longestStreak,onClose}) {
@@ -2026,6 +2115,7 @@ export default function App() {
   const [allOpen,setAllOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [reviewOpen,setReviewOpen]=useState(false);
+  const [nowPlaying,setNowPlaying]=useState(null);
   const [goalEditOpen,setGoalEditOpen]=useState(false);
   const [showDone,setShowDone]=useState(false);
   const [showReleased,setShowReleased]=useState(false);
@@ -2136,6 +2226,11 @@ export default function App() {
   const [tick,setTick]=useState(0);
 
   useEffect(()=>{if(!loaded)return;storage.set("music_timer",JSON.stringify(timer)).catch(()=>{});},[timer,loaded]);
+  useEffect(()=>{
+    const h=e=>setNowPlaying(e.detail);
+    audioEventBus.addEventListener("audiohandoff",h);
+    return()=>audioEventBus.removeEventListener("audiohandoff",h);
+  },[]);
   useEffect(()=>{
     const iv=setInterval(async()=>{
       try{const r=await storage.get("music_timer");if(!r?.value)return;const remote=JSON.parse(r.value);
@@ -2468,6 +2563,7 @@ export default function App() {
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
       {reviewOpen&&<AnalyticsSheet sessions={sessions} goalHours={goalHours} currentStreak={currentStreak} longestStreak={longestStreak} onClose={()=>setReviewOpen(false)}/>}
+      <MiniPlayer nowPlaying={nowPlaying} onEnd={()=>setNowPlaying(null)} onClear={()=>setNowPlaying(null)}/>
       {toast&&<div className="toast">{toast}</div>}
 
       {/* Header */}
