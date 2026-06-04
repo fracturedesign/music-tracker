@@ -1020,10 +1020,10 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
                 fontFamily:"var(--font-sans)",lineHeight:1.4,whiteSpace:"nowrap",
               }}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke="currentColor" strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-                {hasTl?`${tlFmt(plannedStart)}${plannedEnd?` → ${tlFmt(plannedEnd)}`:""}` : "Set dates"}
+                {hasTl?`${tlFmt(plannedStart)}${plannedEnd&&plannedEnd!==plannedStart?` → ${tlFmt(plannedEnd)}`:""}` : "Set dates"}
               </button>
               <RangePicker open={tlEditing} start={tlStart} end={tlEnd}
-                onChange={(s,e)=>{setTlStart(s);setTlEnd(e);if(s&&e){onSaveTimeline?.(s,e);setTlEditing(false);}else if(s&&e===s){onSaveTimeline?.(s,e);setTlEditing(false);}}}
+                onChange={(s,e)=>{setTlStart(s);setTlEnd(e);if(!s&&!e){onSaveTimeline?.("","");setTlEditing(false);}else if(s&&e){onSaveTimeline?.(s,e);setTlEditing(false);}}}
                 onClose={()=>setTlEditing(false)}/>
             </div>
 
@@ -2626,7 +2626,8 @@ export default function App() {
     })();
     const tlLabel=(()=>{
       const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
-      if(p.plannedStart&&p.plannedEnd)return`${fmt(p.plannedStart)} → ${fmt(p.plannedEnd)}`;
+      if(p.plannedStart&&p.plannedEnd&&p.plannedStart!==p.plannedEnd)return`${fmt(p.plannedStart)} → ${fmt(p.plannedEnd)}`;
+      if(p.plannedStart&&p.plannedEnd&&p.plannedStart===p.plannedEnd)return fmt(p.plannedStart);
       if(p.plannedStart)return fmt(p.plannedStart);
       if(p.plannedEnd)return`due ${fmt(p.plannedEnd)}`;
       return null;
@@ -2653,7 +2654,7 @@ export default function App() {
                 {tlLabel||"dates"}
               </button>
               <RangePicker open={tlOpen} start={tlS} end={tlE}
-                onChange={(s,e)=>{setTlS(s);setTlE(e);if(s&&e){saveTimeline(p.name,s,e);setTlOpen(false);}else if(s&&e===s){saveTimeline(p.name,s,s);setTlOpen(false);}}}
+                onChange={(s,e)=>{setTlS(s);setTlE(e);if(!s&&!e){saveTimeline(p.name,"","");setTlOpen(false);}else if(s&&e){saveTimeline(p.name,s,e);setTlOpen(false);}}}
                 onClose={()=>setTlOpen(false)}/>
             </div>
             <span style={{color:C.dim}}>·</span>
