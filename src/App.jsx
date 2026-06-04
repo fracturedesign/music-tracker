@@ -584,8 +584,15 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
   const [showScan,setShowScan]=useState(false);
   const [activeFilters,setActiveFilters]=useState({formats:[],versions:[]});
   const [abOpen,setAbOpen]=useState(false);
+  const [addMenuOpen,setAddMenuOpen]=useState(false);
   const allFiltersRef=useRef({});
   const fileInputRef=useRef(null);
+  const addMenuRef=useRef(null);
+  useEffect(()=>{
+    if(!addMenuOpen)return;
+    const h=e=>{if(addMenuRef.current&&!addMenuRef.current.contains(e.target))setAddMenuOpen(false);};
+    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+  },[addMenuOpen]);
 
   useEffect(()=>{onCountChange?.(files.length);},[files.length]);// eslint-disable-line
 
@@ -702,159 +709,219 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
   const hasPerProjectPath=!!scanPath;
   const hasGlobalFolder=!!globalAudioFolder;
 
-  return (
-    <div style={{padding:"14px 18px 20px"}}>
-      {/* Action row */}
-      <input ref={fileInputRef} type="file" accept=".wav,.mp3" onChange={handleUpload} style={{display:"none"}}/>
-      <div style={{display:"flex",gap:7,marginBottom:10}}>
-        <button onClick={()=>fileInputRef.current?.click()} disabled={uploading}
-          style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
-            padding:"10px 0",borderRadius:10,cursor:uploading?"default":"pointer",
-            border:`1.5px dashed ${C.lineS}`,background:"transparent",
-            color:uploading?C.dim:C.faint,fontSize:12.5,fontWeight:600,fontFamily:"var(--font-sans)"}}>
-          {uploading?<><Spinner/>Analyzing…</>:<><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>Upload file</>}
+  // Format badges derived from files — used in group summary header
+  const fileFmts=!loading?[...new Set(files.map(f=>(f.format||"").toUpperCase()))].filter(f=>["WAV","MP3"].includes(f)):[];
+
+  // Shared scan panel JSX
+  const ScanPanel=(
+    <div style={{background:C.surf2,border:`1px solid ${hasPerProjectPath?C.accentBorder:C.line}`,borderRadius:10,padding:"11px 13px",marginBottom:12}}>
+      <div style={{fontSize:11,color:C.faint,marginBottom:7}}>
+        {hasPerProjectPath?"Saved path · auto-scans on open · no duplicates":"Absolute folder path on the server"}
+      </div>
+      <div style={{display:"flex",gap:7}}>
+        <input className="mt-text" value={scanPath} onChange={e=>setScanPath(e.target.value)}
+          placeholder="/mnt/user/data/music/my-track"
+          onKeyDown={e=>e.key==="Enter"&&handleScan()}
+          style={{flex:1,padding:"8px 11px",fontSize:12}}/>
+        <button onClick={handleScan} disabled={scanning||!scanPath.trim()}
+          style={{border:"none",borderRadius:8,padding:"0 14px",background:C.accentGrad,color:"#fff",fontSize:12.5,fontWeight:600,
+            cursor:scanning?"default":"pointer",opacity:scanning||!scanPath.trim()?0.5:1,
+            whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6,fontFamily:"var(--font-sans)"}}>
+          {scanning?<><Spinner/>Scanning…</>:"Scan"}
         </button>
-        <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
-          style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,
-            color:showScan||hasPerProjectPath?C.indigo:C.faint,gap:5,display:"flex",
-            borderColor:showScan||hasPerProjectPath?C.accentBorder:C.lineS,
-            background:showScan||hasPerProjectPath?C.accentAlpha:C.surf2}}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          {hasPerProjectPath?"Folder set":"Scan folder"}
-        </button>
-        {files.length>=2&&(
-          <button onClick={()=>setAbOpen(true)}
-            style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,gap:5,display:"flex",
-              color:C.faint,borderColor:C.lineS,background:C.surf2}}>
-            A/B
+        {hasPerProjectPath&&(
+          <button onClick={handleUnlink} title="Unlink folder" style={{...iconBtn,flexShrink:0,borderColor:"rgba(192,138,138,0.3)",background:"rgba(192,138,138,0.08)"}}>
+            {Icon.trash()}
           </button>
         )}
       </div>
-      {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
+      {scanMsg&&<div style={{fontSize:11.5,marginTop:7,color:scanMsg.startsWith("No new")||scanMsg.startsWith("Found")?C.green:C.flame}}>{scanMsg}</div>}
+    </div>
+  );
 
-      {/* Scan panel */}
-      {showScan&&(
-        <div style={{background:C.surf2,border:`1px solid ${hasPerProjectPath?C.accentBorder:C.line}`,borderRadius:10,padding:"11px 13px",marginBottom:12}}>
-          <div style={{fontSize:11,color:C.faint,marginBottom:7}}>
-            {hasPerProjectPath?"Saved path · auto-scans on open · no duplicates":"Absolute folder path on the server"}
-          </div>
-          <div style={{display:"flex",gap:7}}>
-            <input className="mt-text" value={scanPath} onChange={e=>setScanPath(e.target.value)}
-              placeholder="/mnt/user/data/music/my-track"
-              onKeyDown={e=>e.key==="Enter"&&handleScan()}
-              style={{flex:1,padding:"8px 11px",fontSize:12}}/>
-            <button onClick={handleScan} disabled={scanning||!scanPath.trim()}
-              style={{border:"none",borderRadius:8,padding:"0 14px",background:C.accentGrad,color:"#fff",fontSize:12.5,fontWeight:600,
-                cursor:scanning?"default":"pointer",opacity:scanning||!scanPath.trim()?0.5:1,
-                whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6,fontFamily:"var(--font-sans)"}}>
-              {scanning?<><Spinner/>Scanning…</>:"Scan"}
+  // Shared file list renderer
+  const FileList=(()=>{
+    if(loading)return <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"16px 0"}}>Loading…</div>;
+    if(files.length===0)return <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"16px 0",fontStyle:"italic"}}>No files yet.</div>;
+    const availFmts=new Set(files.map(f=>(f.format||"").toUpperCase()).filter(f=>["WAV","MP3"].includes(f)));
+    const availVers=new Set(files.map(f=>extractVersion(f.name)).filter(Boolean));
+    const hasVNum=files.some(f=>/\bv\d/i.test(f.name||""));
+    if(hasVNum)availVers.add("versioned");
+    const fmtF=(activeFilters.formats||[]).filter(v=>availFmts.has(v));
+    const verF=(activeFilters.versions||[]).filter(v=>availVers.has(v));
+    const visible=sortAudioFiles(files).filter(f=>{
+      if(fmtF.length>0){const fmt=(f.format||"").toUpperCase();if(fmt&&!fmtF.includes(fmt))return false;}
+      if(verF.length>0){
+        const ver=extractVersion(f.name);
+        const matchFinal=verF.includes("final")&&ver==="final";
+        const matchVersioned=verF.includes("versioned")&&/\bv\d/i.test(f.name||"");
+        const matchLabel=verF.some(v=>v!=="final"&&v!=="versioned"&&ver===v);
+        if(!matchFinal&&!matchVersioned&&!matchLabel)return false;
+      }
+      return true;
+    });
+    if(visible.length===0)return <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"16px 0"}}>No files match the filters.</div>;
+    return visible.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName}
+      onDelete={handleDelete} onRename={handleRename} onMarkSeen={handleMarkSeen}/>);
+  })();
+
+  // Shared filter pills renderer
+  const FilterPills=(()=>{
+    if(loading||files.length===0)return null;
+    const verLabels=[...new Set(files.map(f=>extractVersion(f.name)).filter(Boolean))];
+    const hasFinal=verLabels.includes("final");
+    const vTagLabels=verLabels.filter(v=>v!=="final"&&!/^v\d/.test(v));
+    const hasVNum=files.some(f=>/\bv\d/i.test(f.name||""));
+    const pills=[
+      ...fileFmts.map(f=>({type:"formats",value:f,label:f})),
+      ...(hasFinal?[{type:"versions",value:"final",label:"Final"}]:[]),
+      ...(hasVNum?[{type:"versions",value:"versioned",label:"Versioned"}]:[]),
+      ...vTagLabels.map(v=>({type:"versions",value:v,label:v.charAt(0).toUpperCase()+v.slice(1)})),
+    ];
+    if(pills.length===0)return null;
+    const anyActive=(activeFilters.formats||[]).length>0||(activeFilters.versions||[]).length>0;
+    const clearFilters=()=>{const c={formats:[],versions:[]};setActiveFilters(c);saveFilters(c);};
+    return(
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10,alignItems:"center"}}>
+        {pills.map(({type,value,label})=>{
+          const on=activeFilters[type]?.includes(value);
+          return(
+            <button key={type+value} onClick={()=>toggleFilter(type,value)}
+              style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:20,cursor:"pointer",
+                letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:"var(--font-sans)",
+                border:`1px solid ${on?C.accentBorder:C.lineS}`,background:on?C.accentAlpha:"transparent",
+                color:on?C.indigo:C.dim,transition:"all .15s"}}>
+              {label}
             </button>
-            {hasPerProjectPath&&(
-              <button onClick={handleUnlink} title="Unlink folder" style={{...iconBtn,flexShrink:0,borderColor:"rgba(192,138,138,0.3)",background:"rgba(192,138,138,0.08)"}}>
-                {Icon.trash()}
+          );
+        })}
+        {anyActive&&<button onClick={clearFilters} style={{fontSize:10.5,fontWeight:600,padding:"3px 9px",borderRadius:20,cursor:"pointer",fontFamily:"var(--font-sans)",border:"none",background:"transparent",color:C.dim}}>Clear</button>}
+      </div>
+    );
+  })();
+
+  return (
+    <div style={{padding: sectionLabel?"10px 18px 14px":"14px 18px 20px"}}>
+      <input ref={fileInputRef} type="file" accept=".wav,.mp3" onChange={handleUpload} style={{display:"none"}}/>
+
+      {sectionLabel ? (
+        /* ── GROUP MODE: compact summary header + collapsible content ── */
+        <>
+          {/* Summary header row */}
+          <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",minHeight:36}}
+            onClick={onToggleSec}>
+            {/* Chevron */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+              style={{transform:sectionOpen?"rotate(90deg)":"rotate(0deg)",transition:"transform .18s",flexShrink:0}}>
+              <path d="M9 6l6 6-6 6" stroke={C.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            {/* Name */}
+            <span style={{flex:1,fontSize:13,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sectionLabel}</span>
+            {/* Format badges */}
+            {!loading&&fileFmts.map(f=>(
+              <span key={f} style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:4,letterSpacing:"0.05em",
+                background:C.surf2,border:`1px solid ${C.lineS}`,color:C.dim}}>
+                {f}
+              </span>
+            ))}
+            {/* File count */}
+            {!loading&&files.length>0&&(
+              <span style={{fontSize:11,color:C.faint,flexShrink:0}}>
+                {files.length} file{files.length!==1?"s":""}
+              </span>
+            )}
+            {!loading&&files.length===0&&(
+              <span style={{fontSize:11,color:C.dim,fontStyle:"italic",flexShrink:0}}>no files</span>
+            )}
+            {/* + action menu */}
+            <div ref={addMenuRef} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+              <button onClick={()=>setAddMenuOpen(v=>!v)}
+                style={{width:26,height:26,borderRadius:7,border:`1px solid ${C.lineS}`,background:C.surf2,
+                  color:C.faint,fontSize:15,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",
+                  justifyContent:"center",fontFamily:"var(--font-sans)"}}>
+                {uploading?<Spinner/>:"+"}
+              </button>
+              {addMenuOpen&&(
+                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:50,
+                  background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,
+                  minWidth:148,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                  <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
+                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
+                    border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
+                    fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Upload file
+                  </button>
+                  <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");setAddMenuOpen(false);}} style={{
+                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
+                    border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
+                    fontSize:13,fontWeight:600,color:hasPerProjectPath?C.indigo:C.text,textAlign:"left"}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke={hasPerProjectPath?C.indigo:C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    {hasPerProjectPath?"Folder set":"Scan folder"}
+                  </button>
+                  {files.length>=2&&(
+                    <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
+                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
+                      border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
+                      fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      A/B compare
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Expanded content */}
+          {sectionOpen&&(
+            <div style={{marginTop:8}}>
+              {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
+              {showScan&&ScanPanel}
+              {FilterPills}
+              {FileList}
+            </div>
+          )}
+        </>
+      ) : (
+        /* ── STANDALONE MODE: original layout ── */
+        <>
+          <div style={{display:"flex",gap:7,marginBottom:10}}>
+            <button onClick={()=>fileInputRef.current?.click()} disabled={uploading}
+              style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+                padding:"10px 0",borderRadius:10,cursor:uploading?"default":"pointer",
+                border:`1.5px dashed ${C.lineS}`,background:"transparent",
+                color:uploading?C.dim:C.faint,fontSize:12.5,fontWeight:600,fontFamily:"var(--font-sans)"}}>
+              {uploading?<><Spinner/>Analyzing…</>:<><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>Upload file</>}
+            </button>
+            <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
+              style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,
+                color:showScan||hasPerProjectPath?C.indigo:C.faint,gap:5,display:"flex",
+                borderColor:showScan||hasPerProjectPath?C.accentBorder:C.lineS,
+                background:showScan||hasPerProjectPath?C.accentAlpha:C.surf2}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7h5M3 12h8M3 17h5M16 5l4 4-8 8-4-1 1-4 7-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {hasPerProjectPath?"Folder set":"Scan folder"}
+            </button>
+            {files.length>=2&&(
+              <button onClick={()=>setAbOpen(true)}
+                style={{...iconBtn,width:"auto",padding:"0 11px",fontSize:12,fontWeight:600,gap:5,display:"flex",
+                  color:C.faint,borderColor:C.lineS,background:C.surf2}}>
+                A/B
               </button>
             )}
           </div>
-          {scanMsg&&<div style={{fontSize:11.5,marginTop:7,color:scanMsg.startsWith("No new")||scanMsg.startsWith("Found")?C.green:C.flame}}>{scanMsg}</div>}
-        </div>
+          {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
+          {showScan&&ScanPanel}
+          {!hasPerProjectPath&&hasGlobalFolder&&!showScan&&(
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"7px 10px",background:C.surf2,border:`1px solid ${C.line}`,borderRadius:8}}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={C.faint} strokeWidth="1.7"/><path d="M12 8v4M12 16h.01" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+              <span style={{fontSize:11,color:C.faint,flex:1}}>Using global folder from Settings</span>
+            </div>
+          )}
+          {FilterPills}
+          {FileList}
+        </>
       )}
-
-      {/* Global folder notice — only show if no per-project path is set */}
-      {!hasPerProjectPath&&hasGlobalFolder&&!showScan&&(
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"7px 10px",background:C.surf2,border:`1px solid ${C.line}`,borderRadius:8}}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={C.faint} strokeWidth="1.7"/><path d="M12 8v4M12 16h.01" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
-          <span style={{fontSize:11,color:C.faint,flex:1}}>Using global folder from Settings</span>
-        </div>
-      )}
-
-      {/* Filter badges */}
-      {!loading&&files.length>0&&(()=>{
-        const fmts=[...new Set(files.map(f=>(f.format||"").toUpperCase()))].filter(f=>["WAV","MP3"].includes(f));
-        const verLabels=[...new Set(files.map(f=>extractVersion(f.name)).filter(Boolean))];
-        const hasFinal=verLabels.includes("final");
-        const vTagLabels=verLabels.filter(v=>v!=="final"&&!/^v\d/.test(v)); // master,demo,draft
-        const hasVNum=files.some(f=>/\bv\d/i.test(f.name||""));
-        const pills=[
-          ...fmts.map(f=>({type:"formats",value:f,label:f})),
-          ...(hasFinal?[{type:"versions",value:"final",label:"Final"}]:[]),
-          ...(hasVNum?[{type:"versions",value:"versioned",label:"Versioned"}]:[]),
-          ...vTagLabels.map(v=>({type:"versions",value:v,label:v.charAt(0).toUpperCase()+v.slice(1)})),
-        ];
-        if(pills.length===0)return null;
-        const anyActive=(activeFilters.formats||[]).length>0||(activeFilters.versions||[]).length>0;
-        const clearFilters=()=>{
-          const cleared={formats:[],versions:[]};
-          setActiveFilters(cleared);
-          saveFilters(cleared);
-        };
-        return(
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10,alignItems:"center"}}>
-            {pills.map(({type,value,label})=>{
-              const on=activeFilters[type]?.includes(value);
-              return(
-                <button key={type+value} onClick={()=>toggleFilter(type,value)}
-                  style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:20,cursor:"pointer",
-                    letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:"var(--font-sans)",
-                    border:`1px solid ${on?C.accentBorder:C.lineS}`,
-                    background:on?C.accentAlpha:"transparent",
-                    color:on?C.indigo:C.dim,transition:"all .15s"}}>
-                  {label}
-                </button>
-              );
-            })}
-            {anyActive&&<button onClick={clearFilters}
-              style={{fontSize:10.5,fontWeight:600,padding:"3px 9px",borderRadius:20,cursor:"pointer",
-                fontFamily:"var(--font-sans)",border:"none",background:"transparent",color:C.dim}}>
-              Clear
-            </button>}
-          </div>
-        );
-      })()}
-
-      {/* Section header (group Versions tab) — rendered after filters, before file list */}
-      {sectionLabel&&(
-        <button onClick={onToggleSec} style={{
-          width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-          padding:"8px 0 6px",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",marginBottom:4,
-        }}>
-          <span style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase"}}>{sectionLabel}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:sectionOpen?"rotate(180deg)":"none",transition:"transform .18s",flexShrink:0}}>
-            <path d="M6 9l6 6 6-6" stroke={C.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      )}
-
-      {/* File list */}
-      {(!sectionLabel||sectionOpen)&&loading?(
-        <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>Loading…</div>
-      ):(!sectionLabel||sectionOpen)&&files.length===0?(
-        <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a file or scan a folder.</div>
-      ):(!sectionLabel||sectionOpen)?(()=>{
-        // Only apply filter values that actually exist in the current file list
-        const availFmts=new Set(files.map(f=>(f.format||"").toUpperCase()).filter(f=>["WAV","MP3"].includes(f)));
-        const availVers=new Set(files.map(f=>extractVersion(f.name)).filter(Boolean));
-        const hasVNum=files.some(f=>/\bv\d/i.test(f.name||""));
-        if(hasVNum)availVers.add("versioned");
-        const fmtF=(activeFilters.formats||[]).filter(v=>availFmts.has(v));
-        const verF=(activeFilters.versions||[]).filter(v=>availVers.has(v));
-        const visible=sortAudioFiles(files).filter(f=>{
-          if(fmtF.length>0){
-            const fmt=(f.format||"").toUpperCase();
-            if(fmt&&!fmtF.includes(fmt))return false;
-          }
-          if(verF.length>0){
-            const ver=extractVersion(f.name);
-            const matchFinal=verF.includes("final")&&ver==="final";
-            const matchVersioned=verF.includes("versioned")&&/\bv\d/i.test(f.name||"");
-            const matchLabel=verF.some(v=>v!=="final"&&v!=="versioned"&&ver===v);
-            if(!matchFinal&&!matchVersioned&&!matchLabel)return false;
-          }
-          return true;
-        });
-        if(visible.length===0)return <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No files match the selected filters.</div>;
-        return visible.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName}
-          onDelete={handleDelete} onRename={handleRename} onMarkSeen={handleMarkSeen}/>);
-      })():null}
     </div>
   );
 }
@@ -965,7 +1032,7 @@ function NotesEditor({value,onChange}) {
 
 function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCountChange,borderTop=false,forcedOpen,onIndividualToggle}) {
   const C=useTheme();
-  const [open,setOpen]=useState(true);
+  const [open,setOpen]=useState(false); // collapsed by default
   const isOpen=forcedOpen!=null?forcedOpen:open;
   const handleToggle=()=>{setOpen(v=>!v);onIndividualToggle?.();};
   return(
