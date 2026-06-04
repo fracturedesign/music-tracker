@@ -867,9 +867,9 @@ function NotesEditor({value,onChange}) {
   );
 }
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
-  const [tab,setTab]=useState("open");
+  const [tab,setTab]=useState(initialTab||"open");
   const [versionsCount,setVersionsCount]=useState(null);
   const [renamingProject,setRenamingProject]=useState(false);
   const [renameVal,setRenameVal]=useState(name);
@@ -1772,6 +1772,8 @@ export default function App() {
   const [newProjectEnd,setNewProjectEnd]=useState("");
   const [newProjectDatesOpen,setNewProjectDatesOpen]=useState(false);
   const [notesModal,setNotesModal]=useState(null);
+  const [notesModalTab,setNotesModalTab]=useState("open");
+  const openProject=(name,tab="open")=>{setNotesModal(name);setNotesModalTab(tab);};
   const [sheet,setSheet]=useState(null);
   const [allOpen,setAllOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
@@ -2037,7 +2039,7 @@ export default function App() {
     // Update audio counts map
     setAudioFileCounts(prev=>{const next={...prev};if(next[oldName]!==undefined){next[newName]=next[oldName];delete next[oldName];}return next;});
     // Keep panel open with new name
-    setNotesModal(newName);
+    openProject(newName);
   };
 
   const downloadBackup=async()=>{
@@ -2130,13 +2132,13 @@ export default function App() {
     return(
     <div style={{background:C.surf2,borderRadius:14,padding:"11px 13px 11px 14px"}}>
       <div style={{display:"flex",gap:10,alignItems:"center"}}>
-        {/* Status bubble — vertically centred in the card */}
-        <StatusDropdown name={p.name} status={p.status||"active"}/>
         {/* Content */}
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+          {/* Project name — clickable */}
+          <button onClick={()=>openProject(p.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",width:"100%"}}>
+            <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+          </button>
           <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-            {/* dates first */}
             {tlLabel?(
               <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlColor,fontWeight:500,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlColor} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlColor} strokeWidth="2" strokeLinecap="round"/></svg>
@@ -2148,15 +2150,18 @@ export default function App() {
                 dates
               </button>
             )}
-            {/* sessions */}
             <span style={{color:C.dim}}>·</span>
             <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
-            {/* audio files */}
-            {audioCount>0&&<><span style={{color:C.dim}}>·</span><span style={{display:"flex",alignItems:"center",gap:2}}><svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}</span></>}
+            {audioCount>0&&<><span style={{color:C.dim}}>·</span>
+              <button onClick={()=>openProject(p.name,"versions")} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.dim,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.dim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
+              </button>
+            </>}
           </div>
         </div>
-        {/* Action buttons */}
-        <button onClick={()=>setNotesModal(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+        {/* Status pill + Open button + action */}
+        <StatusDropdown name={p.name} status={p.status||"active"}/>
+        <button onClick={()=>openProject(p.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
           {Icon.note(C.indigo)}
         </button>
         {isDoneOrReleased
@@ -2188,7 +2193,7 @@ export default function App() {
     <ThemeCtx.Provider value={C}>
     <div className="app" style={{background:C.bg}}>
 
-      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} plannedStart={projectMap[notesModal]?.plannedStart||""} plannedEnd={projectMap[notesModal]?.plannedEnd||""} onSaveTimeline={(s,e)=>saveTimeline(notesModal,s,e)} sessions={sessions} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject}/>}
+      {notesModal&&<ProjectPanel name={notesModal} notes={projectMap[notesModal]?.notes||""} onSave={n=>saveNotes(notesModal,n)} plannedStart={projectMap[notesModal]?.plannedStart||""} plannedEnd={projectMap[notesModal]?.plannedEnd||""} onSaveTimeline={(s,e)=>saveTimeline(notesModal,s,e)} sessions={sessions} onClose={()=>setNotesModal(null)} globalAudioFolder={globalAudioFolder} onRename={renameProject} initialTab={notesModalTab}/>}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
@@ -2339,7 +2344,7 @@ export default function App() {
               const dayTl=timedProjects.map((p,li)=>({p,li})).filter(({p})=>p.plannedStart<=ds&&ds<=(p.plannedEnd||p.plannedStart));
               const hasProject=dayTl.length>0;
               const firstProject=hasProject?dayTl[0].p:null;
-              const handleClick=()=>{if(firstProject)setNotesModal(firstProject.name);};
+              const handleClick=()=>{if(firstProject)openProject(firstProject.name);};
               return(
                 <button key={ds} onClick={handleClick} style={{aspectRatio:"1",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,cursor:hasProject?"pointer":"default",padding:0,position:"relative",overflow:"hidden",background:isToday?C.accentAlpha:hasSess?C.accentAlpha2:"transparent",border:isToday?`1.5px solid ${C.indigo}`:"1.5px solid transparent"}}>
                   <span style={{fontSize:12.5,color:isToday?C.indigo:hasSess?C.text:C.faint,fontWeight:hasSess?600:400,position:"relative",zIndex:1}}>{Number(ds.slice(8))}</span>
