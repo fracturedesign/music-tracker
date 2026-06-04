@@ -1198,12 +1198,13 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
           <div style={{flex:1,overflowY:"auto"}}>
             {isGroup?(
               <>
-                {[{name, label: name+" (group)"}, ...childProjects.map(c=>({name:c.name,label:c.name}))].map(({name:pn,label},i)=>(
-                  <div key={pn}>
-                    <div style={{padding:"10px 16px 4px",fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",borderTop:i>0?`1px solid ${C.line}`:"none"}}>{label}</div>
-                    <VersionsTab projectName={pn} onCountChange={i===0?setVersionsCount:undefined} globalAudioFolder={globalAudioFolder}/>
+                {childProjects.map((c,i)=>(
+                  <div key={c.name}>
+                    <div style={{padding:"10px 16px 4px",fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase",borderTop:i>0?`1px solid ${C.line}`:"none"}}>{c.name}</div>
+                    <VersionsTab projectName={c.name} onCountChange={i===0?setVersionsCount:undefined} globalAudioFolder={globalAudioFolder}/>
                   </div>
                 ))}
+                {childProjects.length===0&&<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"32px 0",fontStyle:"italic"}}>No tracks in this group yet</div>}
               </>
             ):(
               <VersionsTab projectName={name} onCountChange={setVersionsCount} globalAudioFolder={globalAudioFolder}/>
