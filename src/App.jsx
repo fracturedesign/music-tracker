@@ -2129,6 +2129,9 @@ export default function App() {
   const [timerNote,setTimerNote]=useState("");
   const [timerCreatingProj,setTimerCreatingProj]=useState(false);
   const [timerNewProjInput,setTimerNewProjInput]=useState("");
+  const [timerProjDropOpen,setTimerProjDropOpen]=useState(false);
+  const [timerNoteOpen,setTimerNoteOpen]=useState(false);
+  const timerProjRef=useRef(null);
   const [prompt]=useState(()=>PROMPTS[Math.floor(Math.random()*PROMPTS.length)]);
   const [tick,setTick]=useState(0);
 
@@ -2140,6 +2143,11 @@ export default function App() {
     },3000);return()=>clearInterval(iv);
   },[]);
   useEffect(()=>{if(timer.phase!=="running")return;const iv=setInterval(()=>setTick(t=>t+1),250);return()=>clearInterval(iv);},[timer.phase]);
+  useEffect(()=>{
+    if(!timerProjDropOpen)return;
+    const h=e=>{if(timerProjRef.current&&!timerProjRef.current.contains(e.target)){setTimerProjDropOpen(false);setTimerCreatingProj(false);setTimerNewProjInput("");}};
+    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+  },[timerProjDropOpen]);
   useEffect(()=>{if(timer.phase==="running"&&Date.now()>=timer.endsAt)setTimer(t=>t.phase==="running"?{...t,phase:"done",remaining:0,endsAt:0}:t);},[tick,timer.phase,timer.endsAt]);
 
   const timerRemaining=timer.phase==="running"?Math.max(0,timer.endsAt-Date.now()):timer.remaining;
@@ -2509,63 +2517,78 @@ export default function App() {
               <button onClick={()=>{const v=Number(customMin);if(v>0)startCountdown(v);}} disabled={!(Number(customMin)>0)}
                 style={{border:"none",borderRadius:12,color:"#fff",padding:"0 22px",fontSize:15,fontWeight:700,cursor:"pointer",background:C.accentGrad,opacity:Number(customMin)>0?1:0.4,fontFamily:"var(--font-sans)"}}>Start</button>
             </div>
-            <div style={{borderTop:`1px solid ${C.line}`,paddingTop:12,marginTop:4}}>
-              <div style={{fontSize:11,color:C.faint,marginBottom:7}}>Project <span style={{opacity:0.6}}>(optional)</span></div>
-              {timerCreatingProj?(
-                <div style={{display:"flex",gap:8}}>
-                  <input value={timerNewProjInput} onChange={e=>setTimerNewProjInput(e.target.value)} placeholder="Project name…" className="mt-text" style={{flex:1}}
-                    onKeyDown={e=>{if(e.key==="Enter")createTimerProject();if(e.key==="Escape"){setTimerCreatingProj(false);setTimerNewProjInput("");}}}
-                    autoFocus/>
-                  <button onClick={createTimerProject} disabled={!timerNewProjInput.trim()} style={{border:"none",borderRadius:10,color:"#fff",padding:"0 14px",fontSize:14,fontWeight:700,cursor:"pointer",background:C.accentGrad,opacity:timerNewProjInput.trim()?1:0.4}}>✓</button>
-                  <button onClick={()=>{setTimerCreatingProj(false);setTimerNewProjInput("");}} style={{border:`1px solid ${C.line}`,borderRadius:10,background:"transparent",color:C.muted,padding:"0 12px",fontSize:14,cursor:"pointer"}}>✕</button>
-                </div>
-              ):(
-                <div style={{display:"flex",gap:8}}>
-                  <select value={timerProject} onChange={e=>setTimerProject(e.target.value)} className="mt-text" style={{flex:1}}>
-                    <option value="">No project</option>
-                    {projects.filter(p=>p.status!=="archived").map(p=><option key={p.name} value={p.name}>{p.name}</option>)}
-                  </select>
-                  <button onClick={()=>setTimerCreatingProj(true)} style={{border:`1px solid ${C.line}`,borderRadius:10,background:"transparent",color:C.muted,padding:"0 12px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>＋ New</button>
-                </div>
-              )}
-            </div>
           </>
         ):showTimerUI?(
           <>
+            {/* Header: status + icon buttons + discard */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{...eyebrow,color:timer.phase==="done"?C.greenS:timer.phase==="running"?C.indigo:C.muted,display:"flex",alignItems:"center",gap:8}}>
                 <span className={timer.phase==="running"?"pulse-dot":""} style={{width:9,height:9,borderRadius:"50%",background:timer.phase==="done"?C.green:timer.phase==="running"?C.indigo:C.dim,boxShadow:timer.phase==="running"?`0 0 10px ${C.indigo}`:"none"}}/>
                 {timer.phase==="done"?"Time's up":timer.phase==="running"?"Focusing":"Paused"} · {timerTargetMin}m
               </span>
-              <button onClick={cancelTimer} style={{fontSize:12.5,fontWeight:600,color:C.faint,background:"transparent",border:"none",cursor:"pointer"}}>Discard</button>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                {/* Project picker icon */}
+                <div ref={timerProjRef} style={{position:"relative"}}>
+                  <button onClick={()=>{setTimerProjDropOpen(o=>!o);setTimerCreatingProj(false);setTimerNewProjInput("");}}
+                    title={timerProject||"Choose project"}
+                    style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:8,border:"none",cursor:"pointer",
+                      background:timerProject?C.accentAlpha:"transparent",color:timerProject?C.indigo:C.faint,fontFamily:"var(--font-sans)"}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/></svg>
+                    {timerProject&&<span style={{fontSize:11,fontWeight:600,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{timerProject}</span>}
+                  </button>
+                  {timerProjDropOpen&&(()=>{
+                    const closeDropdown=()=>{setTimerProjDropOpen(false);setTimerCreatingProj(false);setTimerNewProjInput("");};
+                    const availProjects=projects.filter(p=>!["done","released","archived"].includes(p.status||"active"));
+                    return(
+                      <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:30,background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:180,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}
+                        onMouseDown={e=>e.stopPropagation()}>
+                        {timerCreatingProj?(
+                          <div style={{padding:"6px 8px",display:"flex",gap:6}}>
+                            <input value={timerNewProjInput} onChange={e=>setTimerNewProjInput(e.target.value)} placeholder="Project name…" className="mt-text"
+                              style={{flex:1,fontSize:12,padding:"5px 8px"}} autoFocus
+                              onKeyDown={e=>{if(e.key==="Enter")createTimerProject().then(closeDropdown);if(e.key==="Escape"){setTimerCreatingProj(false);setTimerNewProjInput("");}}}/>
+                            <button onClick={()=>createTimerProject().then(closeDropdown)} disabled={!timerNewProjInput.trim()}
+                              style={{border:"none",borderRadius:7,color:"#fff",padding:"0 10px",fontSize:13,fontWeight:700,cursor:"pointer",background:C.accentGrad,opacity:timerNewProjInput.trim()?1:0.4}}>✓</button>
+                          </div>
+                        ):(
+                          <>
+                            {timerProject&&(
+                              <button onClick={()=>{setTimerProject("");closeDropdown();}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",borderRadius:9,border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:12.5,color:C.faint,textAlign:"left"}}>
+                                <span style={{width:8,height:8,borderRadius:"50%",background:C.dim,flexShrink:0}}/>No project
+                              </button>
+                            )}
+                            {availProjects.map(p=>{
+                              const active=p.name===timerProject;
+                              return(
+                                <button key={p.name} onClick={()=>{setTimerProject(p.name);closeDropdown();}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",borderRadius:9,border:"none",background:active?C.accentAlpha:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:12.5,fontWeight:active?600:400,color:active?C.indigo:C.text,textAlign:"left"}}>
+                                  <span style={{width:8,height:8,borderRadius:"50%",background:active?C.indigo:C.dim,flexShrink:0}}/>
+                                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                                  {active&&<svg style={{marginLeft:"auto",flexShrink:0}} width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={C.indigo} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                </button>
+                              );
+                            })}
+                            <div style={{height:1,background:C.line,margin:"4px 8px"}}/>
+                            <button onClick={()=>setTimerCreatingProj(true)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",borderRadius:9,border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:12.5,color:C.muted,textAlign:"left"}}>
+                              <span style={{width:8,height:8,borderRadius:"50%",background:C.dim,flexShrink:0}}/>＋ New project
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+                {/* Notes toggle icon */}
+                <button onClick={()=>setTimerNoteOpen(o=>!o)} title="Session notes"
+                  style={{padding:"4px 7px",borderRadius:8,border:"none",cursor:"pointer",
+                    background:timerNoteOpen||timerNote?C.accentAlpha:"transparent",color:timerNoteOpen||timerNote?C.indigo:C.faint}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h10M4 14h7" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>
+                </button>
+                <button onClick={cancelTimer} style={{fontSize:12.5,fontWeight:600,color:C.faint,background:"transparent",border:"none",cursor:"pointer",marginLeft:4}}>Discard</button>
+              </div>
             </div>
             <div className="mono" style={{fontSize:50,fontWeight:700,letterSpacing:"-0.02em",margin:"10px 0 12px",color:timer.phase==="done"?C.greenS:C.text}}>{fmtClock(timerRemaining)}</div>
             <div style={{height:5,borderRadius:5,background:"rgba(255,255,255,0.08)",overflow:"hidden",marginBottom:14}}>
               <div style={{height:"100%",width:`${timerProgress*100}%`,borderRadius:5,background:timer.phase==="done"?"linear-gradient(90deg,#6ee7b7,#34d399)":C.accentGrad,transition:"width .3s linear"}}/>
-            </div>
-            {/* Project + notes during timer */}
-            <div style={{marginBottom:14}}>
-              {timerCreatingProj?(
-                <div style={{display:"flex",gap:8,marginBottom:timerProject?8:0}}>
-                  <input value={timerNewProjInput} onChange={e=>setTimerNewProjInput(e.target.value)} placeholder="Project name…" className="mt-text" style={{flex:1}}
-                    onKeyDown={e=>{if(e.key==="Enter")createTimerProject();if(e.key==="Escape"){setTimerCreatingProj(false);setTimerNewProjInput("");}}}
-                    autoFocus/>
-                  <button onClick={createTimerProject} disabled={!timerNewProjInput.trim()} style={{border:"none",borderRadius:10,color:"#fff",padding:"0 14px",fontSize:14,fontWeight:700,cursor:"pointer",background:C.accentGrad,opacity:timerNewProjInput.trim()?1:0.4}}>✓</button>
-                  <button onClick={()=>{setTimerCreatingProj(false);setTimerNewProjInput("");}} style={{border:`1px solid ${C.line}`,borderRadius:10,background:"transparent",color:C.muted,padding:"0 12px",fontSize:14,cursor:"pointer"}}>✕</button>
-                </div>
-              ):(
-                <div style={{display:"flex",gap:8,marginBottom:timerProject?8:0}}>
-                  <select value={timerProject} onChange={e=>setTimerProject(e.target.value)} className="mt-text" style={{flex:1,fontSize:13}}>
-                    <option value="">No project</option>
-                    {projects.filter(p=>p.status!=="archived").map(p=><option key={p.name} value={p.name}>{p.name}</option>)}
-                  </select>
-                  <button onClick={()=>setTimerCreatingProj(true)} title="New project" style={{border:`1px solid ${C.line}`,borderRadius:10,background:"transparent",color:C.muted,padding:"0 12px",fontSize:13,fontWeight:600,cursor:"pointer"}}>＋</button>
-                </div>
-              )}
-              {timerProject&&(
-                <textarea value={timerNote} onChange={e=>setTimerNote(e.target.value)} placeholder="Quick notes for this session…" className="mt-text"
-                  style={{width:"100%",resize:"none",minHeight:58,fontSize:13,lineHeight:1.5,boxSizing:"border-box"}} rows={2}/>
-              )}
             </div>
             {timer.phase==="done"?(
               <button onClick={logCountdown} style={{width:"100%",padding:15,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:700,color:"#0b0b10",background:"linear-gradient(135deg,#6ee7b7,#34d399)"}}>✓ Log {timerTargetMin}m session</button>
@@ -2574,6 +2597,13 @@ export default function App() {
                 <button onClick={timer.phase==="running"?pauseCountdown:resumeCountdown} style={{flex:1,padding:15,borderRadius:14,cursor:"pointer",border:`1px solid ${C.lineS}`,background:"transparent",color:C.muted,fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:600}}>{timer.phase==="running"?"⏸ Pause":"▶ Resume"}</button>
                 <button onClick={logCountdown} style={{flex:1,padding:15,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:700,color:"#fff",background:C.accentGrad,boxShadow:`0 8px 22px -8px ${C.accentGlow}`}}>✓ Log {timerLogMin}m</button>
               </div>
+            )}
+            {/* Notes textarea — shown when toggled */}
+            {(timerNoteOpen||timerNote)&&(
+              <textarea value={timerNote} onChange={e=>setTimerNote(e.target.value)}
+                placeholder="Session notes…" className="mt-text"
+                style={{width:"100%",marginTop:10,resize:"none",minHeight:64,fontSize:13,lineHeight:1.55,boxSizing:"border-box"}}
+                rows={3} autoFocus={timerNoteOpen&&!timerNote}/>
             )}
           </>
         ):(
