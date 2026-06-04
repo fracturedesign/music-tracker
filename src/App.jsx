@@ -931,7 +931,7 @@ function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCount
   );
 }
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,canGoBack=false}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,audioFileCounts={},canGoBack=false}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const isGroupType=!!GROUP_TYPE_CFG[type];
   const [tab,setTab]=useState(initialTab&&initialTab!=="open"?initialTab:isGroupType?"tracks":"open");
@@ -1181,6 +1181,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
                 return C.indigo;
               })();
               const cnt=sessions?.filter(s=>s.project===c.name).length||0;
+              const audioCount=audioFileCounts[c.name]||0;
               return(
                 <div key={c.name} style={{background:C.surf2,borderRadius:12,padding:"11px 12px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
                   <div style={{flex:1,minWidth:0}}>
@@ -1196,6 +1197,11 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
                       )}
                       {tlLabel&&<span style={{color:C.dim}}>·</span>}
                       <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
+                      {audioCount>0&&<><span style={{color:C.dim}}>·</span>
+                        <button onClick={()=>onOpenProject?.(c.name,"versions")} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.green,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.green} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
+                        </button>
+                      </>}
                     </div>
                   </div>
                   <button onClick={()=>onOpenProject?.(c.name)} style={{fontSize:10.5,fontWeight:700,color:sd,background:`${sd}1a`,border:`1.5px solid ${sd}55`,borderRadius:20,padding:"2px 8px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4}}>{sc.label}</button>
@@ -2589,9 +2595,19 @@ export default function App() {
   const doneProjects=projects.filter(p=>p.status==="done");
   const releasedProjects=projects.filter(p=>p.status==="released");
   const groupProjects=activeProjects.filter(p=>GROUP_TYPE_CFG[p.type]);
-  const topLevelActive=activeProjects.filter(p=>!p.parentGroup);
   const dateSort=(a,b)=>{const sa=a.plannedStart,sb=b.plannedStart;if(sa&&sb)return sa.localeCompare(sb);if(sa)return -1;if(sb)return 1;return 0;};
   const childrenOf=name=>[...activeProjects.filter(p=>p.parentGroup===name)].sort(dateSort);
+  // For groups, effective start = earliest of group's own date and any child's date
+  const effectiveStart=p=>{
+    if(!GROUP_TYPE_CFG[p.type])return p.plannedStart||"";
+    const dates=[p.plannedStart,...activeProjects.filter(c=>c.parentGroup===p.name).map(c=>c.plannedStart)].filter(Boolean);
+    return dates.length?dates.sort()[0]:"";
+  };
+  const topLevelActive=[...activeProjects.filter(p=>!p.parentGroup)].sort((a,b)=>{
+    const sa=effectiveStart(a),sb=effectiveStart(b);
+    if(sa&&sb)return sa.localeCompare(sb);
+    if(sa)return -1;if(sb)return 1;return 0;
+  });
 
   /* actions */
   const commitSession=async(form,id,fromTimer)=>{
@@ -2959,7 +2975,7 @@ export default function App() {
             status={proj.status||"active"} onStatusChange={(name,s)=>updateProjectStatus(name,s)}
             type={proj.type} childProjects={children} ungroupedProjects={ungrouped}
             onOpenProject={openProject} onAddToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup}
-            canGoBack={idx>0}
+            audioFileCounts={audioFileCounts} canGoBack={idx>0}
           />
         );
       })}
