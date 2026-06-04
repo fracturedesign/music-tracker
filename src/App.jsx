@@ -884,11 +884,9 @@ function TrackCard({c,sessions,audioFileCounts,projectColorMap,onOpenProject,onR
   const cnt=sessions?.filter(s=>s.project===c.name).length||0;
   const audioCount=audioFileCounts[c.name]||0;
   return(
-    <div key={c.name} style={{background:C.surf2,borderRadius:12,padding:"11px 12px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
+    <div onClick={()=>onOpenProject?.(c.name)} style={{background:C.surf2,borderRadius:12,padding:"11px 12px 11px 14px",display:"flex",gap:10,alignItems:"center",cursor:"pointer"}}>
       <div style={{flex:1,minWidth:0}}>
-        <button onClick={()=>onOpenProject?.(c.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",width:"100%"}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
-        </button>
+        <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
         <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
           {tlLabel&&(
             <span style={{display:"flex",alignItems:"center",gap:2,color:tlColor,fontWeight:500}}>
