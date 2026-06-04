@@ -2756,7 +2756,7 @@ export default function App() {
     const isDoneOrReleased=["done","released"].includes(p.status||"active");
     const totalSessions=children.reduce((s,c)=>s+(projectCounts[c.name]||0),0)+(projectCounts[p.name]||0);
     return(
-      <div onClick={()=>openProject(p.name)} style={{background:C.surf2,borderRadius:14,overflow:"visible",cursor:"pointer"}}>
+      <div onClick={()=>openProject(p.name)} style={{background:C.surf2,borderRadius:14,overflow:"visible",cursor:"pointer",border:`1px solid ${dot}55`}}>
         {/* Group header */}
         <div style={{padding:"11px 13px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
           <button onClick={e=>{e.stopPropagation();setCollapsed(v=>!v);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"flex",alignItems:"center",color:C.faint,flexShrink:0}}>
