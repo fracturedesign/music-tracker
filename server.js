@@ -213,14 +213,26 @@ app.post("/api/audio/:project/scan", async (req, res) => {
   const existingPaths = new Set(existing.map(f => f.linkedPath).filter(Boolean));
 
   const audioExts = [".wav", ".mp3"];
-  // Match files whose basename starts with the project name (case-insensitive),
-  // followed by end-of-string or a separator char (space, dash, underscore, dot).
-  // This prevents "Flower of memories" from matching project "Fading Flower".
+  // Match files whose basename equals the project name OR follows one of these patterns:
+  //   "Project - anything"   (dash-separated version/mix label)
+  //   "Project v2" / "Project_v2"  (version number)
+  //   "Project (anything)"   (parenthesised label)
+  //   "Project Final" / "Project Mixdown" / "Project Final Mixdown" (wildcard words only)
+  // This prevents "Overgrown Statue" from matching project "Overgrown".
+  const WILDCARD_WORDS = new Set(['final', 'mixdown']);
   const nameMatchesProject = (filePath, filter) => {
     if (!filter) return true;
     const base = basename(filePath, extname(filePath)).toLowerCase();
     const f = filter.toLowerCase();
-    return base === f || /^[-_ .]/.test(base.slice(f.length)) && base.startsWith(f);
+    if (base === f) return true;
+    if (!base.startsWith(f)) return false;
+    const rest = base.slice(f.length);
+    if (/^ - /.test(rest)) return true;           // " - Mix 1", " - Master"
+    if (/^[_ ]v\d/.test(rest)) return true;       // "_v2", " v2"
+    if (/^ \(/.test(rest)) return true;           // " (Master)"
+    // Wildcard-only suffix: one or more of the allowed words separated by space/underscore
+    const words = rest.replace(/^[\s_]+/, '').split(/[\s_]+/);
+    return words.length > 0 && words[0] !== '' && words.every(w => WILDCARD_WORDS.has(w));
   };
   const toAdd = walkDir(folderPath)
     .filter(f => audioExts.includes(extname(f).toLowerCase()))
