@@ -825,89 +825,26 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
 }
 
 /* ─── project panel (notes + versions) ─── */
-function parseLines(text) {
-  return (text||"").split("\n").map(line=>{
-    if(/^-x /i.test(line))return{type:"check",checked:true,content:line.slice(3)};
-    if(/^- /.test(line))return{type:"check",checked:false,content:line.slice(2)};
-    return{type:"text",content:line};
-  });
-}
-function serializeLines(lines){return lines.map(l=>l.type==="check"?(l.checked?"-x ":"- ")+l.content:l.content).join("\n");}
-
-/* ─── line-by-line notes editor with auto-checkbox (Notion-style) ─── */
 function NotesEditor({value,onChange}) {
   const C=useTheme();
-  const [lines,setLines]=useState(()=>{
-    const p=parseLines(value);
-    return p.length?p:[{type:"text",content:""}];
-  });
-  const lineRefs=useRef([]);
-
-  const emit=next=>{setLines(next);onChange(serializeLines(next));};
-
-  const update=(i,content)=>{
-    // Typing "- " at start of a plain text line → auto-convert to checkbox
-    if(lines[i].type==="text"&&content==="- "){
-      const next=[...lines];next[i]={type:"check",checked:false,content:""};
-      emit(next);setTimeout(()=>lineRefs.current[i]?.focus(),0);return;
-    }
-    const next=[...lines];next[i]={...lines[i],content};emit(next);
-  };
-
-  const toggle=i=>{const next=[...lines];next[i]={...lines[i],checked:!lines[i].checked};emit(next);};
-
-  const moveFocus=i=>setTimeout(()=>{
-    const el=lineRefs.current[i];
-    if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length);}catch{}}
-  },0);
-
-  const onKey=(i,e)=>{
-    if(e.key==="Enter"){
-      e.preventDefault();
-      const next=[...lines];
-      // Continue checkbox list on Enter; plain text creates plain line
-      next.splice(i+1,0,{type:lines[i].type==="check"?"check":"text",checked:false,content:""});
-      emit(next);moveFocus(i+1);
-    } else if(e.key==="Backspace"&&lines[i].content===""){
-      if(lines[i].type==="check"){
-        // Backspace on empty checkbox → demote back to text
-        e.preventDefault();
-        const next=[...lines];next[i]={type:"text",content:""};
-        emit(next);setTimeout(()=>lineRefs.current[i]?.focus(),0);
-      } else if(i>0){
-        e.preventDefault();
-        const next=[...lines];next.splice(i,1);
-        emit(next);moveFocus(i-1);
-      }
-    }
-  };
-
+  const ref=useRef(null);
+  // Auto-grow: reset height to auto then set to scrollHeight
+  useEffect(()=>{
+    const el=ref.current;if(!el)return;
+    el.style.height="auto";el.style.height=el.scrollHeight+"px";
+  },[value]);
   return(
-    <div style={{borderTop:`1px solid ${C.line}`,minHeight:120,padding:"8px 16px 4px"}}>
-      {lines.map((line,i)=>(
-        <div key={i} style={{display:"flex",alignItems:"center",gap:8,minHeight:28,padding:"1px 0"}}>
-          {line.type==="check"?(
-            <button onClick={()=>toggle(i)} style={{flexShrink:0,width:16,height:16,borderRadius:4,
-              border:`1.5px solid ${line.checked?C.deep:C.dim}`,background:line.checked?C.deep:"transparent",
-              cursor:"pointer",display:"grid",placeItems:"center",padding:0}}>
-              {line.checked&&<svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </button>
-          ):<div style={{width:16,flexShrink:0}}/>}
-          <input
-            ref={el=>lineRefs.current[i]=el}
-            value={line.content}
-            onChange={e=>update(i,e.target.value)}
-            onKeyDown={e=>onKey(i,e)}
-            placeholder={i===0&&line.type==="text"?`Notes… type "- " for a checkbox`:undefined}
-            style={{flex:1,background:"transparent",border:"none",outline:"none",
-              fontSize:13,lineHeight:1.7,fontFamily:"var(--font-mono)",padding:0,
-              color:line.checked?C.dim:C.text,
-              textDecoration:line.type==="check"&&line.checked?"line-through":"none"}}
-          />
-        </div>
-      ))}
-      {/* Click empty area below to focus last line */}
-      <div style={{minHeight:24,cursor:"text"}} onClick={()=>lineRefs.current[lines.length-1]?.focus()}/>
+    <div style={{borderTop:`1px solid ${C.line}`,padding:"8px 16px 4px"}}>
+      <textarea
+        ref={ref}
+        value={value||""}
+        onChange={e=>onChange(e.target.value)}
+        placeholder="Notes…"
+        style={{width:"100%",minHeight:120,background:"transparent",border:"none",outline:"none",
+          resize:"none",overflow:"hidden",fontSize:13,lineHeight:1.7,
+          fontFamily:"var(--font-mono)",padding:0,color:C.text,
+          boxSizing:"border-box",display:"block"}}
+      />
     </div>
   );
 }
