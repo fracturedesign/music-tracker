@@ -1482,92 +1482,340 @@ function GoalEditSheet({goalHours,onSave,onClose}) {
   );
 }
 
-/* ─── weekly review sheet ─── */
-function WeeklyReviewSheet({sessions,goalHours,currentStreak,onClose}) {
+/* ─── analytics sheet ─── */
+const MOOD_LABEL=["","Rough","Neutral","Good","Great","Flow"];
+function AnalyticsSheet({sessions,goalHours,currentStreak,longestStreak,onClose}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
-  const thisStart=getWeekStart(0);
-  const lastStart=getWeekStart(1);
-  const thisWeekSessions=sessions.filter(s=>s.date>=thisStart&&s.date<=today);
-  const lastWeekSessions=sessions.filter(s=>{const ls=parseDate(lastStart),le=new Date(ls);le.setDate(ls.getDate()+6);const d=parseDate(s.date);return d>=ls&&d<=le;});
-  const thisH=weekHours(sessions,thisStart);
-  const lastH=weekHours(sessions,lastStart);
-  const diff=thisH-lastH;
-  const pct=goalHours>0?Math.min(1,thisH/goalHours):0;
-  // project breakdown this week
+  const [tab,setTab]=useState("overview");
+
+  // ── totals ──────────────────────────────────────────────────
+  const totalMins=totalMin(sessions);
+  const totalSess=sessions.length;
+  const avgMins=totalSess?Math.round(totalMins/totalSess):0;
+  const longestSess=totalSess?[...sessions].sort((a,b)=>b.duration-a.duration)[0]:null;
+
+  // this week vs last
+  const thisStart=getWeekStart(0),lastStart=getWeekStart(1);
+  const thisH=weekHours(sessions,thisStart),lastH=weekHours(sessions,lastStart);
+  const weekDiff=thisH-lastH;
+
+  // best day of week (all-time duration)
+  const dowMins=Array(7).fill(0),dowCount=Array(7).fill(0);
+  sessions.forEach(s=>{const d=(parseDate(s.date).getDay()+6)%7;dowMins[d]+=s.duration;dowCount[d]++;});
+  const bestDayIdx=dowMins.indexOf(Math.max(...dowMins));
+  const maxDowMins=Math.max(...dowMins,1);
+
+  // best time of day
+  const todAcc=TOD.map(t=>({...t,count:0,mins:0}));
+  let todTotal=0;
+  sessions.forEach(s=>{if(s.hour==null)return;const i=todAcc.findIndex(t=>t.test(s.hour));if(i>=0){todAcc[i].count++;todAcc[i].mins+=s.duration;todTotal++;}});
+  const bestTOD=todAcc.reduce((a,b)=>b.mins>a.mins?b:a,todAcc[0]);
+
+  // consistency — % of last 12 weeks with ≥1 session
+  const weeks12starts=Array.from({length:12},(_,i)=>getWeekStart(11-i));
+  const activeWeeks=weeks12starts.filter(ws=>{
+    const we=new Date(parseDate(ws));we.setDate(parseDate(ws).getDate()+6);
+    return sessions.some(s=>s.date>=ws&&s.date<=toDateStr(we));
+  }).length;
+  const consistency=Math.round(activeWeeks/12*100);
+
+  // by session type
+  const tagMap={};
+  sessions.forEach(s=>{const t=s.tag||"Untagged";if(!tagMap[t])tagMap[t]={mins:0,count:0};tagMap[t].mins+=s.duration;tagMap[t].count++;});
+  const tagTotal=Object.values(tagMap).reduce((a,b)=>a+b.mins,0)||1;
+  const tagRows=Object.entries(tagMap).sort((a,b)=>b[1].mins-a[1].mins);
+
+  // trends — 12 weeks
+  const weeks12=weeks12starts.map(start=>({start,h:weekHours(sessions,start)}));
+  const maxWeekH=Math.max(...weeks12.map(w=>w.h),goalHours||1);
+  const goalWeeksHit=weeks12.filter(w=>goalHours>0&&w.h>=goalHours).length;
+
+  // monthly totals
+  const monthMap={};
+  sessions.forEach(s=>{const k=s.date.slice(0,7);monthMap[k]=(monthMap[k]||0)+s.duration;});
+  const monthRows=Object.entries(monthMap).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,6);
+  const maxMonthMins=Math.max(...monthRows.map(r=>r[1]),1);
+
+  // projects all-time
   const projMap={};
-  thisWeekSessions.forEach(s=>{if(s.project){projMap[s.project]=(projMap[s.project]||0)+s.duration;}});
-  const projRows=Object.entries(projMap).sort((a,b)=>b[1]-a[1]);
-  // mood avg this week
-  const moodSessions=thisWeekSessions.filter(s=>s.mood);
-  const moodAvg=moodSessions.length?moodSessions.reduce((a,s)=>a+s.mood,0)/moodSessions.length:null;
-  // best session this week
-  const bestSession=thisWeekSessions.length?[...thisWeekSessions].sort((a,b)=>b.duration-a.duration)[0]:null;
-  const MOOD_LABEL=["","Rough","Neutral","Good","Great","🔥 Flow"];
-  const circumference=2*Math.PI*38;
+  sessions.forEach(s=>{if(!s.project)return;if(!projMap[s.project])projMap[s.project]={mins:0,count:0};projMap[s.project].mins+=s.duration;projMap[s.project].count++;});
+  const projRows=Object.entries(projMap).sort((a,b)=>b[1].mins-a[1].mins);
+  const maxProjMins=projRows.length?projRows[0][1].mins:1;
+
+  // mood
+  const moodDist=[0,0,0,0,0,0];
+  const moodProjMap={};
+  let moodTotal=0;
+  sessions.forEach(s=>{
+    if(!s.mood)return;
+    moodDist[s.mood]++;moodTotal++;
+    if(s.project){if(!moodProjMap[s.project])moodProjMap[s.project]={sum:0,count:0};moodProjMap[s.project].sum+=s.mood;moodProjMap[s.project].count++;}
+  });
+  const moodSessions=sessions.filter(s=>s.mood);
+  const avgMood=moodTotal?moodSessions.reduce((a,s)=>a+s.mood,0)/moodTotal:null;
+  const moodByProj=Object.entries(moodProjMap).map(([name,{sum,count}])=>({name,avg:sum/count,count})).filter(p=>p.count>=2).sort((a,b)=>b.avg-a.avg).slice(0,5);
+
+  const TABS=[["overview","Overview"],["sessions","Sessions"],["time","Time"],["trends","Trends"],["projects","Projects"],["mood","Mood"]];
+
+  const SectionLabel=({children})=>(
+    <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:10,marginTop:4}}>{children}</div>
+  );
+  const StatTile=({val,label,sub})=>(
+    <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px",minWidth:0}}>
+      <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:5}}>{label}</div>
+      <div style={{fontSize:19,fontWeight:700,color:C.text,letterSpacing:"-0.01em"}}>{val}</div>
+      {sub&&<div style={{fontSize:11,color:C.faint,marginTop:2}}>{sub}</div>}
+    </div>
+  );
+
   return(
     <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
         <div className="grab"/>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <div style={{fontSize:19,fontWeight:700,letterSpacing:"-0.01em",color:C.text}}>Weekly Review</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div style={{fontSize:19,fontWeight:700,letterSpacing:"-0.01em",color:C.text}}>Analytics</div>
           <button onClick={onClose} style={iconBtn}>{Icon.close()}</button>
         </div>
-        {/* Goal ring + hours */}
-        <div style={{display:"flex",alignItems:"center",gap:20,background:C.surf2,borderRadius:16,padding:"16px 20px",marginBottom:16}}>
-          <svg width="90" height="90" viewBox="0 0 90 90" style={{flexShrink:0}}>
-            <circle cx="45" cy="45" r="38" fill="none" stroke={C.surf} strokeWidth="8"/>
-            <circle cx="45" cy="45" r="38" fill="none" stroke={C.indigo} strokeWidth="8"
-              strokeDasharray={circumference} strokeDashoffset={circumference*(1-pct)}
-              strokeLinecap="round" transform="rotate(-90 45 45)" style={{transition:"stroke-dashoffset .6s ease"}}/>
-            <text x="45" y="49" textAnchor="middle" fill={C.text} fontSize="15" fontWeight="700" fontFamily="var(--font-sans)">{fmtDur(Math.round(thisH*60))}</text>
-          </svg>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.text}}>This week</div>
-            <div style={{fontSize:12,color:C.faint,marginTop:3}}>{goalHours>0?`${fmtDur(Math.round(Math.max(0,goalHours-thisH)*60))} to go · ${goalHours}h goal`:`${thisWeekSessions.length} session${thisWeekSessions.length!==1?"s":""}`}</div>
-            {lastH>0&&<div style={{fontSize:12,color:diff>=0?C.green:C.flame,marginTop:4,fontWeight:600}}>{diff>=0?"↑":"↓"} {fmtDur(Math.round(Math.abs(diff)*60))} vs last week</div>}
-            {currentStreak>0&&<div style={{fontSize:12,color:C.faint,marginTop:4}}>🔥 {currentStreak}-day streak</div>}
-          </div>
+
+        {/* Tab bar */}
+        <div style={{display:"flex",gap:2,background:C.surf2,borderRadius:10,padding:2,marginBottom:18,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          {TABS.map(([t,l])=>(
+            <button key={t} onClick={()=>setTab(t)} style={{flex:"0 0 auto",fontSize:11,fontWeight:600,padding:"5px 11px",borderRadius:8,border:"none",cursor:"pointer",
+              background:tab===t?C.surf:"transparent",color:tab===t?C.text:C.faint,whiteSpace:"nowrap"}}>{l}</button>
+          ))}
         </div>
-        {/* Projects breakdown */}
-        {projRows.length>0&&(
-          <>
-            <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:10}}>By project</div>
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
-              {projRows.map(([name,mins])=>{
-                const maxMins=projRows[0][1];
+
+        {/* ── Overview ─────────────────────────────────── */}
+        {tab==="overview"&&(
+          <div>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
+              <StatTile val={fmtDur(totalMins)} label="Total time"/>
+              <StatTile val={totalSess} label="Sessions"/>
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              <StatTile val={fmtDur(avgMins)} label="Avg session"/>
+              <StatTile val={longestSess?fmtDur(longestSess.duration):"—"} label="Longest" sub={longestSess?fmtDate(longestSess.date):null}/>
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              <StatTile val={`🔥 ${currentStreak}`} label="Streak" sub={`${longestStreak} best`}/>
+              <StatTile val={`${consistency}%`} label="Consistency" sub="last 12 wks"/>
+            </div>
+            <SectionLabel>This week vs last</SectionLabel>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px"}}>
+                <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:5}}>This week</div>
+                <div style={{fontSize:19,fontWeight:700,color:C.text}}>{fmtDur(Math.round(thisH*60))}</div>
+                {lastH>0&&<div style={{fontSize:11,color:weekDiff>=0?C.green:C.flame,marginTop:2,fontWeight:600}}>{weekDiff>=0?"↑":"↓"} {fmtDur(Math.round(Math.abs(weekDiff)*60))} vs last</div>}
+              </div>
+              <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px"}}>
+                <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:5}}>Best day</div>
+                <div style={{fontSize:19,fontWeight:700,color:C.text}}>{DAYS_FULL[bestDayIdx]}</div>
+                <div style={{fontSize:11,color:C.faint,marginTop:2}}>{fmtDur(dowMins[bestDayIdx])} all time</div>
+              </div>
+            </div>
+            <SectionLabel>Most active time</SectionLabel>
+            <div style={{background:C.surf2,borderRadius:14,padding:"13px 16px",display:"flex",alignItems:"center",gap:12}}>
+              <span style={{fontSize:26}}>{bestTOD.emoji}</span>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:C.text}}>{bestTOD.label}</div>
+                <div style={{fontSize:11,color:C.faint,marginTop:1}}>{fmtDur(bestTOD.mins)} total · {bestTOD.count} sessions</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Sessions by type ────────────────────────── */}
+        {tab==="sessions"&&(
+          <div>
+            <SectionLabel>By session type</SectionLabel>
+            {tagRows.length===0
+              ?<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"12px 0"}}>No sessions yet.</div>
+              :<div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {tagRows.map(([tag,{mins,count}])=>{
+                  const pct=mins/tagTotal;const col=TAG_COLOR[tag]||C.muted;
+                  return(
+                    <div key={tag}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                        <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{tag}</span>
+                        <span style={{fontSize:12,color:C.faint}}>{fmtDur(mins)} · {count} sess · {Math.round(pct*100)}%</span>
+                      </div>
+                      <div style={{height:6,borderRadius:4,background:C.surf2}}>
+                        <div style={{height:"100%",width:`${pct*100}%`,borderRadius:4,background:col,transition:"width .4s ease"}}/>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            }
+          </div>
+        )}
+
+        {/* ── Time patterns ────────────────────────────── */}
+        {tab==="time"&&(
+          <div>
+            <SectionLabel>Time of day</SectionLabel>
+            {todTotal===0
+              ?<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"12px 0"}}>Log sessions to see patterns.</div>
+              :<div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+                {todAcc.map(slot=>{
+                  const pct=todTotal>0?slot.count/todTotal:0;
+                  return(
+                    <div key={slot.label} style={{display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{fontSize:16,width:22}}>{slot.emoji}</span>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                          <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{slot.label}</span>
+                          <span style={{fontSize:12,color:C.faint}}>{slot.count} sess · {fmtDur(slot.mins)}</span>
+                        </div>
+                        <div style={{height:6,borderRadius:4,background:C.surf2}}>
+                          <div style={{height:"100%",width:`${pct*100}%`,borderRadius:4,background:C.indigo,transition:"width .4s ease"}}/>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            }
+            <SectionLabel>Day of week</SectionLabel>
+            <div style={{display:"flex",gap:5,alignItems:"flex-end",height:80}}>
+              {DAYS_MON.map((d,i)=>{
+                const barH=Math.max(0,dowMins[i]/maxDowMins)*68;
                 return(
-                  <div key={name}>
+                  <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5,justifyContent:"flex-end",height:80}}>
+                    <div title={`${DAYS_FULL[i]}: ${fmtDur(dowMins[i])} · ${dowCount[i]} sess`}
+                      style={{width:"100%",height:barH,borderRadius:4,background:i===bestDayIdx?C.green:C.indigo,opacity:0.75,minHeight:dowMins[i]>0?3:0,transition:"height .3s ease"}}/>
+                    <div style={{fontSize:10,color:i===bestDayIdx?C.green:C.dim,fontWeight:i===bestDayIdx?700:400}}>{d}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Trends ──────────────────────────────────── */}
+        {tab==="trends"&&(
+          <div>
+            <SectionLabel>{`Last 12 weeks${goalHours>0?` · goal hit ${goalWeeksHit}/12`:""}`}</SectionLabel>
+            <div style={{display:"flex",gap:3,alignItems:"flex-end",height:100,marginBottom:8}}>
+              {weeks12.map((w,i)=>{
+                const barH=Math.max(0,w.h/maxWeekH)*90;
+                const hit=goalHours>0&&w.h>=goalHours;
+                return(
+                  <div key={i} title={`${w.start}: ${w.h.toFixed(1)}h`}
+                    style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:100}}>
+                    <div style={{width:"100%",height:barH,borderRadius:3,background:hit?C.green:C.indigo,opacity:hit?0.85:i===11?0.9:0.5,minHeight:w.h>0?3:0,transition:"height .3s ease"}}/>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:goalHours>0?8:20}}>
+              <span style={{fontSize:11,color:C.dim}}>12 weeks ago</span>
+              <span style={{fontSize:11,color:C.indigo,fontWeight:600}}>Now</span>
+            </div>
+            {goalHours>0&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:20}}>
+              <div style={{width:12,height:3,borderRadius:2,background:C.green,opacity:0.85}}/>
+              <span style={{fontSize:11,color:C.faint}}>Green = goal reached ({goalHours}h)</span>
+            </div>}
+            <SectionLabel>Monthly totals</SectionLabel>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {monthRows.map(([key,mins])=>{
+                const[y,m]=key.split("-");
+                return(
+                  <div key={key}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                      <span style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"70%"}}>{name}</span>
+                      <span style={{fontSize:12.5,color:C.text}}>{monthNames[parseInt(m)-1]} {y}</span>
                       <span style={{fontSize:12,color:C.faint}}>{fmtDur(mins)}</span>
                     </div>
-                    <div style={{height:5,borderRadius:3,background:C.surf2,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${mins/maxMins*100}%`,background:C.indigo,borderRadius:3,opacity:0.75}}/>
+                    <div style={{height:5,borderRadius:3,background:C.surf2}}>
+                      <div style={{height:"100%",width:`${mins/maxMonthMins*100}%`,borderRadius:3,background:C.indigo,opacity:0.7}}/>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </>
+          </div>
         )}
-        {/* Mood + best session */}
-        <div style={{display:"flex",gap:10,marginBottom:4}}>
-          {moodAvg!==null&&(
-            <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px"}}>
-              <div style={{fontSize:10.5,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:6}}>Avg mood</div>
-              <div style={{fontSize:22}}>{MOOD_EMOJI[Math.round(moodAvg)]}</div>
-              <div style={{fontSize:12,color:C.faint,marginTop:2}}>{MOOD_LABEL[Math.round(moodAvg)]}</div>
-            </div>
-          )}
-          {bestSession&&(
-            <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px"}}>
-              <div style={{fontSize:10.5,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:6}}>Best session</div>
-              <div style={{fontSize:18,fontWeight:700,color:C.text}}>{fmtDur(bestSession.duration)}</div>
-              <div style={{fontSize:12,color:C.faint,marginTop:2}}>{fmtDate(bestSession.date)}</div>
-            </div>
-          )}
-        </div>
-        {thisWeekSessions.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:C.dim,fontSize:13}}>No sessions logged this week yet.</div>}
+
+        {/* ── Projects ────────────────────────────────── */}
+        {tab==="projects"&&(
+          <div>
+            <SectionLabel>All-time by project</SectionLabel>
+            {projRows.length===0
+              ?<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"12px 0"}}>No project sessions yet.</div>
+              :<div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {projRows.map(([name,{mins,count}])=>(
+                  <div key={name}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"65%"}}>{name}</span>
+                      <span style={{fontSize:12,color:C.faint}}>{fmtDur(mins)} · {count} sess</span>
+                    </div>
+                    <div style={{height:6,borderRadius:4,background:C.surf2}}>
+                      <div style={{height:"100%",width:`${mins/maxProjMins*100}%`,borderRadius:4,background:C.indigo,opacity:0.75,transition:"width .4s ease"}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            }
+          </div>
+        )}
+
+        {/* ── Mood ────────────────────────────────────── */}
+        {tab==="mood"&&(
+          <div>
+            {moodTotal===0
+              ?<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"24px 0"}}>Log mood with sessions to see patterns.</div>
+              :<>
+                <div style={{display:"flex",gap:8,marginBottom:20}}>
+                  <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px"}}>
+                    <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:5}}>Avg mood</div>
+                    <div style={{fontSize:24}}>{MOOD_EMOJI[Math.round(avgMood)]}</div>
+                    <div style={{fontSize:12,color:C.faint,marginTop:2}}>{MOOD_LABEL[Math.round(avgMood)]}</div>
+                  </div>
+                  <div style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 14px"}}>
+                    <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,marginBottom:5}}>Sessions rated</div>
+                    <div style={{fontSize:19,fontWeight:700,color:C.text}}>{moodTotal}</div>
+                    <div style={{fontSize:11,color:C.faint,marginTop:2}}>of {totalSess} total</div>
+                  </div>
+                </div>
+                <SectionLabel>Distribution</SectionLabel>
+                <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+                  {[5,4,3,2,1].map(m=>{
+                    const count=moodDist[m];const pct=moodTotal>0?count/moodTotal:0;
+                    return(
+                      <div key={m} style={{display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{fontSize:16,width:22}}>{MOOD_EMOJI[m]}</span>
+                        <div style={{flex:1}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                            <span style={{fontSize:12,color:C.text}}>{MOOD_LABEL[m]}</span>
+                            <span style={{fontSize:12,color:C.faint}}>{count} · {Math.round(pct*100)}%</span>
+                          </div>
+                          <div style={{height:5,borderRadius:3,background:C.surf2}}>
+                            <div style={{height:"100%",width:`${pct*100}%`,borderRadius:3,background:C.indigo,opacity:0.75}}/>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {moodByProj.length>0&&<>
+                  <SectionLabel>Avg mood by project</SectionLabel>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {moodByProj.map(({name,avg,count})=>(
+                      <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span style={{fontSize:12.5,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"60%"}}>{name}</span>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontSize:14}}>{MOOD_EMOJI[Math.round(avg)]}</span>
+                          <span style={{fontSize:12,color:C.faint}}>{avg.toFixed(1)} · {count} sess</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>}
+              </>
+            }
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -2201,7 +2449,7 @@ export default function App() {
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
-      {reviewOpen&&<WeeklyReviewSheet sessions={sessions} goalHours={goalHours} currentStreak={currentStreak} onClose={()=>setReviewOpen(false)}/>}
+      {reviewOpen&&<AnalyticsSheet sessions={sessions} goalHours={goalHours} currentStreak={currentStreak} longestStreak={longestStreak} onClose={()=>setReviewOpen(false)}/>}
       {toast&&<div className="toast">{toast}</div>}
 
       {/* Header */}
@@ -2214,8 +2462,8 @@ export default function App() {
           <div style={{fontSize:13,color:C.faint,marginTop:4,paddingLeft:44}}>Keep the habit. One session at a time.</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <button onClick={()=>setReviewOpen(true)} title="Weekly review" style={iconBtn}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="17" rx="2.5" stroke={C.faint} strokeWidth="1.7"/><path d="M3 9h18" stroke={C.faint} strokeWidth="1.7"/><path d="M8 2v4M16 2v4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M7 14h3M7 17h5" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+          <button onClick={()=>setReviewOpen(true)} title="Analytics" style={iconBtn}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2" y="13" width="4" height="9" rx="1.5" fill={C.faint}/><rect x="10" y="7" width="4" height="15" rx="1.5" fill={C.faint}/><rect x="18" y="2" width="4" height="20" rx="1.5" fill={C.faint}/></svg>
           </button>
           <button onClick={()=>setSettingsOpen(true)} style={iconBtn}>{Icon.gear(C.faint)}</button>
           <div style={{display:"flex",alignItems:"center",gap:6,background:C.surf,border:`1px solid ${C.line}`,borderRadius:999,padding:"8px 13px"}}>
@@ -2334,9 +2582,6 @@ export default function App() {
           </div>
         );
       })()}
-
-      {/* Analytics */}
-      <AnalyticsCard sessions={sessions}/>
 
       {/* Calendar */}
       <div className="card" style={card}>
