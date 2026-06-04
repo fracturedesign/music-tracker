@@ -573,7 +573,7 @@ function sortAudioFiles(files) {
 }
 
 /* ─── versions tab ─── */
-function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
+function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,sectionOpen,onToggleSec}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [files,setFiles]=useState([]);
   const [uploading,setUploading]=useState(false);
@@ -811,12 +811,25 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
         );
       })()}
 
+      {/* Section header (group Versions tab) — rendered after filters, before file list */}
+      {sectionLabel&&(
+        <button onClick={onToggleSec} style={{
+          width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+          padding:"8px 0 6px",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",marginBottom:4,
+        }}>
+          <span style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase"}}>{sectionLabel}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:sectionOpen?"rotate(180deg)":"none",transition:"transform .18s",flexShrink:0}}>
+            <path d="M6 9l6 6 6-6" stroke={C.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      )}
+
       {/* File list */}
-      {loading?(
+      {(!sectionLabel||sectionOpen)&&loading?(
         <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>Loading…</div>
-      ):files.length===0?(
+      ):(!sectionLabel||sectionOpen)&&files.length===0?(
         <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No audio files yet. Upload a file or scan a folder.</div>
-      ):(()=>{
+      ):(!sectionLabel||sectionOpen)?(()=>{
         // Only apply filter values that actually exist in the current file list
         const availFmts=new Set(files.map(f=>(f.format||"").toUpperCase()).filter(f=>["WAV","MP3"].includes(f)));
         const availVers=new Set(files.map(f=>extractVersion(f.name)).filter(Boolean));
@@ -841,7 +854,88 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder}) {
         if(visible.length===0)return <div style={{fontSize:13,color:C.dim,textAlign:"center",padding:"20px 0"}}>No files match the selected filters.</div>;
         return visible.map(f=><AudioFileCard key={f.id} file={f} projectName={projectName}
           onDelete={handleDelete} onRename={handleRename} onMarkSeen={handleMarkSeen}/>);
-      })()}
+      })():null}
+    </div>
+  );
+}
+
+/* ─── track card inside group panel Tracks tab ─── */
+function TrackCard({c,sessions,audioFileCounts,projectColorMap,onOpenProject,onRemoveFromGroup,onStatusChange}) {
+  const C=useTheme(); const {iconBtn}=getStyles(C);
+  const [statusOpen,setStatusOpen]=useState(false);
+  const dropRef=useRef(null);
+  useEffect(()=>{
+    if(!statusOpen)return;
+    const handler=e=>{if(dropRef.current&&!dropRef.current.contains(e.target))setStatusOpen(false);};
+    document.addEventListener("mousedown",handler);
+    return()=>document.removeEventListener("mousedown",handler);
+  },[statusOpen]);
+  const sc=STATUS_CFG[c.status||"active"]||STATUS_CFG.active;
+  const sd=sc.dot||C.indigo;
+  const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
+  const tlLabel=(()=>{
+    if(c.plannedStart&&c.plannedEnd&&c.plannedStart!==c.plannedEnd)return`${fmt(c.plannedStart)} → ${fmt(c.plannedEnd)}`;
+    if(c.plannedStart&&c.plannedEnd&&c.plannedStart===c.plannedEnd)return fmt(c.plannedStart);
+    if(c.plannedStart)return fmt(c.plannedStart);
+    if(c.plannedEnd)return`due ${fmt(c.plannedEnd)}`;
+    return null;
+  })();
+  const tlColor=(c.plannedStart||c.plannedEnd)?(projectColorMap[c.name]||C.indigo):C.dim;
+  const cnt=sessions?.filter(s=>s.project===c.name).length||0;
+  const audioCount=audioFileCounts[c.name]||0;
+  return(
+    <div key={c.name} style={{background:C.surf2,borderRadius:12,padding:"11px 12px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
+      <div style={{flex:1,minWidth:0}}>
+        <button onClick={()=>onOpenProject?.(c.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",width:"100%"}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+        </button>
+        <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+          {tlLabel&&(
+            <span style={{display:"flex",alignItems:"center",gap:2,color:tlColor,fontWeight:500}}>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlColor} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlColor} strokeWidth="2" strokeLinecap="round"/></svg>
+              {tlLabel}
+            </span>
+          )}
+          {tlLabel&&<span style={{color:C.dim}}>·</span>}
+          <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
+          {audioCount>0&&<><span style={{color:C.dim}}>·</span>
+            <button onClick={e=>{e.stopPropagation();onOpenProject?.(c.name,"versions");}} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.green,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.green} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
+            </button>
+          </>}
+        </div>
+      </div>
+      {/* Status pill — click opens dropdown */}
+      <div ref={dropRef} style={{position:"relative",flexShrink:0}}>
+        <button onClick={e=>{e.stopPropagation();setStatusOpen(v=>!v);}}
+          style={{fontSize:10.5,fontWeight:700,color:sd,background:`${sd}1a`,border:`1.5px solid ${sd}55`,borderRadius:20,padding:"2px 8px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4}}>
+          {sc.label}
+        </button>
+        {statusOpen&&(
+          <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:50,
+            background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,
+            minWidth:130,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+            {STATUS_ORDER.map(s=>{
+              const sc2=STATUS_CFG[s],sd2=sc2.dot||C.indigo,isActive=s===(c.status||"active");
+              return(
+                <button key={s} onClick={e=>{e.stopPropagation();onStatusChange?.(c.name,s);setStatusOpen(false);}} style={{
+                  display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",
+                  borderRadius:8,border:"none",background:isActive?`${sd2}18`:"transparent",
+                  cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:12.5,fontWeight:600,
+                  color:isActive?sd2:C.text,textAlign:"left",
+                }}>
+                  <span style={{width:7,height:7,borderRadius:"50%",background:sd2,flexShrink:0}}/>
+                  {sc2.label}
+                  {isActive&&<svg style={{marginLeft:"auto"}} width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={sd2} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <button onClick={e=>{e.stopPropagation();onRemoveFromGroup?.(c.name);}} title="Remove from group" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke={C.faint} strokeWidth="2" strokeLinecap="round"/></svg>
+      </button>
     </div>
   );
 }
@@ -871,21 +965,15 @@ function NotesEditor({value,onChange}) {
   );
 }
 
-function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCountChange,borderTop=false}) {
+function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCountChange,borderTop=false,forcedOpen,onIndividualToggle}) {
   const C=useTheme();
   const [open,setOpen]=useState(true);
+  const isOpen=forcedOpen!=null?forcedOpen:open;
+  const handleToggle=()=>{setOpen(v=>!v);onIndividualToggle?.();};
   return(
     <div style={{borderTop:borderTop?`1px solid ${C.line}`:"none"}}>
-      <button onClick={()=>setOpen(v=>!v)} style={{
-        width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-        padding:"10px 16px 6px",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",
-      }}>
-        <span style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.06em",textTransform:"uppercase"}}>{label}</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:open?"rotate(180deg)":"none",transition:"transform .18s",flexShrink:0}}>
-          <path d="M6 9l6 6 6-6" stroke={C.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-      {open&&<VersionsTab projectName={projectName} onCountChange={onCountChange} globalAudioFolder={globalAudioFolder}/>}
+      <VersionsTab projectName={projectName} onCountChange={onCountChange} globalAudioFolder={globalAudioFolder}
+        sectionLabel={label} sectionOpen={isOpen} onToggleSec={handleToggle}/>
     </div>
   );
 }
@@ -928,6 +1016,7 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
   const [historyOpen,setHistoryOpen]=useState(false);
   const [addTrackOpen,setAddTrackOpen]=useState(false);
   const [newTrackName,setNewTrackName]=useState("");
+  const [versionsAllOpen,setVersionsAllOpen]=useState(null); // null=individual, true=all open, false=all closed
   const isGroup=isGroupType;
   const close=()=>{onSave(text);onClose()};
 
@@ -1138,51 +1227,12 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
                 <button onClick={()=>setAddTrackOpen(false)} style={{fontSize:12,color:C.faint,background:"none",border:"none",cursor:"pointer",padding:"2px 4px",textAlign:"left",fontFamily:"var(--font-sans)"}}>Cancel</button>
               </div>
             )}
-            {/* Child project cards — ProjectRow style */}
-            {childProjects.map(c=>{
-              const sc=STATUS_CFG[c.status||"active"]||STATUS_CFG.active;
-              const sd=sc.dot||C.indigo;
-              const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
-              const tlLabel=(()=>{
-                if(c.plannedStart&&c.plannedEnd&&c.plannedStart!==c.plannedEnd)return`${fmt(c.plannedStart)} → ${fmt(c.plannedEnd)}`;
-                if(c.plannedStart&&c.plannedEnd&&c.plannedStart===c.plannedEnd)return fmt(c.plannedStart);
-                if(c.plannedStart)return fmt(c.plannedStart);
-                if(c.plannedEnd)return`due ${fmt(c.plannedEnd)}`;
-                return null;
-              })();
-              const tlColor=(c.plannedStart||c.plannedEnd)?(projectColorMap[c.name]||C.indigo):C.dim;
-              const cnt=sessions?.filter(s=>s.project===c.name).length||0;
-              const audioCount=audioFileCounts[c.name]||0;
-              return(
-                <div key={c.name} style={{background:C.surf2,borderRadius:12,padding:"11px 12px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <button onClick={()=>onOpenProject?.(c.name)} style={{background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",width:"100%"}}>
-                      <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
-                    </button>
-                    <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                      {tlLabel&&(
-                        <span style={{display:"flex",alignItems:"center",gap:2,color:tlColor,fontWeight:500}}>
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlColor} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlColor} strokeWidth="2" strokeLinecap="round"/></svg>
-                          {tlLabel}
-                        </span>
-                      )}
-                      {tlLabel&&<span style={{color:C.dim}}>·</span>}
-                      <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
-                      {audioCount>0&&<><span style={{color:C.dim}}>·</span>
-                        <button onClick={()=>onOpenProject?.(c.name,"versions")} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.green,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.green} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
-                        </button>
-                      </>}
-                    </div>
-                  </div>
-                  <button onClick={()=>onOpenProject?.(c.name)} style={{fontSize:10.5,fontWeight:700,color:sd,background:`${sd}1a`,border:`1.5px solid ${sd}55`,borderRadius:20,padding:"2px 8px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4}}>{sc.label}</button>
-                  <button onClick={()=>onOpenProject?.(c.name)} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.note(C.indigo)}</button>
-                  <button onClick={()=>onRemoveFromGroup?.(c.name)} title="Remove from group" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke={C.faint} strokeWidth="2" strokeLinecap="round"/></svg>
-                  </button>
-                </div>
-              );
-            })}
+            {/* Child project cards */}
+            {childProjects.map(c=>(
+              <TrackCard key={c.name} c={c} sessions={sessions} audioFileCounts={audioFileCounts}
+                projectColorMap={projectColorMap} onOpenProject={onOpenProject}
+                onRemoveFromGroup={onRemoveFromGroup} onStatusChange={onStatusChange}/>
+            ))}
             {childProjects.length===0&&(
               <div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"16px 0",fontStyle:"italic"}}>No tracks yet</div>
             )}
@@ -1194,10 +1244,19 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
           <div style={{flex:1,overflowY:"auto"}}>
             {isGroup?(
               <>
+                {childProjects.length>0&&(
+                  <div style={{display:"flex",justifyContent:"flex-end",padding:"8px 16px 2px"}}>
+                    <button onClick={()=>setVersionsAllOpen(v=>v===false?true:false)}
+                      style={{fontSize:11,fontWeight:600,color:C.faint,background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",padding:"2px 0"}}>
+                      {versionsAllOpen===false?"Expand all":"Collapse all"}
+                    </button>
+                  </div>
+                )}
                 {childProjects.map((c,i)=>(
                   <CollapsibleVersionsSection key={c.name} projectName={c.name} label={c.name}
                     onCountChange={i===0?setVersionsCount:undefined}
-                    globalAudioFolder={globalAudioFolder} borderTop={i>0}/>
+                    globalAudioFolder={globalAudioFolder} borderTop={i>0}
+                    forcedOpen={versionsAllOpen} onIndividualToggle={()=>setVersionsAllOpen(null)}/>
                 ))}
                 {childProjects.length===0&&<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"32px 0",fontStyle:"italic"}}>No tracks in this group yet</div>}
               </>
@@ -2559,7 +2618,19 @@ export default function App() {
   const projectColorMap=Object.fromEntries(projects.map(p=>[p.name,p.color||PROJECT_PALETTE[0]]));
   const recent=[...sessions].sort((a,b)=>b.date.localeCompare(a.date));
 
-  const rawActive=projects.filter(p=>!["done","released"].includes(p.status||"active"));
+  const rawActive=projects.filter(p=>{
+    const s=p.status||"active";
+    if(s==="released")return false;
+    if(s==="done"){
+      // child of a group: stay active until the parent group itself is done/released
+      if(p.parentGroup){
+        const parent=projectMap[p.parentGroup];
+        if(!parent||!["done","released"].includes(parent.status||"active"))return true;
+      }
+      return false;
+    }
+    return true;
+  });
   const lastSessionDateOf=name=>{
     const s=sessions.filter(x=>x.project===name);
     return s.length?s.reduce((best,x)=>x.date>best?x.date:best,""):"";
@@ -2574,7 +2645,14 @@ export default function App() {
     if(sb)return 1;                         // b has date, a doesn't → b first
     return rawActive.indexOf(a)-rawActive.indexOf(b); // both undated: keep insertion order
   });
-  const doneProjects=projects.filter(p=>p.status==="done");
+  const doneProjects=projects.filter(p=>{
+    if(p.status!=="done")return false;
+    if(p.parentGroup){
+      const parent=projectMap[p.parentGroup];
+      if(!parent||!["done","released"].includes(parent.status||"active"))return false;
+    }
+    return true;
+  });
   const releasedProjects=projects.filter(p=>p.status==="released");
   const groupProjects=activeProjects.filter(p=>GROUP_TYPE_CFG[p.type]);
   const dateSort=(a,b)=>{const sa=a.plannedStart,sb=b.plannedStart;if(sa&&sb)return sa.localeCompare(sb);if(sa)return -1;if(sb)return 1;return 0;};
