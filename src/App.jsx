@@ -3245,7 +3245,7 @@ export default function App() {
           <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>What's for today?</span>
           {remainingH>0&&perDayMins>0&&(
             <span style={{fontSize:12,color:C.faint}}>
-              <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span>{futureDays>0?` /day to reach goal`:" left to reach goal"}
+              <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span>{futureDays>0?` per day to reach goal`:" left to reach goal"}
             </span>
           )}
         </div>
