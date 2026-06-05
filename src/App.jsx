@@ -3288,12 +3288,16 @@ export default function App() {
     const audioCount=audioFileCounts[p.name]||0;
     const isHL=rouletteHL===p.name;
     const isWin=rouletteWinner===p.name;
+    const rouletteActive=isHL||isWin;
     const rouletteShadow=isWin
       ?`0 0 0 2.5px ${C.green}, 0 0 24px ${C.green}99`
       :isHL?`0 0 0 2px ${C.indigo}, 0 0 16px ${C.indigo}77`:"none";
     return(
     <div onClick={()=>openProject(p.name)} style={{background:insideGroup?C.bg:C.surf2,borderRadius:insideGroup?10:14,padding:"11px 13px 11px 14px",cursor:"pointer",
-      boxShadow:rouletteShadow,transform:isWin?"scale(1.03)":"scale(1)",transition:"box-shadow .1s linear, transform .25s cubic-bezier(.34,1.56,.64,1)",position:"relative",zIndex:isWin?2:isHL?1:0}}>
+      boxShadow:rouletteShadow,transition:"box-shadow .1s linear, transform .25s cubic-bezier(.34,1.56,.64,1)",
+      // only create a stacking context during the roulette spin so status dropdowns aren't clipped otherwise
+      ...(isWin?{transform:"scale(1.03)"}:{}),
+      ...(rouletteActive?{position:"relative",zIndex:isWin?2:1}:{})}}>
       <div style={{display:"flex",gap:10,alignItems:"center"}}>
         {/* Content */}
         <div style={{flex:1,minWidth:0}}>
