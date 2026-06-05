@@ -2687,7 +2687,9 @@ export default function App() {
 
   useEffect(()=>{
     if(!loaded)return;
-    rescanAllProjects(false);
+    // same full rescan as the Projects Overview refresh button:
+    // scan all folders, then refresh green audio counts
+    rescanAllProjects(true);
   },[loaded]);// eslint-disable-line
 
   /* auto backup — once per day */
