@@ -3825,7 +3825,7 @@ export default function App() {
               {questData.currentDaily.map((q,i)=>(
                 <button key={i} onClick={()=>!q.done&&completeQuest("daily",i)}
                   style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 10px",borderRadius:10,
-                    background:q.done?C.surf2:`${C.indigo}08`,border:`1px solid ${q.done?C.line:C.accentBorder}`,
+                    background:q.done?C.surf2:`${C.indigo}08`,border:"none",
                     cursor:q.done?"default":"pointer",textAlign:"left",fontFamily:"var(--font-sans)",width:"100%"}}>
                   {qCheckbox(q.done)}
                   <span style={{fontSize:12.5,color:q.done?C.dim:C.text,flex:1,lineHeight:1.4,textDecoration:q.done?"line-through":"none",opacity:q.done?0.65:1}}>{q.text}</span>
@@ -3843,7 +3843,12 @@ export default function App() {
           <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
               <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Oblique Card</span>
-              {questData.currentOblique&&<button onClick={drawOblique} style={{fontSize:11.5,fontWeight:600,color:C.faint,background:"transparent",border:"none",cursor:"pointer",padding:"2px 0",fontFamily:"var(--font-sans)"}}>Redraw</button>}
+              {questData.currentOblique&&(
+                <div style={{display:"flex",gap:10}}>
+                  <button onClick={drawOblique} style={{fontSize:11.5,fontWeight:600,color:C.faint,background:"transparent",border:"none",cursor:"pointer",padding:"2px 0",fontFamily:"var(--font-sans)"}}>Redraw</button>
+                  <button onClick={()=>{const next={...questData,currentOblique:null};setQuestData(next);saveQuestData(next);}} style={{fontSize:11.5,fontWeight:600,color:C.faint,background:"transparent",border:"none",cursor:"pointer",padding:"2px 0",fontFamily:"var(--font-sans)"}}>Hide</button>
+                </div>
+              )}
             </div>
             {questData.currentOblique?(
               <div style={{padding:"12px 14px",borderRadius:12,background:C.surf2,border:`1px solid ${C.line}`}}>
@@ -3920,7 +3925,7 @@ export default function App() {
       {questData?.enabled!==false&&questData&&(()=>{
         const{level,xpInLevel,xpPerLevel}=questLevel(questData.xp||0);
         return(
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 2px 10px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 2px 10px"}}>
             <span style={{fontSize:12,fontWeight:700,color:C.indigo,whiteSpace:"nowrap",flexShrink:0}}>⭐ Lv.{level}</span>
             <div style={{flex:1,height:5,borderRadius:999,background:C.surf2,overflow:"hidden"}}>
               <div style={{height:"100%",borderRadius:999,background:C.accentGrad,width:`${(xpInLevel/xpPerLevel)*100}%`,transition:"width 0.6s ease"}}/>
@@ -4128,7 +4133,7 @@ export default function App() {
                   </div>
                   <button onClick={()=>completeQuest("weekly")}
                     style={{display:"flex",alignItems:"flex-start",gap:10,width:"100%",padding:"10px 12px",borderRadius:12,
-                      background:wq.done?C.surf2:`${C.indigo}08`,border:`1px solid ${wq.done?C.line:C.accentBorder}`,
+                      background:wq.done?C.surf2:`${C.indigo}08`,border:"none",
                       cursor:wq.done?"default":"pointer",textAlign:"left",fontFamily:"var(--font-sans)"}}>
                     {wCheckbox}
                     <span style={{fontSize:13,color:wq.done?C.dim:C.text,flex:1,lineHeight:1.4,textDecoration:wq.done?"line-through":"none",opacity:wq.done?0.65:1}}>{wq.text}</span>
