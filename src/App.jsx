@@ -3823,17 +3823,14 @@ export default function App() {
               {showIdea&&ideaProjects.some(p=>!GROUP_TYPE_CFG[p.type])&&(
                 <button onClick={pickRandomProject} disabled={spinning}
                   style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginBottom:10,
-                    padding:"5px 11px",borderRadius:20,cursor:spinning?"default":"pointer",fontFamily:"var(--font-sans)",
-                    fontSize:11.5,fontWeight:700,letterSpacing:"0.02em",
-                    border:`1px solid ${spinning?C.accentBorder:C.lineS}`,
-                    background:spinning?C.accentAlpha:C.surf2,color:spinning?C.indigo:C.muted,transition:"all .15s"}}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={spinning?{animation:"spin .6s linear infinite"}:undefined}>
-                    <rect x="2" y="2" width="20" height="20" rx="4" stroke="currentColor" strokeWidth="1.8"/>
-                    <circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="16" cy="8" r="1.4" fill="currentColor"/>
-                    <circle cx="8" cy="16" r="1.4" fill="currentColor"/><circle cx="16" cy="16" r="1.4" fill="currentColor"/>
-                    <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
+                    background:"transparent",border:"none",cursor:spinning?"default":"pointer",fontFamily:"var(--font-sans)",
+                    fontSize:11.5,fontWeight:700,letterSpacing:"0.02em",color:spinning?C.indigo:C.muted,transition:"color .15s"}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={spinning?{animation:"spin .6s linear infinite"}:undefined}>
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.8"/>
+                    <path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19" stroke="currentColor" strokeWidth="1.3"/>
+                    <circle cx="12" cy="12" r="2" fill="currentColor"/>
                   </svg>
-                  {spinning?"Spinning…":"Pick a Random Project"}
+                  {spinning?"Spinning…":"Spin the Wheel!"}
                 </button>
               )}
             </div>
