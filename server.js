@@ -245,10 +245,7 @@ app.post("/api/audio/:project/scan", async (req, res) => {
   //   "Project Final" / "Project Mixdown" / "Project Final Mixdown" (wildcard words only)
   // This prevents "Overgrown Statue" from matching project "Overgrown".
   const WILDCARD_WORDS = new Set(['final', 'mixdown']);
-  const nameMatchesProject = (filePath, filter) => {
-    if (!filter) return true;
-    const base = basename(filePath, extname(filePath)).toLowerCase();
-    const f = filter.toLowerCase();
+  const matchesBase = (base, f) => {
     if (base === f) return true;
     if (!base.startsWith(f)) return false;
     const rest = base.slice(f.length);
@@ -258,6 +255,18 @@ app.post("/api/audio/:project/scan", async (req, res) => {
     // Wildcard-only suffix: one or more of the allowed words separated by space/underscore
     const words = rest.replace(/^[\s_]+/, '').split(/[\s_]+/);
     return words.length > 0 && words[0] !== '' && words.every(w => WILDCARD_WORDS.has(w));
+  };
+  const nameMatchesProject = (filePath, filter) => {
+    if (!filter) return true;
+    const base = basename(filePath, extname(filePath)).toLowerCase();
+    const f = filter.toLowerCase();
+    if (matchesBase(base, f)) return true;
+    // If the project name ends with a version suffix (e.g. "Moss v3"),
+    // also try matching against the stripped name ("Moss") so that
+    // files named "Moss v4.mp3" etc. still match.
+    const stripped = f.replace(/[\s_]v\d+$/i, '').trim();
+    if (stripped && stripped !== f) return matchesBase(base, stripped);
+    return false;
   };
   const toAdd = walkDir(folderPath)
     .filter(f => audioExts.includes(extname(f).toLowerCase()))
