@@ -827,6 +827,16 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
                   stroke={hasPerProjectPath?C.indigo:C.faint} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
+            {/* Filter toggle button */}
+            <button onClick={e=>{e.stopPropagation();setShowFilters(s=>!s);}} title="Toggle filters"
+              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",
+                alignItems:"center",justifyContent:"center",
+                border:`1px solid ${showFilters?C.accentBorder:C.lineS}`,
+                background:showFilters?C.accentAlpha:C.surf2}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M3 6h18M7 12h10M11 18h2" stroke={showFilters?C.indigo:C.faint} strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </button>
             {/* + action menu (upload + A/B) */}
             <div ref={addMenuRef} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setAddMenuOpen(v=>!v)}
@@ -862,7 +872,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
             <div style={{marginTop:8}}>
               {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
               {showScan&&ScanPanel}
-              {FilterPills}
+              {showFilters&&FilterPills}
               {FileList}
             </div>
           )}
@@ -3211,6 +3221,53 @@ export default function App() {
     </div>
   );};
 
+  // ── Today section (reused in idle card + timer card) ─────────────────
+  const todaySection=(()=>{
+    const todayProjects=projects.filter(p=>
+      !GROUP_TYPE_CFG[p.type]&&
+      !["done","released"].includes(p.status)&&
+      p.plannedStart&&p.plannedStart<=today&&(p.plannedEnd||p.plannedStart)>=today
+    );
+    const thisWeekH=weekHours(sessions,getWeekStart(0));
+    const remainingH=Math.max(0,goalHours-thisWeekH);
+    const todayIdx=weekStrip.findIndex(d=>d.isToday);
+    const daysLeft=todayIdx>=0?7-todayIdx:1;
+    const perDayMins=daysLeft>0?Math.round(remainingH/daysLeft*60):0;
+    const fmtM=m=>m>=60?`${Math.floor(m/60)}h${m%60?`${m%60}m`:""}`:m>0?`${m}m`:"0m";
+    const daysUntil=ds=>{if(!ds)return null;const diff=Math.round((parseDate(ds)-parseDate(today))/(1000*60*60*24));if(diff<0)return null;if(diff===0)return"due today";if(diff===1)return"1 day left";return`${diff} days left`;};
+    if(todayProjects.length===0&&remainingH<=0)return null;
+    return(
+      <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+          <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>What's for today?</span>
+          {remainingH>0&&perDayMins>0&&(
+            <span style={{fontSize:12,color:C.faint}}>
+              <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span> to hit goal
+            </span>
+          )}
+        </div>
+        {todayProjects.length>0?(
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {todayProjects.map(p=>{
+              const dl=daysUntil(p.plannedEnd);
+              const col=projectColorMap[p.name]||C.indigo;
+              return(
+                <button key={p.name} onClick={()=>openProject(p.name)}
+                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                    padding:"6px 10px",borderRadius:10,cursor:"pointer",textAlign:"left",
+                    border:`1px solid ${col}33`,background:`${col}12`,fontFamily:"var(--font-sans)"}}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:col,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                  {dl&&<span style={{fontSize:11,color:C.faint,flexShrink:0,marginLeft:8}}>{dl}</span>}
+                </button>
+              );
+            })}
+          </div>
+        ):(
+          <div style={{fontSize:12.5,color:C.dim,fontStyle:"italic"}}>No projects scheduled for today.</div>
+        )}
+      </div>
+    );
+  })();
 
   return (
     <ThemeCtx.Provider value={C}>
@@ -3383,6 +3440,7 @@ export default function App() {
                   fontSize:13,lineHeight:1.6,color:C.text,fontFamily:"var(--font-sans)",
                   outline:"none",caretColor:C.indigo}}/>
             )}
+            {todaySection}
           </>
         ):(
           <>
@@ -3395,39 +3453,7 @@ export default function App() {
               <button onClick={()=>setSheet({form:newForm(),editing:false,id:null})} style={{flex:1,padding:15,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:700,color:"#fff",background:C.accentGrad,boxShadow:`0 8px 22px -8px ${C.accentGlow}`}}>{todayHasSession?"＋ Log another":"＋ Log a session"}</button>
               <button onClick={openTimerSetup} style={{padding:"15px 18px",borderRadius:14,cursor:"pointer",border:`1px solid ${C.lineS}`,background:"transparent",color:C.muted,fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:600,display:"flex",alignItems:"center",gap:7}}>▶ Timer</button>
             </div>
-            {(()=>{
-              const todayProjects=projects.filter(p=>!GROUP_TYPE_CFG[p.type]&&!["done","released"].includes(p.status)&&p.plannedStart&&p.plannedStart<=today&&(p.plannedEnd||p.plannedStart)>=today);
-              const thisWeekH=weekHours(sessions,getWeekStart(0));
-              const remainingH=Math.max(0,goalHours-thisWeekH);
-              // days left in current week including today (Mon=0…Sun=6, today's weekStrip index)
-              const todayIdx=weekStrip.findIndex(d=>d.isToday);
-              const daysLeft=todayIdx>=0?7-todayIdx:1;
-              const perDayMins=daysLeft>0?Math.round(remainingH/daysLeft*60):0;
-              const fmtM=m=>m>=60?`${Math.floor(m/60)}h${m%60?`${m%60}m`:""}`:m>0?`${m}m`:"0m";
-              if(todayProjects.length===0&&remainingH<=0)return null;
-              return(
-                <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
-                  {remainingH>0&&perDayMins>0&&(
-                    <div style={{fontSize:12.5,color:C.muted,marginBottom:todayProjects.length>0?8:0}}>
-                      <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span> today to reach weekly goal
-                    </div>
-                  )}
-                  {todayProjects.length>0&&(
-                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                      {todayProjects.map(p=>(
-                        <button key={p.name} onClick={()=>openProject(p.name)}
-                          style={{fontSize:11.5,fontWeight:600,padding:"3px 9px",borderRadius:20,cursor:"pointer",
-                            border:`1px solid ${(projectColorMap[p.name]||C.indigo)}44`,
-                            background:`${(projectColorMap[p.name]||C.indigo)}18`,
-                            color:projectColorMap[p.name]||C.indigo,fontFamily:"var(--font-sans)"}}>
-                          {p.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+            {todaySection}
           </>
         )}
       </div>
