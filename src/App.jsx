@@ -3228,7 +3228,8 @@ export default function App() {
       !["done","released"].includes(p.status)&&
       p.plannedStart&&p.plannedStart<=today&&(p.plannedEnd||p.plannedStart)>=today
     );
-    const thisWeekMins=weekHours(sessions,getWeekStart(0))*60;
+    const liveElapsedMins=showTimerUI?Math.floor(timerElapsed/60000):0;
+    const thisWeekMins=weekHours(sessions,getWeekStart(0))*60+liveElapsedMins;
     const remainingMins=Math.max(0,goalHours*60-thisWeekMins);
     const todayIdx=weekStrip.findIndex(d=>d.isToday); // Mon=0…Sun=6
     const futureDays=todayIdx>=0?6-todayIdx:0; // days after today (Fri→2, Sat→1, Sun→0)
