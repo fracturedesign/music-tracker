@@ -3231,9 +3231,9 @@ export default function App() {
     const liveElapsedMins=showTimerUI?Math.floor(timerElapsed/60000):0;
     const thisWeekMins=weekHours(sessions,getWeekStart(0))*60+liveElapsedMins;
     const remainingMins=Math.max(0,goalHours*60-thisWeekMins);
-    const todayIdx=weekStrip.findIndex(d=>d.isToday);
-    const daysLeft=todayIdx>=0?7-todayIdx:1;
-    const perDayMins=daysLeft>0?remainingMins/daysLeft:0;
+    const todayIdx=weekStrip.findIndex(d=>d.isToday); // Mon=0…Sun=6
+    const futureDays=todayIdx>=0?6-todayIdx:0; // days after today (Fri→2, Sat→1, Sun→0)
+    const perDayMins=futureDays>0?remainingMins/futureDays:remainingMins; // Sun: show all remaining
     const remainingH=remainingMins/60;
     const fmtM=m=>m>=60?`${Math.floor(m/60)}h${Math.round(m%60)?`${Math.round(m%60)}m`:""}`:m>0?`${Math.round(m)}m`:"0m";
     const daysUntil=ds=>{if(!ds)return null;const diff=Math.round((parseDate(ds)-parseDate(today))/(1000*60*60*24));if(diff<0)return null;if(diff===0)return"due today";if(diff===1)return"due tomorrow";return`${diff} days left`;};
@@ -3245,7 +3245,7 @@ export default function App() {
           <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>What's for today?</span>
           {remainingH>0&&perDayMins>0&&(
             <span style={{fontSize:12,color:C.faint}}>
-              <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span> today to reach weekly goal
+              <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span>{futureDays>0?` /day to reach goal`:" left to reach goal"}
             </span>
           )}
         </div>
