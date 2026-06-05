@@ -3228,12 +3228,14 @@ export default function App() {
       !["done","released"].includes(p.status)&&
       p.plannedStart&&p.plannedStart<=today&&(p.plannedEnd||p.plannedStart)>=today
     );
-    const liveElapsedMins=showTimerUI?timerElapsed/60000:0;
-    const dailyTargetMins=Math.round(goalHours/7*60);
-    const todayLoggedMins=sessionsByDate[today]||0;
-    const perDayMins=Math.max(0,dailyTargetMins-todayLoggedMins-liveElapsedMins);
+    const liveElapsedMins=showTimerUI?Math.floor(timerElapsed/60000):0;
+    const thisWeekMins=weekHours(sessions,getWeekStart(0))*60+liveElapsedMins;
+    const remainingMins=Math.max(0,goalHours*60-thisWeekMins);
+    const todayIdx=weekStrip.findIndex(d=>d.isToday);
+    const daysLeft=todayIdx>=0?7-todayIdx:1;
+    const perDayMins=daysLeft>0?remainingMins/daysLeft:0;
+    const remainingH=remainingMins/60;
     const fmtM=m=>m>=60?`${Math.floor(m/60)}h${Math.round(m%60)?`${Math.round(m%60)}m`:""}`:m>0?`${Math.round(m)}m`:"0m";
-    const remainingH=Math.max(0,goalHours-weekHours(sessions,getWeekStart(0)));
     const daysUntil=ds=>{if(!ds)return null;const diff=Math.round((parseDate(ds)-parseDate(today))/(1000*60*60*24));if(diff<0)return null;if(diff===0)return"due today";if(diff===1)return"due tomorrow";return`${diff} days left`;};
     const sortedTodayProjects=[...todayProjects].sort((a,b)=>{const da=a.plannedEnd||a.plannedStart||"9999";const db=b.plannedEnd||b.plannedStart||"9999";return da.localeCompare(db);});
     if(todayProjects.length===0&&remainingH<=0)return null;
@@ -3472,7 +3474,7 @@ export default function App() {
       {/* This week + Weekly goal (merged) */}
       {(()=>{
         const baseWeekH=weekHours(sessions,getWeekStart(0));
-        const thisWeekH=baseWeekH+(showTimerUI?timerElapsed/3600000:0);
+        const thisWeekH=baseWeekH+(showTimerUI?Math.floor(timerElapsed/60000)/60:0);
         const pct=goalHours>0?thisWeekH/goalHours:0;
         return (
           <div className="card" style={card}>
