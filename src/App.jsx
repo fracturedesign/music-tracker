@@ -606,11 +606,12 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
         const loadedFiles=fr.files||[];
         setFiles(loadedFiles);
         const savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
-        if(savedPath){
-          setScanPath(savedPath);
+        const autoScanPath=savedPath||globalAudioFolder||"";
+        if(autoScanPath){
+          if(savedPath)setScanPath(savedPath);
           // don't auto-open the panel — path is shown as folder badge in group mode
-          const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
-          if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
+          const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:autoScanPath})});
+          if(sr.ok){const sd=await sr.json();if(sd.added>0||sd.files)setFiles(sd.files||[]);}
         }
       }catch{}
       setLoading(false);
@@ -3708,7 +3709,7 @@ export default function App() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:showIdea?"rotate(90deg)":"none",transition:"transform .2s"}}><path d="M9 6l6 6-6 6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 <span style={{fontSize:12,fontWeight:600,color:C.faint}}>Ideas ({ideaProjects.length})</span>
               </button>
-              <button title="Pick a random idea to start next"
+              {showIdea&&<button title="Pick a random idea to start next"
                 onClick={()=>{
                   const picks=ideaProjects.filter(p=>!GROUP_TYPE_CFG[p.type]);
                   if(!picks.length)return;
@@ -3726,7 +3727,7 @@ export default function App() {
                   <circle cx="8" cy="16" r="1.5" fill={C.faint}/><circle cx="16" cy="16" r="1.5" fill={C.faint}/>
                   <circle cx="12" cy="12" r="1.5" fill={C.faint}/>
                 </svg>
-              </button>
+              </button>}
             </div>
             {showIdea&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{ideaProjects.map(p=><ProjectRow key={p.name} p={p}/>)}</div>}
           </div>
