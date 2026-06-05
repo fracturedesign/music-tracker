@@ -2685,11 +2685,17 @@ export default function App() {
     }catch{}
   };
 
+  // Reusable handler — used by both the Projects Overview button and app launch.
+  const runRescanAll=async()=>{
+    if(rescanning)return;
+    setRescanning(true);
+    await rescanAllProjects(true);
+    setRescanning(false);
+  };
+
   useEffect(()=>{
     if(!loaded)return;
-    // same full rescan as the Projects Overview refresh button:
-    // scan all folders, then refresh green audio counts
-    rescanAllProjects(true);
+    runRescanAll(); // fire the same rescan (with spinner) the overview button runs
   },[loaded]);// eslint-disable-line
 
   /* auto backup — once per day */
@@ -3706,7 +3712,7 @@ export default function App() {
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:16}}>
           <span style={eyebrow}>Projects</span>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <button onClick={async()=>{if(rescanning)return;setRescanning(true);await rescanAllProjects(true);setRescanning(false);}} disabled={rescanning} title="Rescan all projects for new audio files"
+            <button onClick={runRescanAll} disabled={rescanning} title="Rescan all projects for new audio files"
               style={{...iconBtn,width:24,height:24,borderRadius:7,opacity:rescanning?0.5:1,cursor:rescanning?"default":"pointer"}}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={rescanning?{animation:"spin 1s linear infinite"}:undefined}><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
