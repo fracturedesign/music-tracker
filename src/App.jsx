@@ -2031,6 +2031,11 @@ function AnalyticsSheet({sessions,goalHours,currentStreak,longestStreak,onClose}
   const weeks12=weeks12starts.map(start=>({start,h:weekHours(sessions,start)}));
   const maxWeekH=Math.max(...weeks12.map(w=>w.h),goalHours||1);
   const goalWeeksHit=weeks12.filter(w=>goalHours>0&&w.h>=goalHours).length;
+  // goal streak — scan from most recent week backwards
+  let currentGoalStreak=0;
+  for(let i=weeks12.length-1;i>=0;i--){if(goalHours>0&&weeks12[i].h>=goalHours)currentGoalStreak++;else break;}
+  let bestGoalStreak=0,gStreak=0;
+  for(const w of weeks12){if(goalHours>0&&w.h>=goalHours){gStreak++;bestGoalStreak=Math.max(bestGoalStreak,gStreak);}else gStreak=0;}
 
   // monthly totals
   const monthMap={};
@@ -2197,6 +2202,18 @@ function AnalyticsSheet({sessions,goalHours,currentStreak,longestStreak,onClose}
         {/* ── Trends ──────────────────────────────────── */}
         {tab==="trends"&&(
           <div>
+            {/* Goal streak stats */}
+            {goalHours>0&&(
+              <div style={{display:"flex",gap:8,marginBottom:20}}>
+                {[[currentGoalStreak,"week streak","🔥"],[bestGoalStreak,"best streak","🏆"],[goalWeeksHit,"/ 12 hit","✓"]].map(([val,label,icon])=>(
+                  <div key={label} style={{flex:1,background:C.surf2,borderRadius:14,padding:"12px 10px",textAlign:"center"}}>
+                    <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:C.faint,marginBottom:4}}>{icon}</div>
+                    <div style={{fontSize:22,fontWeight:700,color:val>0?C.green:C.text}}>{val}</div>
+                    <div style={{fontSize:10,color:C.faint,marginTop:2}}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
             <SectionLabel>{`Last 12 weeks${goalHours>0?` · goal hit ${goalWeeksHit}/12`:""}`}</SectionLabel>
             <div style={{display:"flex",gap:3,alignItems:"flex-end",height:100,marginBottom:8}}>
               {weeks12.map((w,i)=>{
@@ -2218,6 +2235,40 @@ function AnalyticsSheet({sessions,goalHours,currentStreak,longestStreak,onClose}
               <div style={{width:12,height:3,borderRadius:2,background:C.green,opacity:0.85}}/>
               <span style={{fontSize:11,color:C.faint}}>Green = goal reached ({goalHours}h)</span>
             </div>}
+            {/* Week-by-week breakdown */}
+            {goalHours>0&&(()=>{
+              const weeksWithData=[...weeks12].reverse().filter(w=>w.h>0);
+              if(weeksWithData.length===0)return null;
+              return(
+                <>
+                  <SectionLabel>Week by week</SectionLabel>
+                  <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+                    {weeksWithData.map((w,i)=>{
+                      const hit=w.h>=goalHours;
+                      const pct=Math.min(1,w.h/goalHours);
+                      const d=new Date(w.start+"T00:00:00");
+                      const dEnd=new Date(d);dEnd.setDate(d.getDate()+6);
+                      const fmt=dt=>`${monthNames[dt.getMonth()].slice(0,3)} ${dt.getDate()}`;
+                      const label=`${fmt(d)} – ${fmt(dEnd)}`;
+                      return(
+                        <div key={i}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                            <span style={{fontSize:12,color:C.muted}}>{label}</span>
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              <span style={{fontSize:12,fontWeight:600,color:hit?C.green:C.text}}>{fmtDur(Math.round(w.h*60))}</span>
+                              {hit&&<span style={{fontSize:10,color:C.green,fontWeight:700}}>✓</span>}
+                            </div>
+                          </div>
+                          <div style={{height:5,borderRadius:3,background:C.surf2}}>
+                            <div style={{height:"100%",width:`${pct*100}%`,borderRadius:3,background:hit?C.green:C.indigo,opacity:hit?0.8:0.5,transition:"width .3s ease"}}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
             <SectionLabel>Monthly totals</SectionLabel>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {monthRows.map(([key,mins])=>{
@@ -3515,6 +3566,37 @@ export default function App() {
                 </div>
               </div>
             </div>
+            {/* Past weeks history strip */}
+            {goalHours>0&&(()=>{
+              const past8=Array.from({length:8},(_,i)=>{
+                const start=getWeekStart(8-i);
+                const h=weekHours(sessions,start);
+                const hit=h>=goalHours;
+                const d=new Date(start+"T00:00:00");
+                const label=`${monthNames[d.getMonth()].slice(0,3)} ${d.getDate()}`;
+                return{start,h,hit,label};
+              });
+              const anyData=past8.some(w=>w.h>0);
+              if(!anyData)return null;
+              return(
+                <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
+                  <div style={{fontSize:10.5,color:C.faint,fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase",marginBottom:10}}>Past 8 weeks</div>
+                  <div style={{display:"flex",gap:4,alignItems:"flex-end"}}>
+                    {past8.map((w,i)=>(
+                      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}} title={`${w.label}: ${fmtDur(Math.round(w.h*60))}`}>
+                        <div style={{width:"100%",height:36,borderRadius:5,background:C.surf2,position:"relative",overflow:"hidden"}}>
+                          <div style={{position:"absolute",bottom:0,left:0,right:0,
+                            height:`${Math.min(1,w.h/goalHours)*100}%`,
+                            background:w.hit?C.green:C.indigo,opacity:w.hit?0.85:0.45,transition:"height .3s ease"}}/>
+                        </div>
+                        <div style={{width:6,height:6,borderRadius:"50%",background:w.hit?C.green:C.dim,flexShrink:0}}/>
+                        <div style={{fontSize:8.5,color:C.dim,whiteSpace:"nowrap"}}>{w.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
