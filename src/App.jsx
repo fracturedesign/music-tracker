@@ -603,19 +603,17 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
           fetch(`/api/audio/${encodeURIComponent(projectName)}`).then(r=>r.json()),
           fetch(`/api/data/music_scan_folders`).then(r=>r.json()),
         ]);
-        setFiles(fr.files||[]);
+        const loadedFiles=fr.files||[];
+        setFiles(loadedFiles);
         const savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
-        if(savedPath)setScanPath(savedPath);
-        const autoScanPath=savedPath||globalAudioFolder||"";
-        setLoading(false); // show existing files immediately; scan runs in background below
-        if(autoScanPath){
-          try{
-            // don't auto-open the panel — path is shown as folder badge in group mode
-            const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:autoScanPath})});
-            if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
-          }catch{}
+        if(savedPath){
+          setScanPath(savedPath);
+          // don't auto-open the panel — path is shown as folder badge in group mode
+          const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
+          if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
         }
-      }catch{setLoading(false);}
+      }catch{}
+      setLoading(false);
     })();
   },[projectName]);// eslint-disable-line
 
@@ -2588,7 +2586,6 @@ export default function App() {
   const [goalEditOpen,setGoalEditOpen]=useState(false);
   const [showDone,setShowDone]=useState(false);
   const [showReleased,setShowReleased]=useState(false);
-  const [showIdea,setShowIdea]=useState(false);
   const [audioFileCounts,setAudioFileCounts]=useState({});
   const [globalAudioFolder,setGlobalAudioFolder]=useState("");
   const [archivedProjects,setArchivedProjects]=useState([]);
@@ -2845,7 +2842,6 @@ export default function App() {
   const rawActive=projects.filter(p=>{
     const s=p.status||"active";
     if(s==="released")return false;
-    if(s==="idea")return false;
     if(s==="done"){
       // child of a group: stay active until the parent group itself is done/released
       if(p.parentGroup){
@@ -2856,7 +2852,6 @@ export default function App() {
     }
     return true;
   });
-  const ideaProjects=projects.filter(p=>p.status==="idea"&&!p.parentGroup);
   const lastSessionDateOf=name=>{
     const s=sessions.filter(x=>x.project===name);
     return s.length?s.reduce((best,x)=>x.date>best?x.date:best,""):"";
@@ -3702,38 +3697,6 @@ export default function App() {
             )}
           </div>
         )}
-        {/* Ideas / Backlog section */}
-        {ideaProjects.length>0&&(
-          <div style={{marginTop:14}}>
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <button onClick={()=>setShowIdea(v=>!v)} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",padding:"4px 0",flex:1,marginBottom:showIdea?10:0}}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:showIdea?"rotate(90deg)":"none",transition:"transform .2s"}}><path d="M9 6l6 6-6 6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                <span style={{fontSize:12,fontWeight:600,color:C.faint}}>Ideas ({ideaProjects.length})</span>
-              </button>
-              {showIdea&&<button title="Pick a random idea to start next"
-                onClick={()=>{
-                  const picks=ideaProjects.filter(p=>!GROUP_TYPE_CFG[p.type]);
-                  if(!picks.length)return;
-                  const p=picks[Math.floor(Math.random()*picks.length)];
-                  updateProjectStatus(p.name,"active");
-                  setShowIdea(false);
-                  flash(`🎲 "${p.name}" moved to active`);
-                }}
-                style={{width:26,height:26,borderRadius:7,border:`1px solid ${C.lineS}`,background:C.surf2,
-                  cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                  marginBottom:showIdea?10:0}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                  <rect x="2" y="2" width="20" height="20" rx="4" stroke={C.faint} strokeWidth="1.7"/>
-                  <circle cx="8" cy="8" r="1.5" fill={C.faint}/><circle cx="16" cy="8" r="1.5" fill={C.faint}/>
-                  <circle cx="8" cy="16" r="1.5" fill={C.faint}/><circle cx="16" cy="16" r="1.5" fill={C.faint}/>
-                  <circle cx="12" cy="12" r="1.5" fill={C.faint}/>
-                </svg>
-              </button>}
-            </div>
-            {showIdea&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{ideaProjects.map(p=><ProjectRow key={p.name} p={p}/>)}</div>}
-          </div>
-        )}
-
         {/* Done section */}
         {doneProjects.length>0&&(
           <div style={{marginTop:14}}>
