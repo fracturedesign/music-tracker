@@ -104,7 +104,7 @@ function weekHours(sessions,startStr) { const s=parseDate(startStr),e=new Date(s
 function fmtSeconds(s) { s=Math.floor(s||0); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
 function fmtRelativeDate(ds) {
   if(!ds)return null;
-  const diff=Math.round((keyToUTCms(today)-keyToUTCms(ds))/86400000);
+  const diff=Math.round((keyToUTCms(toDateStr(new Date()))-keyToUTCms(ds))/86400000);
   if(diff===0)return"today";
   if(diff===1)return"yesterday";
   if(diff<7)return`${diff}d ago`;
@@ -115,7 +115,7 @@ function fmtRelativeDate(ds) {
 
 const today     = toDateStr(new Date());
 const yesterday = toDateStr(new Date(Date.now()-86400000));
-const newForm   = (date=today)=>({date,duration:60,mood:3,note:"",project:"",tag:"",hour:new Date().getHours()});
+const newForm   = (date)=>({date:date||toDateStr(new Date()),duration:60,mood:3,note:"",project:"",tag:"",hour:new Date().getHours()});
 
 const storage = {
   async get(key) { const r=await fetch(`/api/data/${key}`); return r.json(); },
@@ -148,53 +148,6 @@ function GoalRing({pct,label,sub}) {
       <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1}}>
         <div style={{fontSize:17,fontWeight:700,color:col,lineHeight:1}}>{label}</div>
         <div style={{fontSize:9.5,color:C.faint}}>{sub}</div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── weekly goal card ─── */
-function WeeklyGoalCard({sessions,goalHours,onEditGoal}) {
-  const C=useTheme(); const {card,eyebrow}=getStyles(C);
-  const thisWeekStart=getWeekStart(0);
-  const thisWeekH=weekHours(sessions,thisWeekStart);
-  const pct=goalHours>0?thisWeekH/goalHours:0;
-
-  const past6=Array.from({length:6},(_,i)=>{
-    const start=getWeekStart(6-i);
-    const h=weekHours(sessions,start);
-    return {start,h,hit:goalHours>0&&h>=goalHours};
-  });
-
-  return (
-    <div className="card" style={card}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:16}}>
-        <span style={eyebrow}>Weekly goal</span>
-        <button onClick={onEditGoal} style={{fontSize:12,fontWeight:600,color:C.indigo,background:C.accentAlpha,border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer"}}>
-          {goalHours}h / week
-        </button>
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:20}}>
-        <GoalRing pct={pct} label={`${fmtDur(Math.round(thisWeekH*60))}`} sub={`of ${goalHours}h`}/>
-        <div style={{flex:1}}>
-          <div style={{fontSize:13,color:C.muted,marginBottom:12}}>
-            {pct>=1 ? <span style={{color:C.green,fontWeight:600}}>✓ Goal reached this week!</span>
-              : `${fmtDur(Math.round(Math.max(0,goalHours-thisWeekH)*60))} to go`}
-          </div>
-          <div style={{fontSize:11,color:C.faint,marginBottom:6}}>Past 6 weeks</div>
-          <div style={{display:"flex",gap:6}}>
-            {past6.map((w,i)=>(
-              <div key={i} title={`${w.start}: ${w.h.toFixed(1)}h`} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                <div style={{width:"100%",height:32,borderRadius:5,background:C.surf2,position:"relative",overflow:"hidden"}}>
-                  <div style={{position:"absolute",bottom:0,left:0,right:0,
-                    height:`${goalHours>0?Math.min(1,w.h/goalHours)*100:0}%`,
-                    background:w.hit?C.green:C.indigo,opacity:w.hit?0.9:0.5,transition:"height .3s ease"}}/>
-                </div>
-                <div style={{width:7,height:7,borderRadius:"50%",background:w.hit?C.green:C.dim}}/>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -598,6 +551,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
 
   useEffect(()=>{
     (async()=>{
+      let savedPath="";
       try{
         const[fr,pr]=await Promise.all([
           fetch(`/api/audio/${encodeURIComponent(projectName)}`).then(r=>r.json()),
@@ -605,15 +559,17 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
         ]);
         const loadedFiles=fr.files||[];
         setFiles(loadedFiles);
-        const savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
-        if(savedPath){
-          setScanPath(savedPath);
-          // don't auto-open the panel — path is shown as folder badge in group mode
+        savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
+        if(savedPath)setScanPath(savedPath);
+      }catch{}
+      setLoading(false); // unblock UI before background scan
+      if(savedPath){
+        try{
+          // Background scan — doesn't block the loading spinner
           const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
           if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
-        }
-      }catch{}
-      setLoading(false);
+        }catch{}
+      }
     })();
   },[projectName]);// eslint-disable-line
 
@@ -2563,6 +2519,8 @@ function ABCompare({files,projectName,onClose}) {
 const PROMPTS=["Make something beautiful today.","Chase the sound in your head.","Press record, see what happens.","One loop can become a song.","Start before you feel ready.","Trust your ears today.","Finish something today.","Show up for the music.","Turn an idea into a take."];
 
 export default function App() {
+  const today=toDateStr(new Date());
+  const yesterday=toDateStr(new Date(Date.now()-86400000));
   const [themeDark,setThemeDark]=useState(()=>localStorage.getItem("music_theme_dark")||"calm");
   const [themeLight,setThemeLight]=useState(()=>localStorage.getItem("music_theme_light")||"paper");
   const [systemDark,setSystemDark]=useState(()=>window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -3874,7 +3832,7 @@ export default function App() {
                   {/* Main row: chips + mood + duration */}
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
                     <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:5,minWidth:0}}>
-                      {s.project&&<button onClick={()=>setNotesModal(s.project)} style={{fontSize:13,fontWeight:600,color:C.indigo,background:C.accentAlpha2,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer"}}>{s.project}{proj?.notes?" 📝":""}</button>}
+                      {s.project&&<button onClick={()=>openProject(s.project)} style={{fontSize:13,fontWeight:600,color:C.indigo,background:C.accentAlpha2,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer"}}>{s.project}{proj?.notes?" 📝":""}</button>}
                       {s.tag&&<span style={{fontSize:12,fontWeight:600,color:tagCol,background:`${tagCol}1e`,borderRadius:6,padding:"3px 9px"}}>{s.tag}</span>}
                       {!s.project&&!s.tag&&<span style={{fontSize:12.5,color:C.dim}}>session</span>}
                     </div>
