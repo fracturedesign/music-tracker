@@ -2622,6 +2622,9 @@ export default function App() {
   const [showReleased,setShowReleased]=useState(false);
   const [showIdea,setShowIdea]=useState(false);
   const [rescanning,setRescanning]=useState(false);
+  const [rouletteHL,setRouletteHL]=useState(null);     // name currently highlighted during spin
+  const [rouletteWinner,setRouletteWinner]=useState(null); // final winner (green pulse)
+  const [spinning,setSpinning]=useState(false);
   const [audioFileCounts,setAudioFileCounts]=useState({});
   const [globalAudioFolder,setGlobalAudioFolder]=useState("");
   const [archivedProjects,setArchivedProjects]=useState([]);
@@ -3210,6 +3213,44 @@ export default function App() {
     );
   };
 
+  const finishRoulette=name=>{
+    updateProjectStatus(name,"active");
+    setRouletteHL(null);
+    setRouletteWinner(null);
+    flash(`🎉 "${name}" is your next project!`);
+  };
+
+  const pickRandomProject=()=>{
+    if(spinning)return;
+    const picks=ideaProjects.filter(p=>!GROUP_TYPE_CFG[p.type]);
+    if(!picks.length)return;
+    setRouletteWinner(null);
+    if(picks.length===1){
+      const only=picks[0].name;
+      setRouletteHL(only);
+      setTimeout(()=>{setRouletteWinner(only);setTimeout(()=>finishRoulette(only),900);},250);
+      return;
+    }
+    setSpinning(true);
+    const totalSteps=20+Math.floor(Math.random()*picks.length*2);
+    let step=0;
+    const tick=()=>{
+      setRouletteHL(picks[step%picks.length].name);
+      step++;
+      if(step>=totalSteps){
+        const winner=picks[(step-1)%picks.length].name;
+        setSpinning(false);
+        setRouletteWinner(winner);
+        setTimeout(()=>finishRoulette(winner),1100);
+        return;
+      }
+      const progress=step/totalSteps;
+      const interval=45+progress*progress*300; // ease-out: 45ms → ~345ms
+      setTimeout(tick,interval);
+    };
+    tick();
+  };
+
   const ProjectRow=({p,insideGroup=false})=>{
     const isDoneOrReleased=["done","released"].includes(p.status||"active");
     const [moveOpen,setMoveOpen]=useState(false);
@@ -3245,8 +3286,14 @@ export default function App() {
     const cnt=projectCounts[p.name]||0;
     const rel=fmtRelativeDate(lastSessionDateOf(p.name));
     const audioCount=audioFileCounts[p.name]||0;
+    const isHL=rouletteHL===p.name;
+    const isWin=rouletteWinner===p.name;
+    const rouletteShadow=isWin
+      ?`0 0 0 2.5px ${C.green}, 0 0 24px ${C.green}99`
+      :isHL?`0 0 0 2px ${C.indigo}, 0 0 16px ${C.indigo}77`:"none";
     return(
-    <div onClick={()=>openProject(p.name)} style={{background:insideGroup?C.bg:C.surf2,borderRadius:insideGroup?10:14,padding:"11px 13px 11px 14px",cursor:"pointer"}}>
+    <div onClick={()=>openProject(p.name)} style={{background:insideGroup?C.bg:C.surf2,borderRadius:insideGroup?10:14,padding:"11px 13px 11px 14px",cursor:"pointer",
+      boxShadow:rouletteShadow,transform:isWin?"scale(1.03)":"scale(1)",transition:"box-shadow .1s linear, transform .25s cubic-bezier(.34,1.56,.64,1)",position:"relative",zIndex:isWin?2:isHL?1:0}}>
       <div style={{display:"flex",gap:10,alignItems:"center"}}>
         {/* Content */}
         <div style={{flex:1,minWidth:0}}>
@@ -3769,25 +3816,22 @@ export default function App() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:showIdea?"rotate(90deg)":"none",transition:"transform .2s"}}><path d="M9 6l6 6-6 6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 <span style={{fontSize:12,fontWeight:600,color:C.faint}}>Ideas ({ideaProjects.length})</span>
               </button>
-              {showIdea&&<button title="Pick a random idea to start next"
-                onClick={()=>{
-                  const picks=ideaProjects.filter(p=>!GROUP_TYPE_CFG[p.type]);
-                  if(!picks.length)return;
-                  const p=picks[Math.floor(Math.random()*picks.length)];
-                  updateProjectStatus(p.name,"active");
-                  setShowIdea(false);
-                  flash(`🎲 "${p.name}" moved to active`);
-                }}
-                style={{width:26,height:26,borderRadius:7,border:`1px solid ${C.lineS}`,background:C.surf2,
-                  cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                  marginBottom:10}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                  <rect x="2" y="2" width="20" height="20" rx="4" stroke={C.faint} strokeWidth="1.7"/>
-                  <circle cx="8" cy="8" r="1.5" fill={C.faint}/><circle cx="16" cy="8" r="1.5" fill={C.faint}/>
-                  <circle cx="8" cy="16" r="1.5" fill={C.faint}/><circle cx="16" cy="16" r="1.5" fill={C.faint}/>
-                  <circle cx="12" cy="12" r="1.5" fill={C.faint}/>
-                </svg>
-              </button>}
+              {showIdea&&ideaProjects.some(p=>!GROUP_TYPE_CFG[p.type])&&(
+                <button onClick={pickRandomProject} disabled={spinning}
+                  style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginBottom:10,
+                    padding:"5px 11px",borderRadius:20,cursor:spinning?"default":"pointer",fontFamily:"var(--font-sans)",
+                    fontSize:11.5,fontWeight:700,letterSpacing:"0.02em",
+                    border:`1px solid ${spinning?C.accentBorder:C.lineS}`,
+                    background:spinning?C.accentAlpha:C.surf2,color:spinning?C.indigo:C.muted,transition:"all .15s"}}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={spinning?{animation:"spin .6s linear infinite"}:undefined}>
+                    <rect x="2" y="2" width="20" height="20" rx="4" stroke="currentColor" strokeWidth="1.8"/>
+                    <circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="16" cy="8" r="1.4" fill="currentColor"/>
+                    <circle cx="8" cy="16" r="1.4" fill="currentColor"/><circle cx="16" cy="16" r="1.4" fill="currentColor"/>
+                    <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
+                  </svg>
+                  {spinning?"Spinning…":"Pick a Random Project"}
+                </button>
+              )}
             </div>
             {showIdea&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{ideaProjects.map(p=><ProjectRow key={p.name} p={p}/>)}</div>}
           </div>
