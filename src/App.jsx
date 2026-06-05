@@ -3234,7 +3234,7 @@ export default function App() {
     const daysLeft=todayIdx>=0?7-todayIdx:1;
     const perDayMins=daysLeft>0?Math.round(remainingH/daysLeft*60):0;
     const fmtM=m=>m>=60?`${Math.floor(m/60)}h${m%60?`${m%60}m`:""}`:m>0?`${m}m`:"0m";
-    const daysUntil=ds=>{if(!ds)return null;const diff=Math.round((parseDate(ds)-parseDate(today))/(1000*60*60*24));if(diff<0)return null;if(diff===0)return"due today";return`${diff+1} days left`;};
+    const daysUntil=ds=>{if(!ds)return null;const diff=Math.round((parseDate(ds)-parseDate(today))/(1000*60*60*24));if(diff<0)return null;if(diff===0)return"due today";if(diff===1)return"due tomorrow";return`${diff} days left`;};
     const sortedTodayProjects=[...todayProjects].sort((a,b)=>{const da=a.plannedEnd||a.plannedStart||"9999";const db=b.plannedEnd||b.plannedStart||"9999";return da.localeCompare(db);});
     if(todayProjects.length===0&&remainingH<=0)return null;
     return(
