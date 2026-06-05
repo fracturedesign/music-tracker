@@ -3234,7 +3234,8 @@ export default function App() {
     const daysLeft=todayIdx>=0?7-todayIdx:1;
     const perDayMins=daysLeft>0?Math.round(remainingH/daysLeft*60):0;
     const fmtM=m=>m>=60?`${Math.floor(m/60)}h${m%60?`${m%60}m`:""}`:m>0?`${m}m`:"0m";
-    const daysUntil=ds=>{if(!ds)return null;const diff=Math.round((parseDate(ds)-parseDate(today))/(1000*60*60*24));if(diff<0)return null;if(diff===0)return"due today";if(diff===1)return"1 day left";return`${diff} days left`;};
+    const daysUntil=ds=>{if(!ds)return null;const diff=Math.round((parseDate(ds)-parseDate(today))/(1000*60*60*24));if(diff<0)return null;if(diff===0)return"due today";return`${diff+1} days left`;};
+    const sortedTodayProjects=[...todayProjects].sort((a,b)=>{const da=a.plannedEnd||a.plannedStart||"9999";const db=b.plannedEnd||b.plannedStart||"9999";return da.localeCompare(db);});
     if(todayProjects.length===0&&remainingH<=0)return null;
     return(
       <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
@@ -3242,13 +3243,13 @@ export default function App() {
           <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>What's for today?</span>
           {remainingH>0&&perDayMins>0&&(
             <span style={{fontSize:12,color:C.faint}}>
-              <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span> to hit goal
+              <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span> today to reach weekly goal
             </span>
           )}
         </div>
         {todayProjects.length>0?(
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {todayProjects.map(p=>{
+            {sortedTodayProjects.map(p=>{
               const dl=daysUntil(p.plannedEnd);
               const col=projectColorMap[p.name]||C.indigo;
               return(
