@@ -585,7 +585,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
   const [activeFilters,setActiveFilters]=useState({formats:[],versions:[]});
   const [abOpen,setAbOpen]=useState(false);
   const [addMenuOpen,setAddMenuOpen]=useState(false);
-  const allFiltersRef=useRef({});
+  const [showFilters,setShowFilters]=useState(false);
   const fileInputRef=useRef(null);
   const addMenuRef=useRef(null);
   useEffect(()=>{
@@ -599,10 +599,9 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
   useEffect(()=>{
     (async()=>{
       try{
-        const[fr,pr,filt]=await Promise.all([
+        const[fr,pr]=await Promise.all([
           fetch(`/api/audio/${encodeURIComponent(projectName)}`).then(r=>r.json()),
           fetch(`/api/data/music_scan_folders`).then(r=>r.json()),
-          fetch(`/api/data/music_audio_filters`).then(r=>r.json()),
         ]);
         const loadedFiles=fr.files||[];
         setFiles(loadedFiles);
@@ -613,33 +612,16 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
           const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:savedPath})});
           if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
         }
-        if(filt?.value){
-          try{
-            const all=JSON.parse(filt.value);
-            allFiltersRef.current=all||{};
-            const saved=all?.[projectName]||{formats:[],versions:[]};
-            setActiveFilters(saved);
-          }catch{}
-        }
       }catch{}
       setLoading(false);
     })();
   },[projectName]);// eslint-disable-line
 
-  const saveFilters=async filters=>{
-    try{
-      allFiltersRef.current={...allFiltersRef.current,[projectName]:filters};
-      await fetch(`/api/data/music_audio_filters`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(allFiltersRef.current)})});
-    }catch{}
-  };
-
   const toggleFilter=(type,value)=>{
     setActiveFilters(prev=>{
       const cur=prev[type]||[];
       const next=cur.includes(value)?cur.filter(v=>v!==value):[...cur,value];
-      const updated={...prev,[type]:next};
-      saveFilters(updated);
-      return updated;
+      return{...prev,[type]:next};
     });
   };
 
@@ -780,7 +762,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
     ];
     if(pills.length===0)return null;
     const anyActive=(activeFilters.formats||[]).length>0||(activeFilters.versions||[]).length>0;
-    const clearFilters=()=>{const c={formats:[],versions:[]};setActiveFilters(c);saveFilters(c);};
+    const clearFilters=()=>setActiveFilters({formats:[],versions:[]});
     return(
       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10,alignItems:"center"}}>
         {pills.map(({type,value,label})=>{
@@ -886,19 +868,32 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
           )}
         </>
       ) : (
-        /* ── STANDALONE MODE: folder badge + + menu ── */
+        /* ── STANDALONE MODE: folder badge + filter + + menu ── */
         <>
           <div style={{display:"flex",gap:6,marginBottom:12,justifyContent:"flex-end"}}>
-            {/* Folder badge — matches group mode style */}
+            {/* Folder badge — matches group mode style; globe dot when using global folder */}
             <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
-              title={hasPerProjectPath?`Folder: ${scanPath}`:"Set scan folder"}
+              title={hasPerProjectPath?`Folder: ${scanPath}`:hasGlobalFolder?"Using global folder from Settings":"Set scan folder"}
               style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",
-                alignItems:"center",justifyContent:"center",
+                alignItems:"center",justifyContent:"center",position:"relative",
                 border:`1px solid ${hasPerProjectPath?C.accentBorder:C.lineS}`,
                 background:hasPerProjectPath?C.accentAlpha:C.surf2}}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                 <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
                   stroke={hasPerProjectPath?C.indigo:C.faint} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {!hasPerProjectPath&&hasGlobalFolder&&(
+                <span style={{position:"absolute",top:-3,right:-3,width:7,height:7,borderRadius:"50%",background:C.indigo,border:`1.5px solid ${C.bg}`}}/>
+              )}
+            </button>
+            {/* Filter toggle button */}
+            <button onClick={()=>setShowFilters(s=>!s)} title="Toggle filters"
+              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",
+                alignItems:"center",justifyContent:"center",
+                border:`1px solid ${showFilters?C.accentBorder:C.lineS}`,
+                background:showFilters?C.accentAlpha:C.surf2}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M3 6h18M7 12h10M11 18h2" stroke={showFilters?C.indigo:C.faint} strokeWidth="1.8" strokeLinecap="round"/>
               </svg>
             </button>
             {/* + menu: upload + A/B — matches group mode style */}
@@ -909,8 +904,8 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
                   display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-sans)"}}>
                 {uploading?<Spinner/>:"+"}
               </button>
-              <SmartDropdown anchorRef={addMenuRef} open={addMenuOpen} align="left" minHeight={100}
-                style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,left:0,right:0,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+              <SmartDropdown anchorRef={addMenuRef} open={addMenuOpen} align="right" minHeight={100}
+                style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,minWidth:150,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
                 <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
                   display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:8,
                   border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
@@ -932,13 +927,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
           </div>
           {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
           {showScan&&ScanPanel}
-          {!hasPerProjectPath&&hasGlobalFolder&&!showScan&&(
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"7px 10px",background:C.surf2,border:`1px solid ${C.line}`,borderRadius:8}}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={C.faint} strokeWidth="1.7"/><path d="M12 8v4M12 16h.01" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
-              <span style={{fontSize:11,color:C.faint,flex:1}}>Using global folder from Settings</span>
-            </div>
-          )}
-          {FilterPills}
+          {showFilters&&FilterPills}
           {FileList}
         </>
       )}
@@ -1880,7 +1869,7 @@ function GoalEditSheet({goalHours,onSave,onClose}) {
 }
 
 /* ─── persistent mini player ─── */
-function MiniPlayer({nowPlaying,onEnd,onClear}) {
+function MiniPlayer({nowPlaying,onEnd,onClear,onOpenProject}) {
   const C=useTheme();
   const audioRef=useRef(null);
   const nowPlayingRef=useRef(nowPlaying);
@@ -1969,7 +1958,7 @@ function MiniPlayer({nowPlaying,onEnd,onClear}) {
                 :<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={C.indigo}/></svg>
               }
             </button>
-            <div style={{flex:1,minWidth:0}}>
+            <div onClick={()=>onOpenProject?.(nowPlaying.projectName,"versions")} style={{flex:1,minWidth:0,cursor:onOpenProject?"pointer":"default"}}>
               <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nowPlaying.file.name}</div>
               <div style={{fontSize:11,color:C.faint,marginTop:1}}>{nowPlaying.projectName}</div>
             </div>
@@ -3250,7 +3239,7 @@ export default function App() {
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
       {reviewOpen&&<AnalyticsSheet sessions={sessions} goalHours={goalHours} currentStreak={currentStreak} longestStreak={longestStreak} onClose={()=>setReviewOpen(false)}/>}
-      <MiniPlayer nowPlaying={nowPlaying} onEnd={()=>setNowPlaying(null)} onClear={()=>setNowPlaying(null)}/>
+      <MiniPlayer nowPlaying={nowPlaying} onEnd={()=>setNowPlaying(null)} onClear={()=>setNowPlaying(null)} onOpenProject={openProject}/>
       {toast&&<div className="toast">{toast}</div>}
 
       {/* Header */}
@@ -3406,6 +3395,39 @@ export default function App() {
               <button onClick={()=>setSheet({form:newForm(),editing:false,id:null})} style={{flex:1,padding:15,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:700,color:"#fff",background:C.accentGrad,boxShadow:`0 8px 22px -8px ${C.accentGlow}`}}>{todayHasSession?"＋ Log another":"＋ Log a session"}</button>
               <button onClick={openTimerSetup} style={{padding:"15px 18px",borderRadius:14,cursor:"pointer",border:`1px solid ${C.lineS}`,background:"transparent",color:C.muted,fontFamily:"var(--font-sans)",fontSize:15.5,fontWeight:600,display:"flex",alignItems:"center",gap:7}}>▶ Timer</button>
             </div>
+            {(()=>{
+              const todayProjects=projects.filter(p=>!GROUP_TYPE_CFG[p.type]&&!["done","released"].includes(p.status)&&p.plannedStart&&p.plannedStart<=today&&(p.plannedEnd||p.plannedStart)>=today);
+              const thisWeekH=weekHours(sessions,getWeekStart(0));
+              const remainingH=Math.max(0,goalHours-thisWeekH);
+              // days left in current week including today (Mon=0…Sun=6, today's weekStrip index)
+              const todayIdx=weekStrip.findIndex(d=>d.isToday);
+              const daysLeft=todayIdx>=0?7-todayIdx:1;
+              const perDayMins=daysLeft>0?Math.round(remainingH/daysLeft*60):0;
+              const fmtM=m=>m>=60?`${Math.floor(m/60)}h${m%60?`${m%60}m`:""}`:m>0?`${m}m`:"0m";
+              if(todayProjects.length===0&&remainingH<=0)return null;
+              return(
+                <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
+                  {remainingH>0&&perDayMins>0&&(
+                    <div style={{fontSize:12.5,color:C.muted,marginBottom:todayProjects.length>0?8:0}}>
+                      <span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span> today to reach weekly goal
+                    </div>
+                  )}
+                  {todayProjects.length>0&&(
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {todayProjects.map(p=>(
+                        <button key={p.name} onClick={()=>openProject(p.name)}
+                          style={{fontSize:11.5,fontWeight:600,padding:"3px 9px",borderRadius:20,cursor:"pointer",
+                            border:`1px solid ${(projectColorMap[p.name]||C.indigo)}44`,
+                            background:`${(projectColorMap[p.name]||C.indigo)}18`,
+                            color:projectColorMap[p.name]||C.indigo,fontFamily:"var(--font-sans)"}}>
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
