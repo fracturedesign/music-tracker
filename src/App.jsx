@@ -58,6 +58,351 @@ const pickProjectColor=(usedColors)=>{
   return free||PROJECT_PALETTE[usedColors.size%PROJECT_PALETTE.length];
 };
 
+// ── Quest system ─────────────────────────────────────────────────────────────
+const DAILY_QUESTS = [
+  ["Sound Design","Add a vinyl crackle layer to give a track warmth"],
+  ["Sound Design","Design a custom hi-hat using only white noise and envelopes"],
+  ["Sound Design","Layer three different percussion sounds into one cohesive hit"],
+  ["Sound Design","Create a sub-bass patch using a sine wave and pitch envelope"],
+  ["Sound Design","Build a pluck sound from scratch — no presets"],
+  ["Sound Design","Design a textural pad using only field recordings"],
+  ["Sound Design","Create a riser and down-lifter pair for transitions"],
+  ["Sound Design","Make a bass that sits under 80 Hz using only EQ and saturation"],
+  ["Sound Design","Design a one-shot kick from a sine wave"],
+  ["Sound Design","Create a lo-fi snare by layering a snare and clap with bit-crushing"],
+  ["Sound Design","Build a pad from three detuned oscillators — no samples"],
+  ["Sound Design","Design a sound inspired by rain using only synthesis"],
+  ["Instruments","Use kalimba as the main melodic instrument"],
+  ["Instruments","Write a progression featuring piano as the only harmonic instrument"],
+  ["Instruments","Use a marimba or vibraphone for the melody"],
+  ["Instruments","Feature a flute or shakuhachi as the main voice"],
+  ["Instruments","Use a koto or shamisen sample as the hook"],
+  ["Instruments","Write a part for cello or violin — real or sampled"],
+  ["Instruments","Feature a Rhodes or Wurlitzer electric piano"],
+  ["Instruments","Use ukulele as the harmonic layer"],
+  ["Instruments","Feature handpan or hang drum as the rhythmic core"],
+  ["Instruments","Use a toy piano or music box for the main melody"],
+  ["Instruments","Write a part for upright bass — keep it acoustic-sounding"],
+  ["Instruments","Use prepared piano samples for an abstract texture"],
+  ["Melody","Write a 4-bar melody using only the pentatonic scale"],
+  ["Melody","Compose a melody with no notes shorter than a quarter note"],
+  ["Melody","Write a looping 8-bar melody with a clear question-and-answer structure"],
+  ["Melody","Write a melody using the Dorian mode"],
+  ["Melody","Create a countermelody that complements an existing one"],
+  ["Melody","Write a melody that stays within a minor third range"],
+  ["Melody","Compose a phrase that resolves to the 5th instead of the root"],
+  ["Melody","Write a melody using the Japanese In scale"],
+  ["Melody","Create a leitmotif — a recurring 2-bar idea"],
+  ["Melody","Write a call-and-response melody between two instruments"],
+  ["Melody","Use chromatic passing notes in at least one bar"],
+  ["Melody","Write a melody that starts on the 3rd of the scale"],
+  ["Harmony","Write a chord progression using only suspended chords"],
+  ["Harmony","Use a minor iv chord in a major key progression"],
+  ["Harmony","Add a secondary dominant chord to a 4-chord loop"],
+  ["Harmony","Reharmonize an existing progression you've written"],
+  ["Harmony","Write a looping two-chord vamp and build a full arrangement on it"],
+  ["Harmony","Add a passing diminished chord between two diatonic chords"],
+  ["Harmony","Arrange a progression in 3/4 time"],
+  ["Harmony","Write a progression using mostly 7th chords"],
+  ["Harmony","Borrow a chord from the parallel minor key"],
+  ["Rhythm","Program a beat where the snare lands on beat 1 and 3"],
+  ["Rhythm","Create a groove in 6/8 time"],
+  ["Rhythm","Build a beat using only samples — no synth drums"],
+  ["Rhythm","Program a polyrhythm: 3 against 4"],
+  ["Rhythm","Create a beat with heavy swing — push it past 60%"],
+  ["Rhythm","Build a half-time groove where the snare only hits on beat 3"],
+  ["Rhythm","Make a drum pattern with no kick drum at all"],
+  ["Rhythm","Build a beat in 5/4 time"],
+  ["Rhythm","Create a groove that uses ghost notes prominently"],
+  ["FX & Processing","Automate reverb wet/dry on your main melody throughout the track"],
+  ["FX & Processing","Use a bitcrusher on a hi-hat bus and blend subtly"],
+  ["FX & Processing","Apply tape saturation to a drum buss"],
+  ["FX & Processing","Sidechain-compress a pad to the kick drum"],
+  ["FX & Processing","Use a ping-pong delay on a lead instrument"],
+  ["FX & Processing","Apply heavy multiband compression to a drum loop"],
+  ["FX & Processing","Use a filter LFO synced to tempo on a synth pad"],
+  ["FX & Processing","Use a transient shaper to make a snare crack more"],
+  ["FX & Processing","Apply stereo width reduction to the low end"],
+  ["FX & Processing","Use a phaser on a guitar or synth chord"],
+  ["FX & Processing","Use convolution reverb with an unusual IR — a cave, a stairwell, a bathroom"],
+  ["Texture & Atmosphere","Record an ambient room noise and use it as a background layer"],
+  ["Texture & Atmosphere","Find a nature recording and pitch-shift it to fit a key"],
+  ["Texture & Atmosphere","Layer three sustained pads and automate their volumes to breathe"],
+  ["Texture & Atmosphere","Sample your environment and turn it into a percussive loop"],
+  ["Texture & Atmosphere","Create a drone from a single sustained note, layering harmonics"],
+  ["Texture & Atmosphere","Use reversed audio as a transition or texture element"],
+  ["Texture & Atmosphere","Build an intro using only atmosphere — no rhythmic elements"],
+  ["Texture & Atmosphere","Use silence deliberately — leave a gap of at least 2 bars"],
+  ["Texture & Atmosphere","Build a texture from slowed-down orchestral samples"],
+  ["Arrangement","Write an intro and outro for an existing sketch"],
+  ["Arrangement","Strip a dense arrangement down to its minimal elements for 4 bars"],
+  ["Arrangement","Add a breakdown featuring only bass and minimal percussion"],
+  ["Arrangement","Double the length of a track by adding a new section"],
+  ["Arrangement","Write a B-section melody over the same chord progression as the A-section"],
+  ["Arrangement","Create a tension-building section before a drop or resolution"],
+  ["Sampling","Find a vinyl sample and chop it into 4 one-shot slices"],
+  ["Sampling","Pitch a drum loop to match the key of a chord progression"],
+  ["Sampling","Reverse a piano sample and use it as a pad"],
+  ["Sampling","Time-stretch a sample to half speed and build a groove around it"],
+  ["Sampling","Chop a spoken-word recording into a rhythmic vocal groove"],
+  ["Sampling","Make a drum kit from samples that are not drums"],
+  ["Mixing","Balance a 5-track demo mix — everything readable, nothing clipping"],
+  ["Mixing","High-pass every instrument above 80 Hz except bass and kick"],
+  ["Mixing","Create a send reverb bus and route at least 4 tracks to it"],
+  ["Mixing","Automate volume on at least 3 tracks throughout a track"],
+  ["Mixing","Use parallel compression on your drum bus"],
+  ["Mixing","Use mid/side processing on a stereo pad"],
+  ["Mixing","Automate a filter cutoff to create movement in a static section"],
+  ["Theory","Write the same melody in 3 different modes"],
+  ["Theory","Transcribe a melody you know by ear into MIDI"],
+  ["Theory","Write a bass line that outlines the harmony — not just roots"],
+  ["Theory","Study one track you admire: map out its form and key"],
+  ["Theory","Find the tempo and key of a reference track and match them in a new sketch"],
+  ["Creativity","Write music for a specific time of day — 3 AM, golden hour, midnight rain"],
+  ["Creativity","Make a track that tells a story — give it a title and a one-sentence narrative"],
+  ["Creativity","Create a 1-minute piece with a clear beginning, middle, and end"],
+  ["Creativity","Set a 20-minute timer and release whatever comes out, as-is"],
+  ["Creativity","Write a track that intentionally breaks one rule you always follow"],
+  ["Creativity","Start a track from a bass line instead of chords or melody"],
+  ["Creativity","Write music inspired by a piece of Japanese art or design"],
+  ["Creativity","Create something using only sounds with a duration under 1 second"],
+  ["Creativity","Make a piece using exactly 4 instruments, no more, no less"],
+  ["Creativity","Create a musical motif and transform it 3 different ways"],
+  ["Creativity","Write music that would feel right in a cozy café"],
+  ["Creativity","Write a track that uses space and silence as its main feature"],
+  ["Creativity","Build a track where every sound has a real-world origin"],
+  ["Creativity","Write 3 completely different intros for the same chord progression"],
+  ["Creativity","Make a track that could work as the end credits of a film"],
+  ["Creativity","Write music inspired by the last dream you remember"],
+  ["Creativity","Build a groove from only hand-percussion and melodic elements, no kick"],
+  ["Creativity","Make a track inspired by Bonobo — blend acoustic and electronic"],
+  ["Creativity","Write music that evokes movement — walking, cycling, traveling"],
+  ["Creativity","Make a loop that works perfectly at -6dB with no other elements"],
+  ["Orbit & Habits","Log today's session in Orbit before you close the DAW"],
+  ["Orbit & Habits","Write a session note in Orbit — even one sentence about what you made"],
+  ["Orbit & Habits","Tag today's session with at least two project tags in Orbit"],
+  ["Orbit & Habits","Review your last 3 sessions in Orbit before starting today's work"],
+  ["Orbit & Habits","Set a session goal in Orbit before you open the DAW"],
+  ["Orbit & Habits","Log how long your session was — aim for at least 25 minutes"],
+  ["Orbit & Habits","Record your mood before and after a session in Orbit"],
+  ["Orbit & Habits","Don't break the streak — log any creative activity in Orbit today"],
+  ["Orbit & Habits","Add a cover image or visual to a project in Orbit"],
+  ["Wellbeing","Meditate for 10 minutes before opening the DAW"],
+  ["Wellbeing","Take a 10-minute walk outside — no headphones, just listen to the world"],
+  ["Wellbeing","Do 5 minutes of stretching for your wrists, shoulders, and neck"],
+  ["Wellbeing","Listen to music today with no other task — just listen, nothing else"],
+  ["Wellbeing","Write 3 things about your music you're genuinely proud of"],
+  ["Wellbeing","Take a full hour away from screens before your session"],
+  ["Wellbeing","Journal for 5 minutes about where your music is going"],
+  ["Wellbeing","Do a breathing exercise before a session — 4-7-8 or box breathing"],
+  ["Wellbeing","Listen to a full album start to finish without skipping"],
+  ["Wellbeing","Set an end time for your session and stick to it — rest is part of the process"],
+  ["Wellbeing","Step away from a track that's frustrating you — come back fresh tomorrow"],
+  ["Wellbeing","Write down one fear you have about your music and sit with it honestly"],
+];
+
+const WEEKLY_QUESTS = [
+  ["Completion","Finish a track: mixed and mastered at release quality"],
+  ["Completion","Complete a track start to finish in 7 days — no revisiting after day 5"],
+  ["Completion","Finish a track that's been sitting in draft for more than 2 months"],
+  ["Completion","Produce a finished 2-minute interlude track"],
+  ["Completion","Deliver a cinematic instrumental — full arrangement, fully mixed"],
+  ["Completion","Complete a track using only DAW stock effects — no third-party plugins"],
+  ["Completion","Finish a track and send it to one person whose opinion you trust"],
+  ["Completion","Produce a short track (under 90 seconds) and fully master it"],
+  ["Orbit — Streak","Log a session in Orbit every single day this week — don't break the chain"],
+  ["Orbit — Streak","Log at least 5 sessions this week in Orbit — quality over quantity"],
+  ["Orbit — Streak","Write a session note in Orbit for every single session this week"],
+  ["Orbit — Streak","Set a goal in Orbit at the start of each day — before the DAW opens"],
+  ["Orbit — Streak","Don't let a day pass without opening Orbit — even on rest days, log your thoughts"],
+  ["Orbit — Review","Review your last 30 days of Orbit sessions: find one pattern, good or bad"],
+  ["Orbit — Review","Identify your most productive time of day from Orbit logs and protect it next week"],
+  ["Orbit — Review","Look at which projects have the most sessions — ask if that matches your priorities"],
+  ["Orbit — Review","Archive or close out any Orbit project you haven't touched in 60+ days"],
+  ["Orbit — Review","Write a weekly retrospective in Orbit: what did you finish, start, or abandon?"],
+  ["Arrangement","Arrange a full track with intro, verse, chorus, bridge, and outro"],
+  ["Arrangement","Take a 2-bar loop and develop it into a 3-minute full arrangement"],
+  ["Arrangement","Write an arrangement inspired by a specific film score"],
+  ["Arrangement","Produce a track where the arrangement tells a clear emotional arc"],
+  ["Arrangement","Produce a single idea in two different arrangements — lo-fi vs cinematic"],
+  ["Sampling","Build an entire track from samples you record yourself this week"],
+  ["Sampling","Create a track made entirely from vinyl samples"],
+  ["Sampling","Produce a flip: sample an existing track and transform it beyond recognition"],
+  ["Sampling","Make a track from environmental field recordings collected this week"],
+  ["Sampling","Build a drum kit and all melodic elements from non-musical object recordings"],
+  ["Sound Design","Design a full sound palette for an EP — no presets, all from scratch"],
+  ["Sound Design","Design and document 10 unique patches this week"],
+  ["Sound Design","Create a signature sound that could define your next release"],
+  ["Sound Design","Build an entire track using only synthesized sounds — no samples at all"],
+  ["Mixing & Mastering","Mix and master a track to streaming-ready loudness"],
+  ["Mixing & Mastering","Take a rough mix and fully professional-mix it — compare before/after"],
+  ["Mixing & Mastering","Mix the same session two different ways and compare with a listener"],
+  ["Mixing & Mastering","Master an EP of 4 short tracks to a consistent, coherent sound"],
+  ["Release Prep","Prepare a track for release: mix, master, metadata, and cover art plan"],
+  ["Release Prep","Write liner notes for a finished track — title, story, instruments used"],
+  ["Release Prep","Create a 30-second preview clip for social media from a finished track"],
+  ["Release Prep","Write a release blurb for an upcoming track — 100 words, no fluff"],
+  ["Creative Challenge","Make a track where every element changes every 8 bars"],
+  ["Creative Challenge","Produce a 5-minute ambient piece with no percussion at all"],
+  ["Creative Challenge","Write a suite of 3 short interconnected pieces in the same key"],
+  ["Creative Challenge","Create an entire EP concept: 4-5 tracks with a unifying theme and title"],
+  ["Creative Challenge","Produce a track where the time signature changes in every section"],
+  ["Creative Challenge","Produce something that could sit on a Bonobo or GoGo Penguin album"],
+  ["Creative Challenge","Create a piece inspired by wabi-sabi — beauty in imperfection"],
+  ["Creative Challenge","Score a short film scene — picture lock it to video"],
+  ["Asian-Inspired","Write a lo-fi track with a distinctly Japanese musical aesthetic"],
+  ["Asian-Inspired","Sample a koto or shamisen recording and build a full production around it"],
+  ["Asian-Inspired","Write something that blends Asian folk melodies with modern production"],
+  ["Asian-Inspired","Write a track that could play in a Studio Ghibli-style rainy scene"],
+  ["Asian-Inspired","Blend a pentatonic motif with a modern lo-fi or jazz-influenced arrangement"],
+  ["Acoustic + Electronic","Produce a track where a real acoustic instrument sits front and center"],
+  ["Acoustic + Electronic","Record any acoustic sound and blend it with synthesized layers"],
+  ["Acoustic + Electronic","Record a guitar or piano part and process it beyond recognition"],
+  ["Acoustic + Electronic","Create a Bonobo-style piece: organic textures over a precise electronic grid"],
+  ["Cinematic","Score a 2-minute imaginary scene using only DAW instruments"],
+  ["Cinematic","Write a cinematic piece that builds from silence to full orchestration"],
+  ["Cinematic","Create a main theme: memorable, loopable, adaptable"],
+  ["Cinematic","Compose a dark tense underscore — no melody, only texture and rhythm"],
+  ["Cinematic","Write a triumphant resolution cue — something that feels like an earned ending"],
+  ["Wellbeing","Meditate for at least 10 minutes every day this week before producing"],
+  ["Wellbeing","Go for a walk outside at least 4 times this week — no headphones"],
+  ["Wellbeing","Write a journal entry every day this week about how your creative energy feels"],
+  ["Wellbeing","Listen to one full album a day, start to finish, with no other task"],
+  ["Wellbeing","Take one full day completely off from music — rest is part of the practice"],
+  ["Wellbeing","Reach out to one musician you admire this week — fan mail, DM, anything"],
+  ["Wellbeing","Share something you made with your Discord community — even a rough sketch"],
+  ["Wellbeing","Sleep before midnight at least 5 days this week — protect your creativity"],
+  ["Theory","Compose a short piece in a key you've never released in"],
+  ["Theory","Write a full arrangement using only modal scales — no standard major or minor"],
+  ["Theory","Transcribe chords from a lo-fi track you admire and write your own over them"],
+  ["Theory","Study a Bill Evans or Ahmad Jamal recording and apply one technique you hear"],
+  ["Workflow & Growth","Build and document a new project template in your DAW"],
+  ["Workflow & Growth","Organize your entire sample library — delete what you'll never actually use"],
+  ["Workflow & Growth","Learn one new DAW feature you've never used and apply it in a track"],
+  ["Workflow & Growth","Write a post-mortem for your last track: what worked, what didn't, why"],
+  ["Workflow & Growth","Design a 7-day production schedule and track adherence in Orbit"],
+  ["Workflow & Growth","Archive and back up all unfinished projects from the last 6 months"],
+  ["Collaboration","Send a loop pack of 5 original loops to another producer this week"],
+  ["Collaboration","Finish your half of a back-and-forth collab project"],
+  ["Collaboration","Share a stem pack from a finished track for remixing"],
+];
+
+const OBLIQUE_QUESTS = [
+  ["Oblique — Constraint","Remove the most important-sounding element from your track and finish it without it"],
+  ["Oblique — Constraint","Work with only what you have in the next 30 minutes — no downloading, no browsing"],
+  ["Oblique — Constraint","Use only three sounds for the entire track: pick them before you start"],
+  ["Oblique — Constraint","Limit yourself to one octave on every instrument"],
+  ["Oblique — Constraint","Allow yourself only 8 MIDI notes per bar — total, across all tracks"],
+  ["Oblique — Constraint","Set every fader to the same volume and don't touch them for one full listen"],
+  ["Oblique — Constraint","Remove all percussion and find another way to create rhythm"],
+  ["Oblique — Constraint","Use only sounds you've never used before in any previous project"],
+  ["Oblique — Constraint","Write the entire piece in one take — no editing afterward"],
+  ["Oblique — Constraint","Work at half your usual tempo — see what changes"],
+  ["Oblique — Constraint","Finish the track before you name any of the tracks in the session"],
+  ["Oblique — Constraint","Make something with a 1-minute hard limit — then stop, done"],
+  ["Oblique — Reversal","Take your current track and reverse every decision: what was loud becomes quiet"],
+  ["Oblique — Reversal","Reverse the timeline of your arrangement — end becomes the beginning"],
+  ["Oblique — Reversal","Take the part you like least in a track and put it front and center"],
+  ["Oblique — Reversal","Take the element you planned to cut and build the whole track around it instead"],
+  ["Oblique — Reversal","Swap the roles: the background texture becomes the lead, the lead becomes texture"],
+  ["Oblique — Reversal","Make the quietest thing in the mix the loudest"],
+  ["Oblique — Reversal","Take the most complex part and simplify it to a single repeated note"],
+  ["Oblique — Reversal","Flip your usual workflow: if you start with rhythm, start with melody today"],
+  ["Oblique — Perspective","Imagine someone you admire is listening — finish the track for them"],
+  ["Oblique — Perspective","Produce as if you have no listeners — make exactly what you want to hear"],
+  ["Oblique — Perspective","Ask: what would this track sound like if it were 10 years older?"],
+  ["Oblique — Perspective","Ask: what would this track sound like made by someone who has never heard yours?"],
+  ["Oblique — Perspective","Listen to the track on the worst speaker in your home — fix only what bothers you there"],
+  ["Oblique — Perspective","Describe your track out loud to an imaginary person who's never heard music like this"],
+  ["Oblique — Perspective","Imagine this track scoring a scene — what happens in the scene? Let it guide you"],
+  ["Oblique — Perspective","Treat the track as already finished — only add things that truly belong"],
+  ["Oblique — Perspective","Make the track you'd most want to discover on a cassette at a flea market"],
+  ["Oblique — Disruption","Add something that doesn't belong — keep it if it improves anything"],
+  ["Oblique — Disruption","Introduce a mistake into the track and leave it in deliberately"],
+  ["Oblique — Disruption","Stop working at the moment of maximum excitement — come back tomorrow"],
+  ["Oblique — Disruption","Change one parameter on every plugin in your session at random — then listen"],
+  ["Oblique — Disruption","Delete one track you think the song needs. See if it still works"],
+  ["Oblique — Disruption","Record something in the wrong key and work with what you get"],
+  ["Oblique — Disruption","Open a finished project and change only one thing — then stop"],
+  ["Oblique — Disruption","Work in a room you don't normally work in"],
+  ["Oblique — Disruption","Import an audio file from a completely unrelated project and find a use for it"],
+  ["Oblique — Disruption","Mute every track, unmute them one at a time, and stop when it already sounds good"],
+  ["Oblique — Process","Commit to the first take of every element — no second chances today"],
+  ["Oblique — Process","Write the track title and mood before you make a single sound"],
+  ["Oblique — Process","Don't listen back during the session — only listen at the very end"],
+  ["Oblique — Process","Stop whenever you feel satisfied — resist the urge to add more"],
+  ["Oblique — Process","Work backwards: finish the outro first, then the middle, then the beginning"],
+  ["Oblique — Process","Spend the first 10 minutes of your session in silence, just thinking"],
+  ["Oblique — Process","Make every decision faster than you normally would — no second-guessing"],
+  ["Oblique — Process","Work from a sketch you wrote on paper before touching the DAW"],
+  ["Oblique — Process","Ask at every step: is this necessary? Remove everything that isn't"],
+  ["Oblique — Process","Complete one full idea before evaluating any of it"],
+  ["Oblique — Emotion","Make something you're afraid to share — then share it anyway"],
+  ["Oblique — Emotion","Write music for a specific emotion, not a vibe or genre"],
+  ["Oblique — Emotion","Make something that makes you uncomfortable — sit with that feeling"],
+  ["Oblique — Emotion","What are you avoiding in this track? Go there."],
+  ["Oblique — Emotion","Make something slow enough to feel patience in"],
+  ["Oblique — Emotion","Write music that sounds like relief"],
+  ["Oblique — Emotion","Make something you'd play to someone at 4 AM when words aren't enough"],
+  ["Oblique — Emotion","What feeling do you most want to communicate this week? Start there."],
+  ["Oblique — Texture","Honor the texture, not the notes — what does the surface of the sound feel like?"],
+  ["Oblique — Texture","Work with the imperfections — don't clean anything up today"],
+  ["Oblique — Texture","Use the space between the notes as the main compositional material"],
+  ["Oblique — Texture","Add one element that exists only to support everything else — never heard on its own"],
+  ["Oblique — Texture","Make the room sound like an instrument"],
+  ["Oblique — Texture","Find the rhythm already hidden in a non-rhythmic sound"],
+  ["Oblique — Texture","Layer something so quietly it's felt more than heard"],
+];
+
+function getISOWeek(dateStr) {
+  const d=new Date(dateStr+"T00:00:00");
+  const jan4=new Date(d.getFullYear(),0,4);
+  const dow=jan4.getDay()||7;
+  const weekStart=new Date(jan4);
+  weekStart.setDate(jan4.getDate()-dow+1);
+  const week=Math.floor((d-weekStart)/604800000)+1;
+  return`${d.getFullYear()}-W${String(week).padStart(2,"0")}`;
+}
+function questLevel(xp){const xpPerLevel=50;return{level:Math.floor(xp/xpPerLevel)+1,xpInLevel:xp%xpPerLevel,xpPerLevel};}
+function pickQuestWeighted(pool,recentIdxs,count){
+  const recentSet=new Set(recentIdxs);
+  const items=pool.map((q,i)=>({i,text:q[1],w:recentSet.has(i)?0.15:1.0}));
+  const result=[];
+  for(let p=0;p<Math.min(count,items.length);p++){
+    const avail=items.filter(x=>!result.some(r=>r.idx===x.i));
+    const total=avail.reduce((s,x)=>s+x.w,0);
+    let rand=Math.random()*total;
+    let picked=avail[avail.length-1];
+    for(const item of avail){rand-=item.w;if(rand<=0){picked=item;break;}}
+    result.push({idx:picked.i,text:picked.text,done:false});
+  }
+  return result;
+}
+function refreshQuestsIfStale(qd,todayStr,weekStr){
+  let next=qd;let changed=false;
+  if(qd.dailyDate!==todayStr){
+    const newHist=[...(qd.completedDailyHistory||[])];
+    (qd.currentDaily||[]).forEach(q=>{if(q.done)newHist.push({idx:q.idx,date:qd.dailyDate||todayStr});});
+    const cutDate=new Date(todayStr);cutDate.setDate(cutDate.getDate()-30);
+    const cutStr=cutDate.toISOString().slice(0,10);
+    const prunedHist=newHist.filter(h=>h.date>=cutStr);
+    const now=new Date(todayStr);
+    const recentIdxs=prunedHist.filter(h=>Math.round((now-new Date(h.date))/86400000)<7).map(h=>h.idx);
+    next={...next,currentDaily:pickQuestWeighted(DAILY_QUESTS,recentIdxs,3),dailyDate:todayStr,completedDailyHistory:prunedHist};
+    changed=true;
+  }
+  if(qd.weeklyDate!==weekStr){
+    const newWHist=[...(qd.completedWeeklyHistory||[])];
+    if(qd.currentWeekly?.done)newWHist.push({idx:qd.currentWeekly.idx,weekStr:qd.weeklyDate});
+    const prunedWHist=newWHist.slice(-24);
+    const recentWIdxs=prunedWHist.slice(-8).map(h=>h.idx);
+    const newWeekly=pickQuestWeighted(WEEKLY_QUESTS,recentWIdxs,1)[0];
+    next={...next,currentWeekly:newWeekly,weeklyDate:weekStr,completedWeeklyHistory:prunedWHist};
+    changed=true;
+  }
+  return changed?next:null;
+}
+
 const GROUP_TYPE_CFG = {
   album: { label:"Album", badge:"LP", dot:"#fb923c" },
   ep:    { label:"EP",    badge:"EP", dot:"#60a5fa" },
@@ -1697,7 +2042,7 @@ function AllSessions({sessions,projects,projectMap,onEdit,onDelete,onClose}) {
 }
 
 /* ─── settings sheet ─── */
-function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived}) {
+function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived,questsEnabled,onQuestsToggle}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [editingGoal,setEditingGoal]=useState(false);
   const [goalInput,setGoalInput]=useState(String(goalHours));
@@ -1750,6 +2095,18 @@ function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChang
             <div style={{fontSize:12,color:C.faint,marginTop:2}}>Export all sessions &amp; projects as JSON</div>
           </div>
         </button>
+
+        {/* Quests */}
+        <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:12}}>Quests</div>
+        <div style={{background:C.surf2,borderRadius:14,padding:"14px 16px",marginBottom:22,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:600,color:C.text}}>Daily &amp; Weekly Quests</div>
+            <div style={{fontSize:12,color:C.faint,marginTop:2}}>Creative challenges, oblique cards, and XP leveling</div>
+          </div>
+          <button onClick={onQuestsToggle} style={{width:44,height:26,borderRadius:999,border:"none",cursor:"pointer",flexShrink:0,background:questsEnabled?C.accentGrad:C.lineS,position:"relative",transition:"background 0.2s"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:questsEnabled?21:3,transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}}/>
+          </button>
+        </div>
 
         {/* Global audio folder */}
         <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:12}}>Global audio folder</div>
@@ -2580,6 +2937,7 @@ export default function App() {
   const [audioFileCounts,setAudioFileCounts]=useState({});
   const [globalAudioFolder,setGlobalAudioFolder]=useState("");
   const [archivedProjects,setArchivedProjects]=useState([]);
+  const [questData,setQuestData]=useState(null);
   const [toast,setToast]=useState("");
   const toastTimer=useRef(null);
   const toastQueue=useRef([]);
@@ -2603,6 +2961,17 @@ export default function App() {
       try{const af=await storage.get("music_audio_files");if(af?.value&&typeof af.value==="object"){setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}}catch{}
       try{const gf=await storage.get("music_global_audio_folder");if(gf?.value)setGlobalAudioFolder(gf.value);}catch{}
       try{const ar=await storage.get("music_archived_projects");if(ar?.value)setArchivedProjects(JSON.parse(ar.value));}catch{}
+      try{
+        const q=await storage.get("music_quests");
+        if(q?.value){setQuestData(JSON.parse(q.value));}
+        else{
+          const todayNow=toDateStr(new Date());
+          const weekNow=getISOWeek(todayNow);
+          const init={enabled:true,xp:0,currentDaily:pickQuestWeighted(DAILY_QUESTS,[],3),currentWeekly:pickQuestWeighted(WEEKLY_QUESTS,[],1)[0],currentOblique:null,dailyDate:todayNow,weeklyDate:weekNow,completedDailyHistory:[],completedWeeklyHistory:[],obliqueHistory:[]};
+          setQuestData(init);
+          await storage.set("music_quests",JSON.stringify(init));
+        }
+      }catch{}
       setLoaded(true);
     })();
   },[]);
@@ -2692,6 +3061,9 @@ export default function App() {
         } else if(key==="music_archived_projects"){
           const r=await fetch("/api/data/music_archived_projects").then(x=>x.json());
           if(r?.value!=null)setArchivedProjects(JSON.parse(r.value));
+        } else if(key==="music_quests"){
+          const r=await fetch("/api/data/music_quests").then(x=>x.json());
+          if(r?.value!=null)setQuestData(JSON.parse(r.value));
         }
       }catch{}
     };
@@ -2736,6 +3108,52 @@ export default function App() {
   const flash=msg=>{
     toastQueue.current.push(msg);
     if(!toast)flashNext();
+  };
+
+  /* quests */
+  const saveQuestData=useCallback(async next=>{try{await storage.set("music_quests",JSON.stringify(next));}catch{}},[]);
+  useEffect(()=>{
+    if(!questData)return;
+    const weekStr=getISOWeek(today);
+    const updated=refreshQuestsIfStale(questData,today,weekStr);
+    if(updated){setQuestData(updated);saveQuestData(updated);}
+  },[questData,today]);// eslint-disable-line
+  const completeQuest=(type,idx)=>{
+    if(!questData)return;
+    if(type==="daily"){
+      if(questData.currentDaily[idx]?.done)return;
+      const nextXp=questData.xp+1;
+      const next={...questData,xp:nextXp,
+        currentDaily:questData.currentDaily.map((q,i)=>i===idx?{...q,done:true}:q),
+        completedDailyHistory:[...(questData.completedDailyHistory||[]),{idx:questData.currentDaily[idx].idx,date:today}]};
+      setQuestData(next);saveQuestData(next);
+      flash(`⭐ +1 XP — Quest complete!`);
+    } else if(type==="weekly"){
+      if(questData.currentWeekly?.done)return;
+      const nextXp=questData.xp+10;
+      const next={...questData,xp:nextXp,
+        currentWeekly:{...questData.currentWeekly,done:true},
+        completedWeeklyHistory:[...(questData.completedWeeklyHistory||[]),{idx:questData.currentWeekly.idx,weekStr:questData.weeklyDate}]};
+      setQuestData(next);saveQuestData(next);
+      flash(`⭐ +10 XP — Weekly quest complete!`);
+    }
+  };
+  const drawOblique=()=>{
+    if(!questData)return;
+    const hist=questData.obliqueHistory||[];
+    const recentSet=new Set(hist.slice(-5));
+    const avail=OBLIQUE_QUESTS.map((q,i)=>({i,text:q[1],w:recentSet.has(i)?0.1:1.0}));
+    const total=avail.reduce((s,x)=>s+x.w,0);
+    let rand=Math.random()*total;
+    let picked=avail[avail.length-1];
+    for(const item of avail){rand-=item.w;if(rand<=0){picked=item;break;}}
+    const next={...questData,currentOblique:{idx:picked.i,text:picked.text},obliqueHistory:[...hist,picked.i].slice(-20)};
+    setQuestData(next);saveQuestData(next);
+  };
+  const toggleQuests=()=>{
+    if(!questData)return;
+    const next={...questData,enabled:!questData.enabled};
+    setQuestData(next);saveQuestData(next);
   };
 
   /* milestones */
@@ -3352,38 +3770,95 @@ export default function App() {
     const fmtM=m=>m>=60?`${Math.floor(m/60)}h${Math.round(m%60)?`${Math.round(m%60)}m`:""}`:m>0?`${Math.round(m)}m`:"0m";
     const daysUntil=ds=>{if(!ds)return null;const diff=Math.round((parseDate(ds)-parseDate(today))/(1000*60*60*24));if(diff<0)return null;if(diff===0)return"due today";if(diff===1)return"due tomorrow";return`${diff} days left`;};
     const sortedTodayProjects=[...todayProjects].sort((a,b)=>{const da=a.plannedEnd||a.plannedStart||"9999";const db=b.plannedEnd||b.plannedStart||"9999";return da.localeCompare(db);});
-    if(todayProjects.length===0&&remainingH<=0)return null;
+    const questsEnabled=questData?.enabled!==false;
+    const hasQuestContent=questsEnabled&&questData?.currentDaily?.length>0;
+    if(todayProjects.length===0&&remainingH<=0&&!hasQuestContent)return null;
+    const qCheckbox=(done)=>(
+      <div style={{width:16,height:16,borderRadius:4,flexShrink:0,marginTop:1,
+        background:done?C.indigo:"transparent",border:`1.5px solid ${done?C.indigo:C.dim}`,
+        display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {done&&<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </div>
+    );
     return(
       <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
-          <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>What's for today?</span>
-          {remainingH>0&&(
-            <span style={{fontSize:12,color:C.faint}}>
-              {doneForToday
-                ?<span style={{color:C.green,fontWeight:600}}>Done for today ✓</span>
-                :<><span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span>{futureDays>0?` per day to reach goal`:" left to reach goal"}</>
-              }
-            </span>
-          )}
-        </div>
-        {todayProjects.length>0?(
-          <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {sortedTodayProjects.map(p=>{
-              const dl=daysUntil(p.plannedEnd);
-              const col=projectColorMap[p.name]||C.indigo;
-              return(
-                <button key={p.name} onClick={()=>openProject(p.name)}
-                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                    padding:"6px 10px",borderRadius:10,cursor:"pointer",textAlign:"left",
-                    border:`1px solid ${col}33`,background:`${col}12`,fontFamily:"var(--font-sans)"}}>
-                  <span style={{fontSize:12.5,fontWeight:600,color:col,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-                  {dl&&<span style={{fontSize:11,color:C.faint,flexShrink:0,marginLeft:8}}>{dl}</span>}
-                </button>
-              );
-            })}
+        {(todayProjects.length>0||remainingH>0)&&(<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+            <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>What's for today?</span>
+            {remainingH>0&&(
+              <span style={{fontSize:12,color:C.faint}}>
+                {doneForToday
+                  ?<span style={{color:C.green,fontWeight:600}}>Done for today ✓</span>
+                  :<><span style={{color:C.indigo,fontWeight:600}}>{fmtM(perDayMins)}</span>{futureDays>0?` per day to reach goal`:" left to reach goal"}</>
+                }
+              </span>
+            )}
           </div>
-        ):(
-          <div style={{fontSize:12.5,color:C.dim,fontStyle:"italic"}}>No projects scheduled for today.</div>
+          {todayProjects.length>0?(
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {sortedTodayProjects.map(p=>{
+                const dl=daysUntil(p.plannedEnd);
+                const col=projectColorMap[p.name]||C.indigo;
+                return(
+                  <button key={p.name} onClick={()=>openProject(p.name)}
+                    style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                      padding:"6px 10px",borderRadius:10,cursor:"pointer",textAlign:"left",
+                      border:`1px solid ${col}33`,background:`${col}12`,fontFamily:"var(--font-sans)"}}>
+                    <span style={{fontSize:12.5,fontWeight:600,color:col,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                    {dl&&<span style={{fontSize:11,color:C.faint,flexShrink:0,marginLeft:8}}>{dl}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ):(
+            <div style={{fontSize:12.5,color:C.dim,fontStyle:"italic"}}>No projects scheduled for today.</div>
+          )}
+        </>)}
+        {/* Daily quests */}
+        {hasQuestContent&&(
+          <div style={{marginTop:todayProjects.length>0||remainingH>0?14:0,paddingTop:todayProjects.length>0||remainingH>0?14:0,borderTop:todayProjects.length>0||remainingH>0?`1px solid ${C.line}`:"none"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Daily Quests</span>
+              <span style={{fontSize:11,color:C.faint}}>+1 XP each</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {questData.currentDaily.map((q,i)=>(
+                <button key={i} onClick={()=>!q.done&&completeQuest("daily",i)}
+                  style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 10px",borderRadius:10,
+                    background:q.done?C.surf2:`${C.indigo}08`,border:`1px solid ${q.done?C.line:C.accentBorder}`,
+                    cursor:q.done?"default":"pointer",textAlign:"left",fontFamily:"var(--font-sans)",width:"100%"}}>
+                  {qCheckbox(q.done)}
+                  <span style={{fontSize:12.5,color:q.done?C.dim:C.text,flex:1,lineHeight:1.4,textDecoration:q.done?"line-through":"none",opacity:q.done?0.65:1}}>{q.text}</span>
+                  {q.done
+                    ?<span style={{fontSize:11,color:C.green,fontWeight:700,flexShrink:0}}>✓</span>
+                    :<span style={{fontSize:10.5,fontWeight:700,color:C.indigo,background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:6,padding:"2px 6px",flexShrink:0,whiteSpace:"nowrap"}}>+1 XP</span>
+                  }
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Oblique card */}
+        {questsEnabled&&questData&&(
+          <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Oblique Card</span>
+              {questData.currentOblique&&<button onClick={drawOblique} style={{fontSize:11.5,fontWeight:600,color:C.faint,background:"transparent",border:"none",cursor:"pointer",padding:"2px 0",fontFamily:"var(--font-sans)"}}>Redraw</button>}
+            </div>
+            {questData.currentOblique?(
+              <div style={{padding:"12px 14px",borderRadius:12,background:C.surf2,border:`1px solid ${C.line}`}}>
+                <span style={{fontSize:13,color:C.text,lineHeight:1.5,fontStyle:"italic"}}>"{questData.currentOblique.text}"</span>
+              </div>
+            ):(
+              <button onClick={drawOblique} style={{
+                width:"100%",padding:"12px 14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+                background:"transparent",border:`1.5px dashed ${C.lineS}`,
+                display:"flex",alignItems:"center",gap:10,fontFamily:"var(--font-sans)"}}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="3" stroke={C.faint} strokeWidth="1.8"/><circle cx="8" cy="8" r="1.5" fill={C.faint}/><circle cx="16" cy="8" r="1.5" fill={C.faint}/><circle cx="12" cy="12" r="1.5" fill={C.faint}/><circle cx="8" cy="16" r="1.5" fill={C.faint}/><circle cx="16" cy="16" r="1.5" fill={C.faint}/></svg>
+                <span style={{fontSize:13,color:C.faint}}>Draw an Oblique Card</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -3414,7 +3889,7 @@ export default function App() {
       })}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
-      {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived}/>}
+      {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived} questsEnabled={questData?.enabled!==false} onQuestsToggle={toggleQuests}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
       {reviewOpen&&<AnalyticsSheet sessions={sessions} goalHours={goalHours} currentStreak={currentStreak} longestStreak={longestStreak} onClose={()=>setReviewOpen(false)}/>}
       <MiniPlayer nowPlaying={nowPlaying} onEnd={()=>setNowPlaying(null)} onClear={()=>setNowPlaying(null)} onOpenProject={openProject}/>
@@ -3440,6 +3915,20 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* XP level bar */}
+      {questData?.enabled!==false&&questData&&(()=>{
+        const{level,xpInLevel,xpPerLevel}=questLevel(questData.xp||0);
+        return(
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 2px 10px"}}>
+            <span style={{fontSize:12,fontWeight:700,color:C.indigo,whiteSpace:"nowrap",flexShrink:0}}>⭐ Lv.{level}</span>
+            <div style={{flex:1,height:5,borderRadius:999,background:C.surf2,overflow:"hidden"}}>
+              <div style={{height:"100%",borderRadius:999,background:C.accentGrad,width:`${(xpInLevel/xpPerLevel)*100}%`,transition:"width 0.6s ease"}}/>
+            </div>
+            <span style={{fontSize:11,color:C.faint,whiteSpace:"nowrap",flexShrink:0}}>{xpInLevel}/{xpPerLevel} XP</span>
+          </div>
+        );
+      })()}
 
       <div className="cols">
       <div className="col col-a">
@@ -3627,6 +4116,30 @@ export default function App() {
                 </div>
               </div>
             </div>
+            {/* Weekly quest */}
+            {questData?.enabled!==false&&questData?.currentWeekly&&(()=>{
+              const wq=questData.currentWeekly;
+              const wCheckbox=(<div style={{width:16,height:16,borderRadius:4,flexShrink:0,marginTop:1,background:wq.done?C.indigo:"transparent",border:`1.5px solid ${wq.done?C.indigo:C.dim}`,display:"flex",alignItems:"center",justifyContent:"center"}}>{wq.done&&<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>);
+              return(
+                <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Weekly Quest</span>
+                    <span style={{fontSize:11,color:C.faint}}>+10 XP</span>
+                  </div>
+                  <button onClick={()=>completeQuest("weekly")}
+                    style={{display:"flex",alignItems:"flex-start",gap:10,width:"100%",padding:"10px 12px",borderRadius:12,
+                      background:wq.done?C.surf2:`${C.indigo}08`,border:`1px solid ${wq.done?C.line:C.accentBorder}`,
+                      cursor:wq.done?"default":"pointer",textAlign:"left",fontFamily:"var(--font-sans)"}}>
+                    {wCheckbox}
+                    <span style={{fontSize:13,color:wq.done?C.dim:C.text,flex:1,lineHeight:1.4,textDecoration:wq.done?"line-through":"none",opacity:wq.done?0.65:1}}>{wq.text}</span>
+                    {wq.done
+                      ?<span style={{fontSize:11,color:C.green,fontWeight:700,flexShrink:0}}>✓</span>
+                      :<span style={{fontSize:10.5,fontWeight:700,color:C.indigo,background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:6,padding:"2px 6px",flexShrink:0,whiteSpace:"nowrap"}}>+10 XP</span>
+                    }
+                  </button>
+                </div>
+              );
+            })()}
             {/* Past weeks history strip */}
             {goalHours>0&&(()=>{
               const past8=Array.from({length:8},(_,i)=>{
