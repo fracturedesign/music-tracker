@@ -689,9 +689,14 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
   const handleRescan=async()=>{
     setScanning(true);
     try{
+      // Per-project folder is dedicated → scan all files in it.
+      // Global folder is shared → only match files belonging to this project
+      // (otherwise the server analyzes the entire audio library).
+      const usingGlobal=!scanPath&&!!globalAudioFolder;
       const path=scanPath||globalAudioFolder||"";
       if(path){
-        const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:path})});
+        const body=usingGlobal?{folderPath:path,nameFilter:projectName}:{folderPath:path};
+        const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
         if(r.ok){const d=await r.json();setFiles(d.files||[]);}
       }else{
         const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}`);
@@ -2616,6 +2621,7 @@ export default function App() {
   const [showDone,setShowDone]=useState(false);
   const [showReleased,setShowReleased]=useState(false);
   const [showIdea,setShowIdea]=useState(false);
+  const [rescanning,setRescanning]=useState(false);
   const [audioFileCounts,setAudioFileCounts]=useState({});
   const [globalAudioFolder,setGlobalAudioFolder]=useState("");
   const [archivedProjects,setArchivedProjects]=useState([]);
@@ -2647,30 +2653,41 @@ export default function App() {
   },[]);
 
   /* background auto-scan all saved project folders + global folder on launch */
+  // Rescan every project's folder(s) for new audio files, then refresh green counts.
+  // When `await`ed (manual refresh), waits for all scans to finish before updating counts.
+  const rescanAllProjects=async(awaitAll=false)=>{
+    try{
+      const[sr,gf]=await Promise.all([
+        storage.get("music_scan_folders"),
+        storage.get("music_global_audio_folder"),
+      ]);
+      const folders=sr?.value?JSON.parse(sr.value):{};
+      const globalFolder=gf?.value||"";
+      const reqs=[];
+      // per-project scans (dedicated folder → no nameFilter)
+      for(const[proj,path]of Object.entries(folders)){
+        if(!path)continue;
+        reqs.push(fetch(`/api/audio/${encodeURIComponent(proj)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:path})}).catch(()=>{}));
+      }
+      // global-folder scans for projects without their own folder (filter by name)
+      if(globalFolder){
+        for(const p of projects){
+          if(folders[p.name])continue;
+          reqs.push(fetch(`/api/audio/${encodeURIComponent(p.name)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:globalFolder,nameFilter:p.name})}).catch(()=>{}));
+        }
+      }
+      if(awaitAll){
+        await Promise.all(reqs);
+        // refresh green counts from storage
+        const af=await fetch("/api/data/music_audio_files").then(r=>r.json()).catch(()=>null);
+        if(af?.value&&typeof af.value==="object")setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));
+      }
+    }catch{}
+  };
+
   useEffect(()=>{
     if(!loaded)return;
-    (async()=>{
-      try{
-        const[sr,gf]=await Promise.all([
-          storage.get("music_scan_folders"),
-          storage.get("music_global_audio_folder"),
-        ]);
-        const folders=sr?.value?JSON.parse(sr.value):{};
-        const globalFolder=gf?.value||"";
-        // fire per-project scans
-        for(const[proj,path]of Object.entries(folders)){
-          if(!path)continue;
-          fetch(`/api/audio/${encodeURIComponent(proj)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:path})}).catch(()=>{});
-        }
-        // fire global-folder scans for projects that have no per-project folder
-        if(globalFolder){
-          for(const p of projects){
-            if(folders[p.name])continue; // has its own folder — skip
-            fetch(`/api/audio/${encodeURIComponent(p.name)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:globalFolder,nameFilter:p.name})}).catch(()=>{});
-          }
-        }
-      }catch{}
-    })();
+    rescanAllProjects(false);
   },[loaded]);// eslint-disable-line
 
   /* auto backup — once per day */
@@ -3687,9 +3704,9 @@ export default function App() {
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:16}}>
           <span style={eyebrow}>Projects</span>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <button onClick={async()=>{try{const af=await fetch("/api/data/music_audio_files").then(r=>r.json());if(af?.value&&typeof af.value==="object")setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}catch{}}} title="Refresh audio counts"
-              style={{...iconBtn,width:24,height:24,borderRadius:7}}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <button onClick={async()=>{if(rescanning)return;setRescanning(true);await rescanAllProjects(true);setRescanning(false);}} disabled={rescanning} title="Rescan all projects for new audio files"
+              style={{...iconBtn,width:24,height:24,borderRadius:7,opacity:rescanning?0.5:1,cursor:rescanning?"default":"pointer"}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={rescanning?{animation:"spin 1s linear infinite"}:undefined}><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
             {activeProjects.length>0&&<span style={{fontSize:12.5,color:C.faint}}>{activeProjects.length} active</span>}
           </div>
