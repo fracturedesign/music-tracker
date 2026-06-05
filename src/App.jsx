@@ -686,6 +686,21 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
     setShowScan(false);
   };
 
+  const handleRescan=async()=>{
+    setScanning(true);
+    try{
+      const path=scanPath||globalAudioFolder||"";
+      if(path){
+        const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:path})});
+        if(r.ok){const d=await r.json();setFiles(d.files||[]);}
+      }else{
+        const r=await fetch(`/api/audio/${encodeURIComponent(projectName)}`);
+        if(r.ok){const d=await r.json();setFiles(d.files||[]);}
+      }
+    }catch{}
+    setScanning(false);
+  };
+
   const Spinner=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite",flexShrink:0}}><circle cx="12" cy="12" r="9" stroke={C.dim} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="28 56"/></svg>;
 
   const hasPerProjectPath=!!scanPath;
@@ -837,6 +852,13 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
                 <path d="M3 6h18M7 12h10M11 18h2" stroke={showFilters?C.indigo:C.faint} strokeWidth="1.8" strokeLinecap="round"/>
               </svg>
             </button>
+            {/* Rescan button */}
+            <button onClick={e=>{e.stopPropagation();handleRescan();}} disabled={scanning} title="Rescan for new files"
+              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:scanning?"default":"pointer",display:"flex",
+                alignItems:"center",justifyContent:"center",
+                border:`1px solid ${C.lineS}`,background:C.surf2,opacity:scanning?0.5:1}}>
+              {scanning?<Spinner/>:<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </button>
             {/* + action menu (upload + A/B) */}
             <div ref={addMenuRef} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setAddMenuOpen(v=>!v)}
@@ -905,6 +927,13 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                 <path d="M3 6h18M7 12h10M11 18h2" stroke={showFilters?C.indigo:C.faint} strokeWidth="1.8" strokeLinecap="round"/>
               </svg>
+            </button>
+            {/* Rescan button */}
+            <button onClick={handleRescan} disabled={scanning} title="Rescan for new files"
+              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:scanning?"default":"pointer",display:"flex",
+                alignItems:"center",justifyContent:"center",
+                border:`1px solid ${C.lineS}`,background:C.surf2,opacity:scanning?0.5:1}}>
+              {scanning?<Spinner/>:<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             </button>
             {/* + menu: upload + A/B — matches group mode style */}
             <div ref={addMenuRef} style={{position:"relative",flexShrink:0}}>
@@ -3657,7 +3686,13 @@ export default function App() {
       <div className="card" style={card}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:16}}>
           <span style={eyebrow}>Projects</span>
-          {activeProjects.length>0&&<span style={{fontSize:12.5,color:C.faint}}>{activeProjects.length} active</span>}
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={async()=>{try{const af=await fetch("/api/data/music_audio_files").then(r=>r.json());if(af?.value&&typeof af.value==="object")setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}catch{}}} title="Refresh audio counts"
+              style={{...iconBtn,width:24,height:24,borderRadius:7}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            {activeProjects.length>0&&<span style={{fontSize:12.5,color:C.faint}}>{activeProjects.length} active</span>}
+          </div>
         </div>
         <div style={{display:"flex",gap:8,marginBottom:newProjectDatesOpen?8:activeProjects.length?16:0}}>
           <input type="text" className="mt-text" value={newProject} placeholder="Track or project name…"
