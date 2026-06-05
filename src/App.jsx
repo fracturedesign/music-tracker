@@ -835,68 +835,58 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
             {!loading&&files.length===0&&(
               <span style={{fontSize:11,color:C.dim,fontStyle:"italic",flexShrink:0}}>no files</span>
             )}
-            {/* Folder badge — highlighted when a scan path is saved */}
-            <button onClick={e=>{e.stopPropagation();setShowScan(s=>!s);setScanMsg("");}}
-              title={hasPerProjectPath?`Folder: ${scanPath}`:"Set scan folder"}
-              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",
-                alignItems:"center",justifyContent:"center",
-                border:`1px solid ${hasPerProjectPath?C.accentBorder:C.lineS}`,
-                background:hasPerProjectPath?C.accentAlpha:C.surf2}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
-                  stroke={hasPerProjectPath?C.indigo:C.faint} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            {/* Filter toggle button */}
-            <button onClick={e=>{e.stopPropagation();setShowFilters(s=>!s);}} title="Toggle filters"
-              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",
-                alignItems:"center",justifyContent:"center",
-                border:`1px solid ${showFilters?C.accentBorder:C.lineS}`,
-                background:showFilters?C.accentAlpha:C.surf2}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <path d="M3 6h18M7 12h10M11 18h2" stroke={showFilters?C.indigo:C.faint} strokeWidth="1.8" strokeLinecap="round"/>
-              </svg>
-            </button>
-            {/* Rescan button */}
-            <button onClick={e=>{e.stopPropagation();handleRescan();}} disabled={scanning} title="Rescan for new files"
-              style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:scanning?"default":"pointer",display:"flex",
-                alignItems:"center",justifyContent:"center",
-                border:`1px solid ${C.lineS}`,background:C.surf2,opacity:scanning?0.5:1}}>
-              {scanning?<Spinner/>:<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </button>
-            {/* + action menu (upload + A/B) */}
-            <div ref={addMenuRef} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>setAddMenuOpen(v=>!v)}
-                style={{width:26,height:26,borderRadius:7,border:`1px solid ${C.lineS}`,background:C.surf2,
-                  color:C.faint,fontSize:15,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",
-                  justifyContent:"center",fontFamily:"var(--font-sans)"}}>
-                {uploading?<Spinner/>:"+"}
-              </button>
-              <SmartDropdown anchorRef={addMenuRef} open={addMenuOpen} align="right" minHeight={100}
-                style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-                <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
-                  display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
-                  border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
-                  fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  Upload file
-                </button>
-                {files.length>=2&&(
-                  <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
-                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
-                    border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",
-                    fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    A/B compare
-                  </button>
-                )}
-              </SmartDropdown>
-            </div>
+            {/* Folder dot indicator when a scan path is saved (no button at rest) */}
+            {hasPerProjectPath&&(
+              <span title={`Folder: ${scanPath}`} style={{width:6,height:6,borderRadius:"50%",background:C.indigo,flexShrink:0}}/>
+            )}
           </div>
 
-          {/* Expanded content */}
+          {/* Expanded content — actions live here, not in the resting row */}
           {sectionOpen&&(
             <div style={{marginTop:8}}>
+              {/* Action toolbar */}
+              <div style={{display:"flex",gap:6,marginBottom:10,justifyContent:"flex-end"}}>
+                <button onClick={()=>{setShowScan(s=>!s);setScanMsg("");}}
+                  title={hasPerProjectPath?`Folder: ${scanPath}`:"Set scan folder"}
+                  style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                    border:`1px solid ${hasPerProjectPath?C.accentBorder:C.lineS}`,background:hasPerProjectPath?C.accentAlpha:C.surf2}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke={hasPerProjectPath?C.indigo:C.faint} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+                {files.length>0&&<button onClick={()=>setShowFilters(s=>!s)} title="Toggle filters"
+                  style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                    border:`1px solid ${showFilters?C.accentBorder:C.lineS}`,background:showFilters?C.accentAlpha:C.surf2}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M7 12h10M11 18h2" stroke={showFilters?C.indigo:C.faint} strokeWidth="1.8" strokeLinecap="round"/></svg>
+                </button>}
+                <button onClick={handleRescan} disabled={scanning} title="Rescan for new files"
+                  style={{width:26,height:26,borderRadius:7,flexShrink:0,cursor:scanning?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                    border:`1px solid ${C.lineS}`,background:C.surf2,opacity:scanning?0.5:1}}>
+                  {scanning?<Spinner/>:<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+                <div ref={addMenuRef} style={{position:"relative",flexShrink:0}}>
+                  <button onClick={()=>setAddMenuOpen(v=>!v)}
+                    style={{width:26,height:26,borderRadius:7,border:`1px solid ${C.lineS}`,background:C.surf2,
+                      color:C.faint,fontSize:15,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-sans)"}}>
+                    {uploading?<Spinner/>:"+"}
+                  </button>
+                  <SmartDropdown anchorRef={addMenuRef} open={addMenuOpen} align="right" minHeight={100}
+                    style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:12,padding:4,minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+                    <button onClick={()=>{fileInputRef.current?.click();setAddMenuOpen(false);}} style={{
+                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
+                      border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 21V10M7 15l5-5 5 5M3 21h18" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Upload file
+                    </button>
+                    {files.length>=2&&(
+                      <button onClick={()=>{setAbOpen(true);setAddMenuOpen(false);}} style={{
+                        display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,
+                        border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        A/B compare
+                      </button>
+                    )}
+                  </SmartDropdown>
+                </div>
+              </div>
               {abOpen&&<ABCompare files={files} projectName={projectName} onClose={()=>setAbOpen(false)}/>}
               {showScan&&ScanPanel}
               {showFilters&&FilterPills}
@@ -1383,7 +1373,11 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
             {isGroup?(
               <>
                 {childProjects.length>0&&(
-                  <div style={{display:"flex",justifyContent:"flex-end",padding:"8px 16px 2px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px 4px"}}>
+                    <span style={{fontSize:10.5,fontWeight:600,letterSpacing:"0.05em",textTransform:"uppercase",color:C.dim,display:"flex",alignItems:"center",gap:5}}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={C.dim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={C.dim} strokeWidth="1.8"/><circle cx="18" cy="16" r="3" stroke={C.dim} strokeWidth="1.8"/></svg>
+                      Audio per track
+                    </span>
                     <button onClick={()=>setVersionsAllOpen(v=>v===true?false:true)}
                       style={{fontSize:11,fontWeight:600,color:C.faint,background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",padding:"2px 0"}}>
                       {versionsAllOpen===true?"Collapse all":"Expand all"}
