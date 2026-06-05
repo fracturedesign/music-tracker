@@ -1107,7 +1107,7 @@ function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCount
   );
 }
 
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,onCreateTrack,audioFileCounts={},projectColorMap={},canGoBack=false}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,onCreateTrack,audioFileCounts={},projectColorMap={},canGoBack=false,onAudioCountChange}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const isGroupType=!!GROUP_TYPE_CFG[type];
   const [tab,setTab]=useState(initialTab&&initialTab!=="open"?initialTab:isGroupType?"tracks":"open");
@@ -1392,14 +1392,14 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
                 )}
                 {childProjects.map((c,i)=>(
                   <CollapsibleVersionsSection key={c.name} projectName={c.name} label={c.name}
-                    onCountChange={n=>setVersionsCountMap(prev=>({...prev,[c.name]:n}))}
+                    onCountChange={n=>{setVersionsCountMap(prev=>({...prev,[c.name]:n}));onAudioCountChange?.(c.name,n);}}
                     globalAudioFolder={globalAudioFolder} borderTop={i>0}
                     forcedOpen={versionsAllOpen} onIndividualToggle={()=>setVersionsAllOpen(null)}/>
                 ))}
                 {childProjects.length===0&&<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"32px 0",fontStyle:"italic"}}>No tracks in this group yet</div>}
               </>
             ):(
-              <VersionsTab projectName={name} onCountChange={setVersionsCount} globalAudioFolder={globalAudioFolder}/>
+              <VersionsTab projectName={name} onCountChange={n=>{setVersionsCount(n);onAudioCountChange?.(name,n);}} globalAudioFolder={globalAudioFolder}/>
             )}
           </div>
         )}
@@ -3405,6 +3405,7 @@ export default function App() {
             type={proj.type} childProjects={children} ungroupedProjects={ungrouped}
             onOpenProject={openProject} onAddToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup} onCreateTrack={createTrackInGroup}
             audioFileCounts={audioFileCounts} projectColorMap={projectColorMap} canGoBack={idx>0}
+            onAudioCountChange={(n,c)=>setAudioFileCounts(prev=>({...prev,[n]:c}))}
           />
         );
       })}
