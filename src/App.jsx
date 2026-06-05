@@ -3720,7 +3720,7 @@ export default function App() {
               style={{...iconBtn,width:24,height:24,borderRadius:7,opacity:rescanning?0.5:1,cursor:rescanning?"default":"pointer"}}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={rescanning?{animation:"spin 1s linear infinite"}:undefined}><path d="M21 12a9 9 0 11-3.1-6.9M21 3v6h-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
-            {activeProjects.length>0&&<span style={{fontSize:12.5,color:C.faint}}>{activeProjects.length} active</span>}
+            {activeProjects.filter(p=>!GROUP_TYPE_CFG[p.type]).length>0&&<span style={{fontSize:12.5,color:C.faint}}>{activeProjects.filter(p=>!GROUP_TYPE_CFG[p.type]).length} active</span>}
           </div>
         </div>
         <div style={{display:"flex",gap:8,marginBottom:newProjectDatesOpen?8:activeProjects.length?16:0}}>
