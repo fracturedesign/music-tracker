@@ -603,18 +603,19 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
           fetch(`/api/audio/${encodeURIComponent(projectName)}`).then(r=>r.json()),
           fetch(`/api/data/music_scan_folders`).then(r=>r.json()),
         ]);
-        const loadedFiles=fr.files||[];
-        setFiles(loadedFiles);
+        setFiles(fr.files||[]);
         const savedPath=pr?.value?(JSON.parse(pr.value)?.[projectName]||""):"";
+        if(savedPath)setScanPath(savedPath);
         const autoScanPath=savedPath||globalAudioFolder||"";
+        setLoading(false); // show existing files immediately; scan runs in background below
         if(autoScanPath){
-          if(savedPath)setScanPath(savedPath);
-          // don't auto-open the panel — path is shown as folder badge in group mode
-          const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:autoScanPath})});
-          if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
+          try{
+            // don't auto-open the panel — path is shown as folder badge in group mode
+            const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:autoScanPath})});
+            if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
+          }catch{}
         }
-      }catch{}
-      setLoading(false);
+      }catch{setLoading(false);}
     })();
   },[projectName]);// eslint-disable-line
 
