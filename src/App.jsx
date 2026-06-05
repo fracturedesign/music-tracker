@@ -611,7 +611,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
           if(savedPath)setScanPath(savedPath);
           // don't auto-open the panel — path is shown as folder badge in group mode
           const sr=await fetch(`/api/audio/${encodeURIComponent(projectName)}/scan`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:autoScanPath})});
-          if(sr.ok){const sd=await sr.json();if(sd.added>0||sd.files)setFiles(sd.files||[]);}
+          if(sr.ok){const sd=await sr.json();if(sd.added>0)setFiles(sd.files||[]);}
         }
       }catch{}
       setLoading(false);
