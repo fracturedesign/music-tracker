@@ -382,7 +382,11 @@ function refreshQuestsIfStale(qd,todayStr,weekStr){
   let next=qd;let changed=false;
   if(qd.dailyDate!==todayStr){
     const newHist=[...(qd.completedDailyHistory||[])];
-    (qd.currentDaily||[]).forEach(q=>{if(q.done)newHist.push({idx:q.idx,date:qd.dailyDate||todayStr});});
+    // Only add if not already recorded (completeQuest already pushes on completion)
+    (qd.currentDaily||[]).forEach(q=>{
+      if(q.done&&!newHist.some(h=>h.idx===q.idx&&h.date===(qd.dailyDate||todayStr)))
+        newHist.push({idx:q.idx,date:qd.dailyDate||todayStr});
+    });
     const cutDate=new Date(todayStr);cutDate.setDate(cutDate.getDate()-30);
     const cutStr=cutDate.toISOString().slice(0,10);
     const prunedHist=newHist.filter(h=>h.date>=cutStr);
