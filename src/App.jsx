@@ -732,16 +732,31 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
       }catch{}
     });
 
-    ws.on("timeupdate",t=>setCurrentTime(t));
+    ws.on("timeupdate",t=>{
+      setCurrentTime(t);
+      if("mediaSession" in navigator&&navigator.mediaSession.metadata){
+        const dur=ws.getDuration?.()??0;
+        if(dur>0)try{navigator.mediaSession.setPositionState({duration:dur,playbackRate:1,position:Math.min(t,dur)});}catch{}
+      }
+    });
     ws.on("play",()=>{
       userPlayingRef.current=true;
       setPlaying(true);
       setBuffering(false);
       audioEventBus.dispatchEvent(new CustomEvent("audioplay",{detail:{id:file.id}}));
       if(file.isNew&&!markedRef.current){markedRef.current=true;onMarkSeen?.(file.id);}
+      if("mediaSession" in navigator){
+        navigator.mediaSession.metadata=new MediaMetadata({title:file.name});
+        navigator.mediaSession.playbackState="playing";
+        navigator.mediaSession.setActionHandler("play",()=>ws.play());
+        navigator.mediaSession.setActionHandler("pause",()=>ws.pause());
+        navigator.mediaSession.setActionHandler("seekbackward",({seekOffset})=>{const dur=ws.getDuration?.()??0;const t=ws.getCurrentTime?.()??0;if(dur>0)ws.seekTo(Math.max(0,t-(seekOffset||10))/dur);});
+        navigator.mediaSession.setActionHandler("seekforward",({seekOffset})=>{const dur=ws.getDuration?.()??0;const t=ws.getCurrentTime?.()??0;if(dur>0)ws.seekTo(Math.min(1,(t+(seekOffset||10))/dur));});
+        navigator.mediaSession.setActionHandler("seekto",({seekTime})=>{const dur=ws.getDuration?.()??0;if(seekTime!=null&&dur>0)ws.seekTo(Math.min(1,seekTime/dur));});
+      }
     });
-    ws.on("pause",()=>{userPlayingRef.current=false;setPlaying(false);});
-    ws.on("finish",()=>{userPlayingRef.current=false;setPlaying(false);setCurrentTime(0);setBuffering(false);});
+    ws.on("pause",()=>{userPlayingRef.current=false;setPlaying(false);if("mediaSession" in navigator)navigator.mediaSession.playbackState="paused";});
+    ws.on("finish",()=>{userPlayingRef.current=false;setPlaying(false);setCurrentTime(0);setBuffering(false);if("mediaSession" in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState="none";}});
 
     return()=>{
       clearTimeout(bufferingTimer.current);
