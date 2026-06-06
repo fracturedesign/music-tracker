@@ -2245,6 +2245,27 @@ function MiniPlayer({nowPlaying,onEnd,onClear,onOpenProject}) {
     return()=>{a.removeEventListener("timeupdate",onTime);a.removeEventListener("durationchange",onDur);a.removeEventListener("play",onPlay);a.removeEventListener("pause",onPause);a.removeEventListener("ended",onEnded);};
   },[]);// eslint-disable-line
 
+  // MediaSession API — tells iOS Control Center / lock screen what's playing
+  useEffect(()=>{
+    if(!("mediaSession" in navigator))return;
+    if(!nowPlaying){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState="none";return;}
+    navigator.mediaSession.metadata=new MediaMetadata({title:nowPlaying.file.name,artist:nowPlaying.projectName,album:"Orbit"});
+    const a=audioRef.current;
+    navigator.mediaSession.setActionHandler("play",()=>a?.play().catch(()=>{}));
+    navigator.mediaSession.setActionHandler("pause",()=>a?.pause());
+    navigator.mediaSession.setActionHandler("seekbackward",({seekOffset})=>{if(a)a.currentTime=Math.max(0,a.currentTime-(seekOffset||10));});
+    navigator.mediaSession.setActionHandler("seekforward",({seekOffset})=>{if(a)a.currentTime=Math.min(a.duration||0,a.currentTime+(seekOffset||10));});
+    navigator.mediaSession.setActionHandler("seekto",({seekTime})=>{if(a&&seekTime!=null)a.currentTime=seekTime;});
+  },[nowPlaying]);// eslint-disable-line
+  useEffect(()=>{
+    if(!("mediaSession" in navigator))return;
+    navigator.mediaSession.playbackState=nowPlaying?(playing?"playing":"paused"):"none";
+  },[playing,nowPlaying]);
+  useEffect(()=>{
+    if(!("mediaSession" in navigator)||!nowPlaying||!(duration>0))return;
+    try{navigator.mediaSession.setPositionState({duration,playbackRate:1,position:Math.min(currentTime,duration)});}catch{}
+  },[currentTime,duration,nowPlaying]);// eslint-disable-line
+
   // Load + seek + play when nowPlaying changes
   useEffect(()=>{
     const a=audioRef.current;
