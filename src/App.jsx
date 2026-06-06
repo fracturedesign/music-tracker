@@ -748,17 +748,26 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
       if("mediaSession" in navigator){
         navigator.mediaSession.metadata=new MediaMetadata({title:file.name});
         navigator.mediaSession.playbackState="playing";
-        // Use the underlying HTMLAudioElement directly — more reliable on iOS than ws.play/pause
-        const media=ws.getMediaElement?.();
-        navigator.mediaSession.setActionHandler("play",()=>media?media.play().catch(()=>{}):ws.play());
-        navigator.mediaSession.setActionHandler("pause",()=>media?media.pause():ws.pause());
-        navigator.mediaSession.setActionHandler("seekbackward",({seekOffset})=>{const dur=ws.getDuration?.()??0;const t=ws.getCurrentTime?.()??0;if(dur>0)ws.seekTo(Math.max(0,t-(seekOffset||10))/dur);});
-        navigator.mediaSession.setActionHandler("seekforward",({seekOffset})=>{const dur=ws.getDuration?.()??0;const t=ws.getCurrentTime?.()??0;if(dur>0)ws.seekTo(Math.min(1,(t+(seekOffset||10))/dur));});
-        navigator.mediaSession.setActionHandler("seekto",({seekTime})=>{const dur=ws.getDuration?.()??0;if(seekTime!=null&&dur>0)ws.seekTo(Math.min(1,seekTime/dur));});
       }
     });
-    ws.on("pause",()=>{userPlayingRef.current=false;setPlaying(false);if("mediaSession" in navigator)navigator.mediaSession.playbackState="paused";});
-    ws.on("finish",()=>{userPlayingRef.current=false;setPlaying(false);setCurrentTime(0);setBuffering(false);if("mediaSession" in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState="none";}});
+    ws.on("pause",()=>{
+      userPlayingRef.current=false;setPlaying(false);
+      if("mediaSession" in navigator)navigator.mediaSession.playbackState="paused";
+    });
+    ws.on("finish",()=>{
+      userPlayingRef.current=false;setPlaying(false);setCurrentTime(0);setBuffering(false);
+      if("mediaSession" in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState="none";}
+    });
+    // Register MediaSession action handlers once on ready — set playbackState explicitly in each
+    // handler so iOS icon updates immediately without waiting for the WaveSurfer event chain.
+    if("mediaSession" in navigator){
+      const seek=(delta)=>{const dur=ws.getDuration?.()??0;const t=ws.getCurrentTime?.()??0;if(dur>0)ws.seekTo(Math.max(0,Math.min(1,(t+delta)/dur)));};
+      navigator.mediaSession.setActionHandler("play",()=>{ws.play();navigator.mediaSession.playbackState="playing";});
+      navigator.mediaSession.setActionHandler("pause",()=>{ws.pause();navigator.mediaSession.playbackState="paused";});
+      navigator.mediaSession.setActionHandler("seekbackward",({seekOffset})=>seek(-(seekOffset||10)));
+      navigator.mediaSession.setActionHandler("seekforward",({seekOffset})=>seek(seekOffset||10));
+      navigator.mediaSession.setActionHandler("seekto",({seekTime})=>{const dur=ws.getDuration?.()??0;if(seekTime!=null&&dur>0)ws.seekTo(Math.min(1,seekTime/dur));});
+    }
 
     return()=>{
       clearTimeout(bufferingTimer.current);
@@ -2264,16 +2273,24 @@ function MiniPlayer({nowPlaying,onEnd,onClear,onOpenProject}) {
 
   // MediaSession API — only manages the session when MiniPlayer is the active source.
   // When nowPlaying is null, AudioFileCard may be playing; don't override its session.
+  // Handlers use audioRef.current (not a captured snapshot) so they always hit the live element.
+  // playbackState is set immediately inside each handler — don't rely on the event chain.
   useEffect(()=>{
     if(!("mediaSession" in navigator))return;
     if(!nowPlaying)return;
     navigator.mediaSession.metadata=new MediaMetadata({title:nowPlaying.file.name});
-    const a=audioRef.current;
-    navigator.mediaSession.setActionHandler("play",()=>a?.play().catch(()=>{}));
-    navigator.mediaSession.setActionHandler("pause",()=>a?.pause());
-    navigator.mediaSession.setActionHandler("seekbackward",({seekOffset})=>{if(a)a.currentTime=Math.max(0,a.currentTime-(seekOffset||10));});
-    navigator.mediaSession.setActionHandler("seekforward",({seekOffset})=>{if(a)a.currentTime=Math.min(a.duration||0,a.currentTime+(seekOffset||10));});
-    navigator.mediaSession.setActionHandler("seekto",({seekTime})=>{if(a&&seekTime!=null)a.currentTime=seekTime;});
+    navigator.mediaSession.playbackState="playing";
+    navigator.mediaSession.setActionHandler("play",()=>{
+      audioRef.current?.play().catch(()=>{});
+      navigator.mediaSession.playbackState="playing";
+    });
+    navigator.mediaSession.setActionHandler("pause",()=>{
+      audioRef.current?.pause();
+      navigator.mediaSession.playbackState="paused";
+    });
+    navigator.mediaSession.setActionHandler("seekbackward",({seekOffset})=>{const a=audioRef.current;if(a)a.currentTime=Math.max(0,a.currentTime-(seekOffset||10));});
+    navigator.mediaSession.setActionHandler("seekforward",({seekOffset})=>{const a=audioRef.current;if(a)a.currentTime=Math.min(a.duration||0,a.currentTime+(seekOffset||10));});
+    navigator.mediaSession.setActionHandler("seekto",({seekTime})=>{const a=audioRef.current;if(a&&seekTime!=null)a.currentTime=seekTime;});
   },[nowPlaying]);// eslint-disable-line
   useEffect(()=>{
     if(!("mediaSession" in navigator)||!nowPlaying)return;
