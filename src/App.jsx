@@ -2210,8 +2210,6 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
   // rec
   const [isRecording,setIsRecording]=useState(false);
   const [recordingTime,setRecordingTime]=useState(0);
-  const [selectedProject,setSelectedProject]=useState(null);
-  const [projPickerOpen,setProjPickerOpen]=useState(false);
   const [uploading,setUploading]=useState(false);
   const [recError,setRecError]=useState("");
   const [folderPath,setFolderPath]=useState("");
@@ -2371,7 +2369,6 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
       const fd=new FormData();
       fd.append("file",blob,name+ext);
       fd.append("name",name);
-      if(selectedProject)fd.append("projectName",selectedProject);
       await fetch("/api/recordings/upload",{method:"POST",body:fd});
       onRecordingsChange();
       setTab("tapes");
@@ -2419,7 +2416,6 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
   const deleteMixtape=id=>{saveMixtapes(mixtapes.filter(m=>m.id!==id));if(openMixtapeId===id)setOpenMixtapeId(null);};
 
   const TABS_R=[["rec","Rec"],["tapes",recordings.length?`Tapes (${recordings.length})`:"Tapes"],["mixtapes","Mixtapes"]];
-  const activeProjects=projects.filter(p=>!p.parentGroup&&p.status!=="done"&&p.status!=="released"&&p.status!=="idea");
 
   return(
     <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -2516,30 +2512,6 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
             {/* Timer */}
             <div className="mono" style={{fontSize:38,fontWeight:700,letterSpacing:"0.04em",color:isRecording?"#ef4444":C.dim,marginBottom:18,transition:"color 0.3s"}}>
               {fmtRecTime(recordingTime)}
-            </div>
-            {/* Project picker */}
-            <div style={{width:"100%",marginBottom:20,position:"relative"}}>
-              <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:6}}>Link to project</div>
-              <button onClick={()=>setProjPickerOpen(v=>!v)}
-                style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:12,border:`1px solid ${C.line}`,background:C.surf2,cursor:"pointer",boxSizing:"border-box"}}>
-                <span style={{fontSize:13,fontWeight:selectedProject?600:400,color:selectedProject?C.text:C.faint}}>{selectedProject||"No project selected"}</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-              {projPickerOpen&&(
-                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:C.surf,border:`1px solid ${C.line}`,borderRadius:12,overflow:"hidden",zIndex:100,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",maxHeight:180,overflowY:"auto"}}>
-                  <button onClick={()=>{setSelectedProject(null);setProjPickerOpen(false);}}
-                    style={{width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:!selectedProject?C.surf2:"transparent",cursor:"pointer",fontSize:13,color:C.faint,borderBottom:`1px solid ${C.line}`}}>
-                    No project
-                  </button>
-                  {activeProjects.map(p=>(
-                    <button key={p.name} onClick={()=>{setSelectedProject(p.name);setProjPickerOpen(false);}}
-                      style={{width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:selectedProject===p.name?C.surf2:"transparent",cursor:"pointer",fontSize:13,fontWeight:600,color:selectedProject===p.name?C.indigo:C.text,borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{width:8,height:8,borderRadius:"50%",background:p.color||C.indigo,flexShrink:0,display:"inline-block"}}/>
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
             {/* Record / Stop */}
             {uploading?(
@@ -4025,8 +3997,15 @@ export default function App() {
   /* quest refresh (once per day, user-triggered) */
   const refreshDailyQuests=()=>{
     if(!questData||questData.lastDailyRefresh===today)return;
-    const recentIdxs=[...new Set([...(questData.completedDailyHistory||[]).slice(-7).map(h=>h.idx),...(questData.currentDaily||[]).map(q=>q.idx)])];
-    const newDaily=pickQuestWeighted(DAILY_QUESTS,recentIdxs,3);
+    const current=questData.currentDaily||[];
+    const doneCount=current.filter(q=>q.done).length;
+    // all done — nothing to reroll
+    if(doneCount===current.length)return;
+    const recentIdxs=[...new Set([...(questData.completedDailyHistory||[]).slice(-7).map(h=>h.idx),...current.map(q=>q.idx)])];
+    const needed=current.length-doneCount;
+    const freshQuests=pickQuestWeighted(DAILY_QUESTS,recentIdxs,needed);
+    let freshIdx=0;
+    const newDaily=current.map(q=>q.done?q:freshQuests[freshIdx++]);
     const next={...questData,currentDaily:newDaily,lastDailyRefresh:today};
     setQuestData(next);saveQuestData(next);
   };
@@ -4612,17 +4591,29 @@ export default function App() {
                   <div style={{fontSize:13,color:C.faint,textAlign:"center",padding:"10px 0"}}>No quests completed this month yet</div>
                 ):(
                   <>
-                    {dailyHist.length>0&&(
-                      <div style={{marginBottom:12}}>
-                        <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8}}>Daily</div>
-                        {dailyHist.map((h,i)=>(
-                          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:5}}>
-                            <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0,marginTop:1}}>{h.date}</span>
-                            <span style={{fontSize:12,color:C.text,lineHeight:1.4}}>{DAILY_QUESTS[h.idx]?.[1]||"—"}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {dailyHist.length>0&&(()=>{
+                      const byDay=dailyHist.reduce((acc,h)=>{(acc[h.date]=acc[h.date]||[]).push(h);return acc;},{});
+                      const days=Object.keys(byDay).sort((a,b)=>b.localeCompare(a));
+                      return(
+                        <div style={{marginBottom:12}}>
+                          <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8}}>Daily</div>
+                          {days.map(date=>(
+                            <div key={date} style={{marginBottom:10}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                                <span className="mono" style={{fontSize:11,color:C.faint}}>{date}</span>
+                                <span style={{fontSize:10,fontWeight:700,color:C.indigo,background:C.accentAlpha,borderRadius:5,padding:"1px 6px"}}>+{byDay[date].length} XP</span>
+                              </div>
+                              {byDay[date].map((h,i)=>(
+                                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:3,paddingLeft:8}}>
+                                  <span style={{fontSize:11,color:C.faint,marginTop:2,flexShrink:0}}>·</span>
+                                  <span style={{fontSize:12,color:C.text,lineHeight:1.4}}>{DAILY_QUESTS[h.idx]?.[1]||"—"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {weeklyHist.length>0&&(
                       <div>
                         <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8}}>Weekly</div>
