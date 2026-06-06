@@ -2281,7 +2281,7 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
       const hist=waveHistoryRef.current;
       for(let i=0;i<hist.length;i++){
         // sqrt gives a perceptual curve: quiet sounds visible, loud sounds not clipped
-        const val=Math.min(1,Math.sqrt(hist[i]*18));
+        const val=Math.min(1,Math.sqrt(hist[i]*8));
         const bH=Math.max(3,val*H*0.92);
         const x=i*(barW+barGap);
         const y=(H-bH)/2;
