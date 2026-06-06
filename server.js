@@ -1,5 +1,7 @@
 import express from "express";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, createReadStream, statSync } from "fs";
+import { createServer as createHttpServer } from "http";
+import { createServer as createHttpsServer } from "https";
 import { fileURLToPath } from "url";
 import { dirname, join, extname, basename } from "path";
 import { exec } from "child_process";
@@ -7,10 +9,15 @@ import { promisify } from "util";
 import multer from "multer";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = process.env.DATA_PATH || join(__dirname, "data.json");
-const DATA_DIR  = dirname(DATA_FILE);
-const AUDIO_DIR = join(DATA_DIR, "audio");
-const PORT = process.env.PORT || 3001;
+const DATA_FILE   = process.env.DATA_PATH || join(__dirname, "data.json");
+const DATA_DIR    = dirname(DATA_FILE);
+const AUDIO_DIR   = join(DATA_DIR, "audio");
+const PORT        = process.env.PORT       || 3001;
+const HTTPS_PORT  = process.env.HTTPS_PORT || 3443;
+const HTTPS_HOST  = process.env.HTTPS_HOST || "";
+const SSL_DIR     = join(DATA_DIR, "ssl");
+const CERT_FILE   = join(SSL_DIR, "cert.pem");
+const KEY_FILE    = join(SSL_DIR, "key.pem");
 
 mkdirSync(AUDIO_DIR, { recursive: true });
 
@@ -466,6 +473,25 @@ app.delete("/api/recordings/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+/* ── SSL info & cert download ── */
+app.get("/api/ssl-info", (req, res) => {
+  const available = existsSync(CERT_FILE) && existsSync(KEY_FILE);
+  res.json({
+    httpsAvailable: available,
+    httpsPort:      Number(HTTPS_PORT),
+    httpsHost:      HTTPS_HOST || null,
+    httpsUrl:       available && HTTPS_HOST ? `https://${HTTPS_HOST}:${HTTPS_PORT}` : null,
+  });
+});
+
+// Served with x509 MIME type so iOS Safari triggers the "Install Certificate" flow
+app.get("/api/ssl-cert", (req, res) => {
+  if (!existsSync(CERT_FILE)) return res.status(404).json({ error: "No cert" });
+  res.setHeader("Content-Type", "application/x-x509-ca-cert");
+  res.setHeader("Content-Disposition", 'attachment; filename="music-tracker.crt"');
+  createReadStream(CERT_FILE).pipe(res);
+});
+
 /* ── SPA fallback ── */
 app.get("*", (req, res) => {
   const index = join(distPath, "index.html");
@@ -473,4 +499,55 @@ app.get("*", (req, res) => {
   else res.status(404).send("Run `npm run build` first.");
 });
 
-app.listen(PORT, () => console.log(`Music Tracker running on http://localhost:${PORT}`));
+/* ── Self-signed cert generation ── */
+async function ensureSslCert() {
+  if (existsSync(CERT_FILE) && existsSync(KEY_FILE)) return true;
+  if (!HTTPS_HOST) return false;
+  try {
+    mkdirSync(SSL_DIR, { recursive: true });
+    const cfgPath = join(SSL_DIR, "openssl.cnf");
+    writeFileSync(cfgPath,
+`[req]
+distinguished_name = req_dn
+x509_extensions    = v3_req
+prompt             = no
+[req_dn]
+CN = MusicTracker
+[v3_req]
+subjectAltName     = @alt_names
+keyUsage           = critical,digitalSignature,keyEncipherment
+extendedKeyUsage   = serverAuth
+basicConstraints   = critical,CA:TRUE
+[alt_names]
+IP.1  = ${HTTPS_HOST}
+DNS.1 = ${HTTPS_HOST}
+`);
+    await execAsync(
+      `openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+       -keyout "${KEY_FILE}" -out "${CERT_FILE}" -config "${cfgPath}"`,
+      { timeout: 30_000 }
+    );
+    console.log(`SSL cert generated for ${HTTPS_HOST} → ${CERT_FILE}`);
+    return true;
+  } catch (e) {
+    console.error("SSL cert generation failed:", e.message);
+    return false;
+  }
+}
+
+/* ── Start servers ── */
+createHttpServer(app).listen(PORT, () =>
+  console.log(`Music Tracker HTTP  → http://localhost:${PORT}`)
+);
+
+ensureSslCert().then(ok => {
+  if (!ok) return;
+  try {
+    const opts = { cert: readFileSync(CERT_FILE), key: readFileSync(KEY_FILE) };
+    createHttpsServer(opts, app).listen(HTTPS_PORT, () =>
+      console.log(`Music Tracker HTTPS → https://${HTTPS_HOST}:${HTTPS_PORT}`)
+    );
+  } catch (e) {
+    console.error("HTTPS server failed to start:", e.message);
+  }
+});

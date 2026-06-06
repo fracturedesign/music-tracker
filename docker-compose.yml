@@ -5,8 +5,12 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
+      - "3443:3443"
     volumes:
       - /mnt/user/appdata/music-tracker:/data
       - /mnt/user:/mnt/user:ro
     environment:
       - DATA_PATH=/data/data.json
+      # Set to your NAS IP to enable HTTPS (required for microphone on iPhone)
+      # Example: HTTPS_HOST=192.168.1.100
+      - HTTPS_HOST=

@@ -2186,6 +2186,7 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
   const [folderPath,setFolderPath]=useState("");
   const [editingFolder,setEditingFolder]=useState(false);
   const [folderInput,setFolderInput]=useState("");
+  const [sslInfo,setSslInfo]=useState(null);
   const mediaRecorderRef=useRef(null);
   const streamRef=useRef(null);
   const chunksRef=useRef([]);
@@ -2205,6 +2206,7 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
 
   useEffect(()=>{
     fetch("/api/recordings/folder").then(r=>r.json()).then(d=>{setFolderPath(d.path||"");setFolderInput(d.path||"");}).catch(()=>{});
+    fetch("/api/ssl-info").then(r=>r.json()).then(setSslInfo).catch(()=>{});
     return()=>{
       if(mediaRecorderRef.current?.state==="recording")try{mediaRecorderRef.current.stop();}catch{}
       streamRef.current?.getTracks().forEach(t=>t.stop());
@@ -2426,6 +2428,41 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
         {/* ── REC ── */}
         {!openMixtapeId&&tab==="rec"&&(
           <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+            {/* HTTPS gate */}
+            {window.location.protocol!=="https:"&&(
+              <div style={{width:"100%",marginBottom:16,borderRadius:12,border:"1.5px solid rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.06)",padding:"14px 16px"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#ef4444",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="#ef4444" strokeWidth="1.8"/><path d="M8 11V7a4 4 0 018 0v4" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                  HTTPS required for microphone
+                </div>
+                {sslInfo?.httpsAvailable?(
+                  <>
+                    <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.5}}>
+                      Two steps to enable recording on iPhone:
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      <a href="/api/ssl-cert"
+                        style={{display:"block",textAlign:"center",padding:"9px 14px",borderRadius:10,background:C.accentGrad,color:"#fff",fontSize:13,fontWeight:700,textDecoration:"none"}}>
+                        Step 1 — Install Certificate
+                      </a>
+                      <button onClick={()=>{window.location.href=sslInfo.httpsUrl;}}
+                        style={{padding:"9px 14px",borderRadius:10,border:`1.5px solid ${C.accentBorder}`,background:C.accentAlpha,color:C.indigo,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                        Step 2 — Open HTTPS ({sslInfo.httpsHost}:{sslInfo.httpsPort}) →
+                      </button>
+                    </div>
+                    <div style={{fontSize:11,color:C.faint,marginTop:10,lineHeight:1.5}}>
+                      After installing: Settings → General → About → Certificate Trust Settings → enable trust for MusicTracker.
+                    </div>
+                  </>
+                ):sslInfo?(
+                  <div style={{fontSize:12,color:C.muted,lineHeight:1.6}}>
+                    Add <span className="mono" style={{background:C.surf2,padding:"1px 5px",borderRadius:4}}>HTTPS_HOST=<em>your-nas-ip</em></span> to docker-compose.yml and rebuild.
+                  </div>
+                ):(
+                  <div style={{fontSize:12,color:C.faint}}>Loading…</div>
+                )}
+              </div>
+            )}
             {/* Waveform canvas */}
             <div style={{width:"100%",height:80,borderRadius:14,background:C.surf2,marginBottom:16,position:"relative",overflow:"hidden"}}>
               <canvas ref={canvasRef} style={{width:"100%",height:"100%",display:"block"}}/>
