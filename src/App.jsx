@@ -2104,7 +2104,7 @@ function TapeRow({rec,projects,playingId,onSetPlaying,onDelete,onRename,onRemove
     if(!waveContRef.current)return null;
     const ws=WaveSurfer.create({
       container:waveContRef.current,waveColor:C.dim,progressColor:C.indigo,
-      height:36,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,
+      height:36,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,normalize:true,
     });
     ws.on("ready",()=>{
       setWsReady(true);
@@ -2280,8 +2280,9 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
       ctx.clearRect(0,0,W,H);
       const hist=waveHistoryRef.current;
       for(let i=0;i<hist.length;i++){
-        const val=Math.min(1,hist[i]*4);
-        const bH=Math.max(3,val*H*0.88);
+        // sqrt gives a perceptual curve: quiet sounds visible, loud sounds not clipped
+        const val=Math.min(1,Math.sqrt(hist[i]*18));
+        const bH=Math.max(3,val*H*0.92);
         const x=i*(barW+barGap);
         const y=(H-bH)/2;
         const alpha=Math.round((0.35+val*0.65)*255).toString(16).padStart(2,"0");
