@@ -2075,7 +2075,7 @@ function AllSessions({sessions,projects,projectMap,onEdit,onDelete,onClose}) {
 /* ─── recorder ─── */
 const REC_PLACEHOLDER_BARS=Array.from({length:30},(_,i)=>4+Math.abs(Math.sin(i*0.7))*20);
 
-function TapeRow({rec,projects,playingId,onSetPlaying,onDelete,onRename,onRemoveFromMixtape}) {
+function TapeRow({rec,projects,playingId,onSetPlaying,onDelete,onRename,onRemoveFromMixtape,mixtapes,onAddToMixtape}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const waveContRef=useRef(null);
   const wsRef=useRef(null);
@@ -2087,12 +2087,17 @@ function TapeRow({rec,projects,playingId,onSetPlaying,onDelete,onRename,onRemove
   const [renaming,setRenaming]=useState(false);
   const [renameVal,setRenameVal]=useState(rec.name);
   const [confirmDel,setConfirmDel]=useState(false);
+  const [mixtapePickerOpen,setMixtapePickerOpen]=useState(false);
 
   useEffect(()=>{
     if(playingId!==rec.id&&localPlaying&&wsRef.current)wsRef.current.pause();
   },[playingId]);// eslint-disable-line
 
-  useEffect(()=>()=>{wsRef.current?.destroy();},[]);
+  useEffect(()=>{
+    // Load waveform immediately on mount without waiting for play
+    const timer=setTimeout(()=>{ensureWs();},50);
+    return()=>{clearTimeout(timer);wsRef.current?.destroy();};
+  },[]);// eslint-disable-line
 
   const ensureWs=()=>{
     if(wsRef.current)return wsRef.current;
@@ -2160,6 +2165,28 @@ function TapeRow({rec,projects,playingId,onSetPlaying,onDelete,onRename,onRemove
           <button onClick={onRemoveFromMixtape}
             style={{fontSize:11,fontWeight:600,color:C.faint,background:"transparent",border:`1px solid ${C.line}`,borderRadius:8,padding:"3px 10px",cursor:"pointer"}}>Remove</button>
         )}
+        {mixtapes&&mixtapes.length>0&&onAddToMixtape&&(
+          <div style={{position:"relative"}}>
+            <button onClick={()=>setMixtapePickerOpen(v=>!v)}
+              style={{...iconBtn,width:28,height:28,borderRadius:8}}
+              title="Add to mixtape">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={C.indigo} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={C.indigo} strokeWidth="1.8"/><circle cx="18" cy="16" r="3" stroke={C.indigo} strokeWidth="1.8"/><line x1="19" y1="4" x2="19" y2="10" stroke={C.indigo} strokeWidth="1.8" strokeLinecap="round"/><line x1="16" y1="7" x2="22" y2="7" stroke={C.indigo} strokeWidth="1.8" strokeLinecap="round"/></svg>
+            </button>
+            {mixtapePickerOpen&&(
+              <div style={{position:"absolute",bottom:"100%",right:0,marginBottom:4,background:C.surf2,border:`1px solid ${C.line}`,borderRadius:10,padding:"4px 0",minWidth:160,zIndex:100,boxShadow:"0 4px 20px rgba(0,0,0,0.2)"}}>
+                <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",color:C.faint,padding:"4px 12px 6px"}}>Add to mixtape</div>
+                {mixtapes.map(mx=>(
+                  <button key={mx.id} onClick={()=>{onAddToMixtape(rec.id,mx.id);setMixtapePickerOpen(false);}}
+                    style={{display:"block",width:"100%",textAlign:"left",padding:"7px 12px",fontSize:13,fontWeight:600,color:C.text,background:"none",border:"none",cursor:"pointer"}}>
+                    {mx.name}
+                  </button>
+                ))}
+                <button onClick={()=>setMixtapePickerOpen(false)}
+                  style={{display:"block",width:"100%",textAlign:"left",padding:"5px 12px",fontSize:12,color:C.faint,background:"none",border:"none",cursor:"pointer"}}>Cancel</button>
+              </div>
+            )}
+          </div>
+        )}
         <button onClick={()=>{setRenameVal(rec.name);setRenaming(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8}}>{Icon.pencil()}</button>
         {confirmDel?(
           <>
@@ -2225,6 +2252,7 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
     onMixtapesChange(next);
   };
 
+  const waveHistoryRef=useRef([]);
   const drawCanvas=()=>{
     const canvas=canvasRef.current;
     const analyser=analyserRef.current;
@@ -2235,23 +2263,29 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
     canvas.width=W*dpr; canvas.height=H*dpr;
     const ctx=canvas.getContext("2d");
     ctx.scale(dpr,dpr);
-    const bufLen=analyser.frequencyBinCount;
+    analyser.fftSize=2048;
+    const bufLen=analyser.fftSize;
     const dataArr=new Uint8Array(bufLen);
-    const barCount=50;
-    const barW=Math.max(1,(W-(barCount-1))/barCount);
-    const step=Math.max(1,Math.floor(bufLen/barCount));
-    const hexIndigo=C.indigo;
+    waveHistoryRef.current=[];
+    const barW=3;const barGap=1;const barCount=Math.floor(W/(barW+barGap));
     const render=()=>{
       animFrameRef.current=requestAnimationFrame(render);
-      analyser.getByteFrequencyData(dataArr);
+      analyser.getByteTimeDomainData(dataArr);
+      // compute RMS amplitude for this frame
+      let sum=0;
+      for(let i=0;i<bufLen;i++){const v=(dataArr[i]-128)/128;sum+=v*v;}
+      const rms=Math.sqrt(sum/bufLen);
+      waveHistoryRef.current.push(rms);
+      if(waveHistoryRef.current.length>barCount)waveHistoryRef.current.shift();
       ctx.clearRect(0,0,W,H);
-      for(let i=0;i<barCount;i++){
-        const val=dataArr[i*step]/255;
+      const hist=waveHistoryRef.current;
+      for(let i=0;i<hist.length;i++){
+        const val=Math.min(1,hist[i]*4);
         const bH=Math.max(3,val*H*0.88);
-        const x=i*(barW+1);
+        const x=i*(barW+barGap);
         const y=(H-bH)/2;
-        const alpha=Math.round((0.3+val*0.7)*255).toString(16).padStart(2,"0");
-        ctx.fillStyle=hexIndigo+alpha;
+        const alpha=Math.round((0.35+val*0.65)*255).toString(16).padStart(2,"0");
+        ctx.fillStyle=C.indigo+alpha;
         if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,barW,bH,1.5);ctx.fill();}
         else ctx.fillRect(x,y,barW,bH);
       }
@@ -2281,7 +2315,6 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
       audioCtxRef.current=audioCtx;
       const source=audioCtx.createMediaStreamSource(stream);
       const analyser=audioCtx.createAnalyser();
-      analyser.fftSize=512;
       source.connect(analyser);
       analyserRef.current=analyser;
       const candidates=["audio/mp4","audio/webm;codecs=opus","audio/webm","audio/ogg"];
@@ -2572,7 +2605,8 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
                     {groupedTapes[month].map(rec=>(
                       <TapeRow key={rec.id} rec={rec} projects={projects}
                         playingId={tapesPlayingId} onSetPlaying={setTapesPlayingId}
-                        onDelete={handleDeleteRecording} onRename={handleRenameRecording}/>
+                        onDelete={handleDeleteRecording} onRename={handleRenameRecording}
+                        mixtapes={mixtapes} onAddToMixtape={(recId,mxId)=>saveMixtapes(mixtapes.map(m=>m.id===mxId?{...m,recordingIds:m.recordingIds.includes(recId)?m.recordingIds:[...m.recordingIds,recId]}:m))}/>
                     ))}
                   </div>
                 ))}
