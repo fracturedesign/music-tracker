@@ -1,5 +1,5 @@
 import express from "express";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, createReadStream, statSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, createReadStream, statSync, renameSync } from "fs";
 import { createServer as createHttpServer } from "http";
 import { createServer as createHttpsServer } from "https";
 import { fileURLToPath } from "url";
@@ -366,10 +366,15 @@ const recordingUpload = multer({
       cb(null, folder);
     },
     filename: (req, file, cb) => {
-      const ts  = Date.now().toString();
-      const rnd = Math.random().toString(36).slice(2, 6);
-      const ext = extname(file.originalname).toLowerCase() || ".m4a";
-      cb(null, `${ts}${rnd}${ext}`);
+      const ext  = extname(file.originalname).toLowerCase() || ".m4a";
+      const base = basename(file.originalname, ext)
+        .replace(/[^\w\s.-]/g, "_").replace(/\s+/g, "-").trim() || "tape";
+      const d   = readData();
+      const dir = d.music_recordings_folder || RECORDINGS_DIR;
+      let name  = `${base}${ext}`;
+      let n     = 1;
+      while (existsSync(join(dir, name))) { name = `${base}_${n++}${ext}`; }
+      cb(null, name);
     },
   }),
   limits: { fileSize: 500 * 1024 * 1024 },
@@ -399,10 +404,10 @@ app.post("/api/recordings/upload", recordingUpload.single("file"), async (req, r
     duration = parseFloat(JSON.parse(stdout).format?.duration || 0);
   } catch {}
   const ext = extname(filename).toLowerCase();
-  const id  = filename.replace(ext, "");
+  const id  = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const meta = {
     id,
-    name:         name || `tape-${id}`,
+    name:         name || basename(filename, ext),
     filename,
     absolutePath,
     duration,
@@ -454,7 +459,29 @@ app.patch("/api/recordings/:id", (req, res) => {
   const recs = data.music_recordings || [];
   const idx  = recs.findIndex(r => r.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Not found" });
-  if (name        !== undefined) recs[idx] = { ...recs[idx], name };
+
+  if (name !== undefined) {
+    const rec     = recs[idx];
+    const oldPath = rec.absolutePath || join(RECORDINGS_DIR, rec.filename);
+    if (existsSync(oldPath)) {
+      const dir     = dirname(oldPath);
+      const ext     = extname(rec.filename).toLowerCase();
+      const newBase = name.replace(/[^\w\s.-]/g, "_").replace(/\s+/g, "-").trim() || "tape";
+      let   newFile = `${newBase}${ext}`;
+      let   n       = 1;
+      while (existsSync(join(dir, newFile)) && join(dir, newFile) !== oldPath) {
+        newFile = `${newBase}_${n++}${ext}`;
+      }
+      const newPath = join(dir, newFile);
+      try {
+        renameSync(oldPath, newPath);
+        recs[idx] = { ...recs[idx], name, filename: newFile, absolutePath: newPath };
+      } catch { recs[idx] = { ...recs[idx], name }; }
+    } else {
+      recs[idx] = { ...recs[idx], name };
+    }
+  }
+
   if (projectName !== undefined) recs[idx] = { ...recs[idx], projectName };
   writeData(data);
   broadcast("music_recordings");
