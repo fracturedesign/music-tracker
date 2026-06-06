@@ -475,6 +475,7 @@ const Icon = {
   note:  (c="#9a9ab2")=><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 4h14v12l-5 5H5V4z" stroke={c} strokeWidth="1.7" strokeLinejoin="round"/><path d="M14 21v-5h5" stroke={c} strokeWidth="1.7" strokeLinejoin="round"/></svg>,
   gear:  (c="#9a9ab2")=><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke={c} strokeWidth="1.8"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></svg>,
   download:(c="#9a9ab2")=><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3v13M7 12l5 5 5-5M3 21h18" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  mic:     (c="#9a9ab2")=><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke={c} strokeWidth="1.8"/><path d="M5 10a7 7 0 0014 0" stroke={c} strokeWidth="1.8" strokeLinecap="round"/><path d="M12 17v4M9 21h6" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 };
 
 /* ─── goal ring ─── */
@@ -2067,6 +2068,531 @@ function AllSessions({sessions,projects,projectMap,onEdit,onDelete,onClose}) {
   );
 }
 
+/* ─── recorder ─── */
+const REC_PLACEHOLDER_BARS=Array.from({length:30},(_,i)=>4+Math.abs(Math.sin(i*0.7))*20);
+
+function TapeRow({rec,projects,playingId,onSetPlaying,onDelete,onRename,onRemoveFromMixtape}) {
+  const C=useTheme(); const {iconBtn}=getStyles(C);
+  const waveContRef=useRef(null);
+  const wsRef=useRef(null);
+  const pendingPlayRef=useRef(false);
+  const [wsReady,setWsReady]=useState(false);
+  const [localPlaying,setLocalPlaying]=useState(false);
+  const [currentTime,setCurrentTime]=useState(0);
+  const [wsDuration,setWsDuration]=useState(rec.duration||0);
+  const [renaming,setRenaming]=useState(false);
+  const [renameVal,setRenameVal]=useState(rec.name);
+  const [confirmDel,setConfirmDel]=useState(false);
+
+  useEffect(()=>{
+    if(playingId!==rec.id&&localPlaying&&wsRef.current)wsRef.current.pause();
+  },[playingId]);// eslint-disable-line
+
+  useEffect(()=>()=>{wsRef.current?.destroy();},[]);
+
+  const ensureWs=()=>{
+    if(wsRef.current)return wsRef.current;
+    if(!waveContRef.current)return null;
+    const ws=WaveSurfer.create({
+      container:waveContRef.current,waveColor:C.dim,progressColor:C.indigo,
+      height:36,barWidth:2,barGap:1,barRadius:2,cursorWidth:1,cursorColor:C.muted,
+    });
+    ws.on("ready",()=>{
+      setWsReady(true);
+      setWsDuration(ws.getDuration?.()??rec.duration??0);
+      if(pendingPlayRef.current){pendingPlayRef.current=false;ws.play();}
+    });
+    ws.on("play",()=>{setLocalPlaying(true);onSetPlaying(rec.id);});
+    ws.on("pause",()=>setLocalPlaying(false));
+    ws.on("finish",()=>{setLocalPlaying(false);onSetPlaying(null);});
+    ws.on("timeupdate",t=>setCurrentTime(t));
+    ws.load(`/api/recordings/stream/${rec.id}`);
+    wsRef.current=ws;
+    return ws;
+  };
+
+  const handlePlayPause=()=>{
+    const ws=ensureWs();
+    if(!ws)return;
+    if(!wsReady){pendingPlayRef.current=true;return;}
+    if(ws.isPlaying?.())ws.pause();else ws.play();
+  };
+
+  const fmtS=s=>{const m=Math.floor(s/60);return`${m}:${String(Math.floor(s%60)).padStart(2,"0")}`;};
+  const projColor=projects?.find(p=>p.name===rec.projectName)?.color||C.indigo;
+  const commitRename=()=>{const v=renameVal.trim();if(v&&v!==rec.name)onRename(rec.id,v);setRenaming(false);};
+
+  return(
+    <div style={{background:C.surf2,borderRadius:14,padding:"12px 14px",marginBottom:8}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+        {renaming?(
+          <input value={renameVal} onChange={e=>setRenameVal(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter")commitRename();if(e.key==="Escape")setRenaming(false);}}
+            onBlur={commitRename} autoFocus className="mt-text"
+            style={{flex:1,padding:"4px 8px",fontSize:13}}/>
+        ):(
+          <span style={{flex:1,fontSize:13,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+            onDoubleClick={()=>{setRenameVal(rec.name);setRenaming(true);}}>{rec.name}</span>
+        )}
+        <span style={{fontSize:11,color:C.faint,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>
+          {wsReady?`${fmtS(currentTime)} / ${fmtS(wsDuration)}`:fmtS(wsDuration)}
+        </span>
+      </div>
+      {rec.projectName&&(
+        <div style={{marginBottom:6}}>
+          <span style={{fontSize:11,fontWeight:600,color:projColor,background:projColor+"22",borderRadius:6,padding:"2px 8px"}}>{rec.projectName}</span>
+        </div>
+      )}
+      <div ref={waveContRef} onClick={handlePlayPause} style={{cursor:"pointer",marginBottom:8,minHeight:36}}/>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={handlePlayPause} style={{...iconBtn,width:30,height:30,borderRadius:9,flexShrink:0}}>
+          {localPlaying
+            ?<svg width="12" height="12" viewBox="0 0 24 24" fill={C.indigo}><rect x="5" y="4" width="4" height="16" rx="1.5"/><rect x="15" y="4" width="4" height="16" rx="1.5"/></svg>
+            :<svg width="12" height="12" viewBox="0 0 24 24" fill={C.indigo}><polygon points="5,3 20,12 5,21"/></svg>
+          }
+        </button>
+        <div style={{flex:1}}/>
+        {onRemoveFromMixtape&&(
+          <button onClick={onRemoveFromMixtape}
+            style={{fontSize:11,fontWeight:600,color:C.faint,background:"transparent",border:`1px solid ${C.line}`,borderRadius:8,padding:"3px 10px",cursor:"pointer"}}>Remove</button>
+        )}
+        <button onClick={()=>{setRenameVal(rec.name);setRenaming(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8}}>{Icon.pencil()}</button>
+        {confirmDel?(
+          <>
+            <span style={{fontSize:11,color:C.muted}}>Delete?</span>
+            <button onClick={()=>onDelete(rec.id)}
+              style={{fontSize:11,fontWeight:700,color:"#ef4444",background:"rgba(239,68,68,0.1)",border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer"}}>Yes</button>
+            <button onClick={()=>setConfirmDel(false)}
+              style={{fontSize:11,color:C.faint,background:"transparent",border:"none",cursor:"pointer"}}>No</button>
+          </>
+        ):(
+          <button onClick={()=>setConfirmDel(true)} style={{...iconBtn,width:28,height:28,borderRadius:8}}>{Icon.trash()}</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,onMixtapesChange}) {
+  const C=useTheme(); const {iconBtn}=getStyles(C);
+  const [tab,setTab]=useState("rec");
+  // rec
+  const [isRecording,setIsRecording]=useState(false);
+  const [recordingTime,setRecordingTime]=useState(0);
+  const [selectedProject,setSelectedProject]=useState(null);
+  const [projPickerOpen,setProjPickerOpen]=useState(false);
+  const [uploading,setUploading]=useState(false);
+  const [recError,setRecError]=useState("");
+  const [folderPath,setFolderPath]=useState("");
+  const mediaRecorderRef=useRef(null);
+  const streamRef=useRef(null);
+  const chunksRef=useRef([]);
+  const analyserRef=useRef(null);
+  const audioCtxRef=useRef(null);
+  const canvasRef=useRef(null);
+  const animFrameRef=useRef(null);
+  const timerRef=useRef(null);
+  // tapes
+  const [tapesPlayingId,setTapesPlayingId]=useState(null);
+  const [searchQuery,setSearchQuery]=useState("");
+  // mixtapes
+  const [openMixtapeId,setOpenMixtapeId]=useState(null);
+  const [creatingMixtape,setCreatingMixtape]=useState(false);
+  const [newMixtapeName,setNewMixtapeName]=useState("");
+  const [addingToMixtape,setAddingToMixtape]=useState(false);
+
+  useEffect(()=>{
+    fetch("/api/recordings/folder").then(r=>r.json()).then(d=>setFolderPath(d.path||"")).catch(()=>{});
+    return()=>{
+      if(mediaRecorderRef.current?.state==="recording")try{mediaRecorderRef.current.stop();}catch{}
+      streamRef.current?.getTracks().forEach(t=>t.stop());
+      cancelAnimationFrame(animFrameRef.current);
+      clearInterval(timerRef.current);
+      try{audioCtxRef.current?.close();}catch{}
+    };
+  },[]);
+
+  const saveMixtapes=async next=>{
+    await fetch("/api/data/music_mixtapes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(next)})});
+    onMixtapesChange(next);
+  };
+
+  const drawCanvas=()=>{
+    const canvas=canvasRef.current;
+    const analyser=analyserRef.current;
+    if(!canvas||!analyser)return;
+    const dpr=window.devicePixelRatio||1;
+    const W=canvas.offsetWidth||300;
+    const H=canvas.offsetHeight||80;
+    canvas.width=W*dpr; canvas.height=H*dpr;
+    const ctx=canvas.getContext("2d");
+    ctx.scale(dpr,dpr);
+    const bufLen=analyser.frequencyBinCount;
+    const dataArr=new Uint8Array(bufLen);
+    const barCount=50;
+    const barW=Math.max(1,(W-(barCount-1))/barCount);
+    const step=Math.max(1,Math.floor(bufLen/barCount));
+    const hexIndigo=C.indigo;
+    const render=()=>{
+      animFrameRef.current=requestAnimationFrame(render);
+      analyser.getByteFrequencyData(dataArr);
+      ctx.clearRect(0,0,W,H);
+      for(let i=0;i<barCount;i++){
+        const val=dataArr[i*step]/255;
+        const bH=Math.max(3,val*H*0.88);
+        const x=i*(barW+1);
+        const y=(H-bH)/2;
+        const alpha=Math.round((0.3+val*0.7)*255).toString(16).padStart(2,"0");
+        ctx.fillStyle=hexIndigo+alpha;
+        if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,barW,bH,1.5);ctx.fill();}
+        else ctx.fillRect(x,y,barW,bH);
+      }
+    };
+    render();
+  };
+
+  const startRecording=async()=>{
+    setRecError("");
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({
+        audio:{sampleRate:48000,channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+      });
+      streamRef.current=stream;
+      const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+      audioCtxRef.current=audioCtx;
+      const source=audioCtx.createMediaStreamSource(stream);
+      const analyser=audioCtx.createAnalyser();
+      analyser.fftSize=512;
+      source.connect(analyser);
+      analyserRef.current=analyser;
+      const candidates=["audio/mp4","audio/webm;codecs=opus","audio/webm","audio/ogg"];
+      const mimeType=candidates.find(t=>MediaRecorder.isTypeSupported(t))||"";
+      const recorder=new MediaRecorder(stream,mimeType?{mimeType}:{});
+      mediaRecorderRef.current=recorder;
+      chunksRef.current=[];
+      recorder.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
+      recorder.onstop=handleRecordingStop;
+      recorder.start(250);
+      setIsRecording(true);
+      setRecordingTime(0);
+      timerRef.current=setInterval(()=>setRecordingTime(t=>t+1),1000);
+      drawCanvas();
+    }catch(err){
+      setRecError(err.name==="NotAllowedError"?"Microphone access denied":"Could not start recording");
+    }
+  };
+
+  const stopRecording=()=>{
+    if(!mediaRecorderRef.current||!isRecording)return;
+    try{mediaRecorderRef.current.stop();}catch{}
+    streamRef.current?.getTracks().forEach(t=>t.stop());
+    clearInterval(timerRef.current);
+    cancelAnimationFrame(animFrameRef.current);
+    setIsRecording(false);
+  };
+
+  const handleRecordingStop=async()=>{
+    const mimeType=mediaRecorderRef.current?.mimeType||"audio/mp4";
+    const ext=mimeType.includes("mp4")?".m4a":mimeType.includes("webm")?".webm":mimeType.includes("ogg")?".ogg":".m4a";
+    const blob=new Blob(chunksRef.current,{type:mimeType});
+    if(!blob.size)return;
+    const now=new Date();
+    const pad=n=>String(n).padStart(2,"0");
+    const name=`tape-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    setUploading(true);
+    try{
+      const fd=new FormData();
+      fd.append("file",blob,name+ext);
+      fd.append("name",name);
+      if(selectedProject)fd.append("projectName",selectedProject);
+      await fetch("/api/recordings/upload",{method:"POST",body:fd});
+      onRecordingsChange();
+      setTab("tapes");
+    }catch{setRecError("Upload failed");}
+    finally{setUploading(false);try{audioCtxRef.current?.close();}catch{}}
+  };
+
+  const handleDeleteRecording=async id=>{
+    await fetch(`/api/recordings/${id}`,{method:"DELETE"});
+    onRecordingsChange();
+    saveMixtapes(mixtapes.map(m=>({...m,recordingIds:m.recordingIds.filter(r=>r!==id)})));
+  };
+
+  const handleRenameRecording=async(id,name)=>{
+    await fetch(`/api/recordings/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+    onRecordingsChange();
+  };
+
+  const fmtRecTime=s=>`${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+  const MONTH_NAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const fmtMonthKey=k=>{const[y,m]=k.split("-");return`${MONTH_NAMES[parseInt(m)-1]} ${y}`;};
+  const filteredRecs=searchQuery?recordings.filter(r=>
+    r.name.toLowerCase().includes(searchQuery.toLowerCase())||(r.projectName||"").toLowerCase().includes(searchQuery.toLowerCase())
+  ):recordings;
+  const groupedTapes={};
+  [...filteredRecs].sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).forEach(r=>{
+    const d=r.createdAt?new Date(r.createdAt):new Date();
+    const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    if(!groupedTapes[k])groupedTapes[k]=[];
+    groupedTapes[k].push(r);
+  });
+  const monthKeys=Object.keys(groupedTapes).sort((a,b)=>b.localeCompare(a));
+
+  const openMixtapeObj=mixtapes.find(m=>m.id===openMixtapeId);
+  const mixtapeTapes=openMixtapeObj?openMixtapeObj.recordingIds.map(id=>recordings.find(r=>r.id===id)).filter(Boolean):[];
+  const tapesNotInMixtape=openMixtapeObj?recordings.filter(r=>!openMixtapeObj.recordingIds.includes(r.id)):[];
+
+  const createMixtape=()=>{
+    if(!newMixtapeName.trim())return;
+    saveMixtapes([...mixtapes,{id:Date.now().toString(),name:newMixtapeName.trim(),createdAt:new Date().toISOString(),recordingIds:[]}]);
+    setNewMixtapeName("");setCreatingMixtape(false);
+  };
+  const addToMixtape=id=>saveMixtapes(mixtapes.map(m=>m.id===openMixtapeId?{...m,recordingIds:[...m.recordingIds,id]}:m));
+  const removeFromMixtape=id=>saveMixtapes(mixtapes.map(m=>m.id===openMixtapeId?{...m,recordingIds:m.recordingIds.filter(r=>r!==id)}:m));
+  const deleteMixtape=id=>{saveMixtapes(mixtapes.filter(m=>m.id!==id));if(openMixtapeId===id)setOpenMixtapeId(null);};
+
+  const TABS_R=[["rec","Rec"],["tapes",recordings.length?`Tapes (${recordings.length})`:"Tapes"],["mixtapes","Mixtapes"]];
+  const activeProjects=projects.filter(p=>!p.parentGroup&&p.status!=="done"&&p.status!=="released"&&p.status!=="idea");
+
+  return(
+    <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="grab"/>
+        {/* Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          {openMixtapeId?(
+            <>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <button onClick={()=>setOpenMixtapeId(null)}
+                  style={{background:"none",border:"none",padding:4,cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:C.indigo,fontSize:13,fontWeight:600}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke={C.indigo} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Mixtapes
+                </button>
+                <div style={{fontSize:17,fontWeight:700,color:C.text}}>{openMixtapeObj?.name}</div>
+              </div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>setAddingToMixtape(v=>!v)}
+                  style={{fontSize:12,fontWeight:700,color:"#fff",background:C.accentGrad,border:"none",borderRadius:10,padding:"6px 14px",cursor:"pointer"}}>+ Add</button>
+                <button onClick={onClose} style={iconBtn}>{Icon.close()}</button>
+              </div>
+            </>
+          ):(
+            <>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:28,height:28,borderRadius:8,background:C.accentAlpha,display:"grid",placeItems:"center"}}>
+                  {Icon.mic(C.indigo)}
+                </div>
+                <div style={{fontSize:19,fontWeight:700,color:C.text}}>Recorder</div>
+              </div>
+              <button onClick={onClose} style={iconBtn}>{Icon.close()}</button>
+            </>
+          )}
+        </div>
+
+        {/* Tab bar */}
+        {!openMixtapeId&&(
+          <div style={{display:"flex",gap:2,background:C.surf2,borderRadius:10,padding:2,marginBottom:18}}>
+            {TABS_R.map(([t,l])=>(
+              <button key={t} onClick={()=>setTab(t)} style={{flex:1,fontSize:11.5,fontWeight:600,padding:"6px 4px",borderRadius:8,border:"none",cursor:"pointer",
+                background:tab===t?C.surf:"transparent",color:tab===t?C.text:C.faint,whiteSpace:"nowrap"}}>{l}</button>
+            ))}
+          </div>
+        )}
+
+        {/* ── REC ── */}
+        {!openMixtapeId&&tab==="rec"&&(
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+            {/* Waveform canvas */}
+            <div style={{width:"100%",height:80,borderRadius:14,background:C.surf2,marginBottom:16,position:"relative",overflow:"hidden"}}>
+              <canvas ref={canvasRef} style={{width:"100%",height:"100%",display:"block"}}/>
+              {!isRecording&&(
+                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",gap:3,pointerEvents:"none"}}>
+                  {REC_PLACEHOLDER_BARS.map((h,i)=><div key={i} style={{width:3,height:h,borderRadius:2,background:C.dim}}/>)}
+                </div>
+              )}
+            </div>
+            {/* Timer */}
+            <div className="mono" style={{fontSize:38,fontWeight:700,letterSpacing:"0.04em",color:isRecording?"#ef4444":C.dim,marginBottom:18,transition:"color 0.3s"}}>
+              {fmtRecTime(recordingTime)}
+            </div>
+            {/* Project picker */}
+            <div style={{width:"100%",marginBottom:20,position:"relative"}}>
+              <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:6}}>Link to project</div>
+              <button onClick={()=>setProjPickerOpen(v=>!v)}
+                style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:12,border:`1px solid ${C.line}`,background:C.surf2,cursor:"pointer",boxSizing:"border-box"}}>
+                <span style={{fontSize:13,fontWeight:selectedProject?600:400,color:selectedProject?C.text:C.faint}}>{selectedProject||"No project selected"}</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {projPickerOpen&&(
+                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:C.surf,border:`1px solid ${C.line}`,borderRadius:12,overflow:"hidden",zIndex:100,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",maxHeight:180,overflowY:"auto"}}>
+                  <button onClick={()=>{setSelectedProject(null);setProjPickerOpen(false);}}
+                    style={{width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:!selectedProject?C.surf2:"transparent",cursor:"pointer",fontSize:13,color:C.faint,borderBottom:`1px solid ${C.line}`}}>
+                    No project
+                  </button>
+                  {activeProjects.map(p=>(
+                    <button key={p.name} onClick={()=>{setSelectedProject(p.name);setProjPickerOpen(false);}}
+                      style={{width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:selectedProject===p.name?C.surf2:"transparent",cursor:"pointer",fontSize:13,fontWeight:600,color:selectedProject===p.name?C.indigo:C.text,borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:p.color||C.indigo,flexShrink:0,display:"inline-block"}}/>
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Record / Stop */}
+            {uploading?(
+              <div style={{fontSize:13,color:C.faint,marginBottom:12}}>Saving tape…</div>
+            ):isRecording?(
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+                <button onClick={stopRecording}
+                  style={{width:72,height:72,borderRadius:"50%",border:"none",cursor:"pointer",background:"rgba(239,68,68,0.12)",display:"grid",placeItems:"center"}}>
+                  <div style={{width:26,height:26,borderRadius:7,background:"#ef4444"}}/>
+                </button>
+                <div className="pulse-dot" style={{fontSize:12,fontWeight:700,color:"#ef4444",display:"flex",alignItems:"center",gap:5}}>
+                  <div style={{width:7,height:7,borderRadius:"50%",background:"#ef4444"}}/>
+                  Recording
+                </div>
+              </div>
+            ):(
+              <button onClick={startRecording}
+                style={{width:72,height:72,borderRadius:"50%",border:"3px solid #ef4444",cursor:"pointer",background:"transparent",display:"grid",placeItems:"center",marginBottom:4}}>
+                <div style={{width:52,height:52,borderRadius:"50%",background:"#ef4444"}}/>
+              </button>
+            )}
+            {recError&&<div style={{fontSize:12,color:"#ef4444",marginTop:10,textAlign:"center"}}>{recError}</div>}
+            {/* Folder path */}
+            {folderPath&&(
+              <div style={{width:"100%",marginTop:22,padding:"10px 12px",borderRadius:10,background:C.surf2,display:"flex",alignItems:"flex-start",gap:8}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{marginTop:1,flexShrink:0}}><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke={C.faint} strokeWidth="1.7" strokeLinejoin="round"/></svg>
+                <span className="mono" style={{fontSize:10.5,color:C.faint,wordBreak:"break-all",lineHeight:1.4}}>{folderPath}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAPES ── */}
+        {!openMixtapeId&&tab==="tapes"&&(
+          <div>
+            {recordings.length===0?(
+              <div style={{textAlign:"center",padding:"48px 0",color:C.faint}}>
+                <div style={{fontSize:40,marginBottom:10}}>🎙</div>
+                <div style={{fontSize:14,fontWeight:600,color:C.muted,marginBottom:4}}>No tapes yet</div>
+                <div style={{fontSize:12}}>Go to Rec tab to start recording</div>
+              </div>
+            ):(
+              <>
+                <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+                  placeholder="Search tapes…" className="mt-text"
+                  style={{width:"100%",padding:"9px 12px",marginBottom:14,boxSizing:"border-box"}}/>
+                {monthKeys.length===0&&searchQuery&&(
+                  <div style={{textAlign:"center",padding:"24px 0",fontSize:13,color:C.faint}}>No results for "{searchQuery}"</div>
+                )}
+                {monthKeys.map(month=>(
+                  <div key={month}>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8,marginTop:4}}>{fmtMonthKey(month)}</div>
+                    {groupedTapes[month].map(rec=>(
+                      <TapeRow key={rec.id} rec={rec} projects={projects}
+                        playingId={tapesPlayingId} onSetPlaying={setTapesPlayingId}
+                        onDelete={handleDeleteRecording} onRename={handleRenameRecording}/>
+                    ))}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── MIXTAPES ── */}
+        {!openMixtapeId&&tab==="mixtapes"&&(
+          <div>
+            {creatingMixtape?(
+              <div style={{display:"flex",gap:8,marginBottom:14}}>
+                <input value={newMixtapeName} onChange={e=>setNewMixtapeName(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter")createMixtape();if(e.key==="Escape")setCreatingMixtape(false);}}
+                  placeholder="Mixtape name…" className="mt-text"
+                  style={{flex:1,padding:"9px 12px"}} autoFocus/>
+                <button onClick={createMixtape}
+                  style={{background:C.accentGrad,border:"none",borderRadius:10,color:"#fff",padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>Create</button>
+                <button onClick={()=>setCreatingMixtape(false)} style={iconBtn}>{Icon.close()}</button>
+              </div>
+            ):(
+              <button onClick={()=>setCreatingMixtape(true)}
+                style={{width:"100%",padding:"11px 14px",borderRadius:12,border:`1.5px dashed ${C.line}`,background:"transparent",cursor:"pointer",fontSize:13,fontWeight:700,color:C.indigo,marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxSizing:"border-box"}}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.indigo} strokeWidth="2.5" strokeLinecap="round"/></svg>
+                New Mixtape
+              </button>
+            )}
+            {mixtapes.length===0&&!creatingMixtape&&(
+              <div style={{textAlign:"center",padding:"32px 0",color:C.faint}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.muted,marginBottom:4}}>No mixtapes yet</div>
+                <div style={{fontSize:12}}>Create one to organise your tapes</div>
+              </div>
+            )}
+            {mixtapes.map(mx=>(
+              <div key={mx.id} onClick={()=>{setOpenMixtapeId(mx.id);setAddingToMixtape(false);}}
+                style={{background:C.surf2,borderRadius:14,padding:"13px 14px",marginBottom:8,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:36,height:36,borderRadius:10,background:C.accentAlpha,display:"grid",placeItems:"center",flexShrink:0}}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={C.indigo} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={C.indigo} strokeWidth="1.7"/><circle cx="18" cy="16" r="3" stroke={C.indigo} strokeWidth="1.7"/></svg>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:600,color:C.text}}>{mx.name}</div>
+                  <div style={{fontSize:12,color:C.faint,marginTop:1}}>{mx.recordingIds.length} {mx.recordingIds.length===1?"tape":"tapes"}</div>
+                </div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── MIXTAPE DETAIL ── */}
+        {openMixtapeId&&openMixtapeObj&&(
+          <div>
+            {addingToMixtape&&(
+              <div style={{background:C.surf2,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:10}}>Choose a tape to add</div>
+                {tapesNotInMixtape.length===0?(
+                  <div style={{fontSize:13,color:C.faint}}>All tapes are already in this mixtape</div>
+                ):(
+                  tapesNotInMixtape.map(r=>(
+                    <button key={r.id} onClick={()=>addToMixtape(r.id)}
+                      style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 0",border:"none",background:"transparent",cursor:"pointer",borderBottom:`1px solid ${C.line}`,textAlign:"left"}}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={C.indigo} strokeWidth="2" strokeLinecap="round"/></svg>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.name}</div>
+                        {r.projectName&&<div style={{fontSize:11,color:C.faint}}>{r.projectName}</div>}
+                      </div>
+                    </button>
+                  ))
+                )}
+                <button onClick={()=>setAddingToMixtape(false)} style={{marginTop:10,fontSize:12,color:C.faint,background:"transparent",border:"none",cursor:"pointer"}}>Done</button>
+              </div>
+            )}
+            {mixtapeTapes.length===0&&!addingToMixtape?(
+              <div style={{textAlign:"center",padding:"48px 0",color:C.faint}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.muted,marginBottom:4}}>This mixtape is empty</div>
+                <div style={{fontSize:12}}>Tap "+ Add" to add recordings</div>
+              </div>
+            ):(
+              mixtapeTapes.map(rec=>(
+                <TapeRow key={rec.id} rec={rec} projects={projects}
+                  playingId={tapesPlayingId} onSetPlaying={setTapesPlayingId}
+                  onDelete={handleDeleteRecording} onRename={handleRenameRecording}
+                  onRemoveFromMixtape={()=>removeFromMixtape(rec.id)}/>
+              ))
+            )}
+            <div style={{marginTop:20,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
+              <button onClick={()=>deleteMixtape(openMixtapeId)}
+                style={{fontSize:12,color:"#ef4444",background:"rgba(239,68,68,0.07)",border:"1px solid rgba(239,68,68,0.18)",borderRadius:10,padding:"7px 14px",cursor:"pointer"}}>
+                Delete mixtape
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── settings sheet ─── */
 function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived,questsEnabled,onQuestsToggle}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
@@ -3172,6 +3698,9 @@ export default function App() {
   const [audioFileCounts,setAudioFileCounts]=useState({});
   const [globalAudioFolder,setGlobalAudioFolder]=useState("");
   const [archivedProjects,setArchivedProjects]=useState([]);
+  const [recorderOpen,setRecorderOpen]=useState(false);
+  const [recordings,setRecordings]=useState([]);
+  const [mixtapes,setMixtapes]=useState([]);
   const [questData,setQuestData]=useState(null);
   const [toast,setToast]=useState("");
   const toastTimer=useRef(null);
@@ -3207,6 +3736,8 @@ export default function App() {
           await storage.set("music_quests",JSON.stringify(init));
         }
       }catch{}
+      try{const r=await fetch("/api/recordings").then(x=>x.json());setRecordings(r.recordings||[]);}catch{}
+      try{const mx=await storage.get("music_mixtapes");if(mx?.value)setMixtapes(JSON.parse(mx.value));}catch{}
       setLoaded(true);
     })();
   },[]);
@@ -3299,6 +3830,12 @@ export default function App() {
         } else if(key==="music_quests"){
           const r=await fetch("/api/data/music_quests").then(x=>x.json());
           if(r?.value!=null)setQuestData(JSON.parse(r.value));
+        } else if(key==="music_recordings"){
+          const r=await fetch("/api/recordings").then(x=>x.json());
+          setRecordings(r.recordings||[]);
+        } else if(key==="music_mixtapes"){
+          const r=await fetch("/api/data/music_mixtapes").then(x=>x.json());
+          if(r?.value!=null)setMixtapes(JSON.parse(r.value));
         }
       }catch{}
     };
@@ -3862,6 +4399,7 @@ export default function App() {
       })}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
+      {recorderOpen&&<RecorderSheet recordings={recordings} mixtapes={mixtapes} projects={projects} onClose={()=>setRecorderOpen(false)} onRecordingsChange={async()=>{try{const r=await fetch("/api/recordings").then(x=>x.json());setRecordings(r.recordings||[]);}catch{}}} onMixtapesChange={setMixtapes}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived} questsEnabled={questData?.enabled!==false} onQuestsToggle={toggleQuests}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
       {reviewOpen&&<AnalyticsSheet sessions={sessions} goalHours={goalHours} currentStreak={currentStreak} longestStreak={longestStreak} onClose={()=>setReviewOpen(false)}/>}
@@ -3881,6 +4419,7 @@ export default function App() {
           <button onClick={()=>setReviewOpen(true)} title="Analytics" style={iconBtn}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2" y="13" width="4" height="9" rx="1.5" fill={C.faint}/><rect x="10" y="7" width="4" height="15" rx="1.5" fill={C.faint}/><rect x="18" y="2" width="4" height="20" rx="1.5" fill={C.faint}/></svg>
           </button>
+          <button onClick={()=>setRecorderOpen(true)} title="Recorder" style={iconBtn}>{Icon.mic(C.faint)}</button>
           <button onClick={()=>setSettingsOpen(true)} style={iconBtn}>{Icon.gear(C.faint)}</button>
           <div style={{display:"flex",alignItems:"center",gap:6,background:C.surf,border:`1px solid ${C.line}`,borderRadius:999,padding:"8px 13px"}}>
             <span style={{fontSize:15}}>🔥</span>
