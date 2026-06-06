@@ -3777,6 +3777,8 @@ export default function App() {
   const [recordings,setRecordings]=useState([]);
   const [mixtapes,setMixtapes]=useState([]);
   const [questData,setQuestData]=useState(null);
+  const [questHistoryOpen,setQuestHistoryOpen]=useState(false);
+  const [dateNonce,setDateNonce]=useState(0);// incremented to force midnight re-renders
   const [toast,setToast]=useState("");
   const toastTimer=useRef(null);
   const toastQueue=useRef([]);
@@ -3965,6 +3967,35 @@ export default function App() {
     const updated=refreshQuestsIfStale(questData,today,weekStr);
     if(updated){setQuestData(updated);saveQuestData(updated);}
   },[questData,today]);// eslint-disable-line
+
+  /* midnight + visibility refresh — ensures today/quests update when PWA resumes */
+  useEffect(()=>{
+    const bump=()=>setDateNonce(n=>n+1);
+    const onVisible=()=>{if(document.visibilityState==="visible")bump();};
+    document.addEventListener("visibilitychange",onVisible);
+    // schedule a re-render at the next midnight
+    const now=new Date();
+    const msTilMidnight=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1)-now+300;
+    const t=setTimeout(bump,msTilMidnight);
+    return()=>{document.removeEventListener("visibilitychange",onVisible);clearTimeout(t);};
+  },[]);// eslint-disable-line
+
+  /* quest refresh (once per day, user-triggered) */
+  const refreshDailyQuests=()=>{
+    if(!questData||questData.lastDailyRefresh===today)return;
+    const recentIdxs=[...new Set([...(questData.completedDailyHistory||[]).slice(-7).map(h=>h.idx),...(questData.currentDaily||[]).map(q=>q.idx)])];
+    const newDaily=pickQuestWeighted(DAILY_QUESTS,recentIdxs,3);
+    const next={...questData,currentDaily:newDaily,lastDailyRefresh:today};
+    setQuestData(next);saveQuestData(next);
+  };
+  const refreshWeeklyQuest=()=>{
+    if(!questData||questData.lastWeeklyRefresh===today||questData.currentWeekly?.done)return;
+    const recentIdxs=[...new Set([...(questData.completedWeeklyHistory||[]).slice(-8).map(h=>h.idx),...(questData.currentWeekly!=null?[questData.currentWeekly.idx]:[])])];
+    const newWeekly=pickQuestWeighted(WEEKLY_QUESTS,recentIdxs,1)[0];
+    const next={...questData,currentWeekly:newWeekly,lastWeeklyRefresh:today};
+    setQuestData(next);saveQuestData(next);
+  };
+
   const completeQuest=(type,idx)=>{
     if(!questData)return;
     if(type==="daily"){
@@ -4398,7 +4429,15 @@ export default function App() {
         {hasQuestContent&&(
           <div style={{marginTop:todayProjects.length>0||remainingH>0?14:0,paddingTop:todayProjects.length>0||remainingH>0?14:0,borderTop:todayProjects.length>0||remainingH>0?`1px solid ${C.line}`:"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-              <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Daily Quests</span>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Daily Quests</span>
+                {questData.lastDailyRefresh!==today&&(
+                  <button onClick={refreshDailyQuests} title="Get new daily quests"
+                    style={{background:"none",border:"none",padding:2,cursor:"pointer",display:"flex",alignItems:"center",opacity:0.55,lineHeight:1}}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M23 20v-6h-6" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                )}
+              </div>
               <span style={{fontSize:11,color:C.faint}}>+1 XP each</span>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:5}}>
@@ -4506,14 +4545,58 @@ export default function App() {
       {/* XP level bar */}
       {questData?.enabled!==false&&questData&&(()=>{
         const{level,xpInLevel,xpPerLevel}=questLevel(questData.xp||0);
+        const thisMonth=today.slice(0,7);
+        const dailyHist=[...(questData.completedDailyHistory||[])].filter(h=>h.date?.startsWith(thisMonth)).reverse();
+        const weeklyHist=[...(questData.completedWeeklyHistory||[])].slice(-6).reverse();
         return(
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 2px 10px"}}>
-            <span style={{fontSize:12,fontWeight:700,color:C.indigo,whiteSpace:"nowrap",flexShrink:0}}>⭐ Lv.{level}</span>
-            <div style={{flex:1,height:5,borderRadius:999,background:C.surf2,overflow:"hidden"}}>
-              <div style={{height:"100%",borderRadius:999,background:C.accentGrad,width:`${(xpInLevel/xpPerLevel)*100}%`,transition:"width 0.6s ease"}}/>
-            </div>
-            <span style={{fontSize:11,color:C.faint,whiteSpace:"nowrap",flexShrink:0}}>{xpInLevel}/{xpPerLevel} XP</span>
-          </div>
+          <>
+            <button onClick={()=>setQuestHistoryOpen(v=>!v)} title="Quest history"
+              style={{display:"flex",alignItems:"center",gap:8,padding:"8px 2px 10px",width:"100%",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+              <span style={{fontSize:12,fontWeight:700,color:C.indigo,whiteSpace:"nowrap",flexShrink:0}}>⭐ Lv.{level}</span>
+              <div style={{flex:1,height:5,borderRadius:999,background:C.surf2,overflow:"hidden"}}>
+                <div style={{height:"100%",borderRadius:999,background:C.accentGrad,width:`${(xpInLevel/xpPerLevel)*100}%`,transition:"width 0.6s ease"}}/>
+              </div>
+              <span style={{fontSize:11,color:C.faint,whiteSpace:"nowrap",flexShrink:0}}>{xpInLevel}/{xpPerLevel} XP</span>
+            </button>
+            {questHistoryOpen&&(
+              <div style={{background:C.surf,border:`1px solid ${C.line}`,borderRadius:16,padding:"14px 16px",marginBottom:14,animation:"mtmodal .2s ease"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text}}>
+                    Quest History — {new Date(today+"T12:00:00").toLocaleString("default",{month:"long",year:"numeric"})}
+                  </div>
+                  <button onClick={()=>setQuestHistoryOpen(false)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}>{Icon.close()}</button>
+                </div>
+                {dailyHist.length===0&&weeklyHist.length===0?(
+                  <div style={{fontSize:13,color:C.faint,textAlign:"center",padding:"10px 0"}}>No quests completed this month yet</div>
+                ):(
+                  <>
+                    {dailyHist.length>0&&(
+                      <div style={{marginBottom:12}}>
+                        <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8}}>Daily</div>
+                        {dailyHist.map((h,i)=>(
+                          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:5}}>
+                            <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0,marginTop:1}}>{h.date}</span>
+                            <span style={{fontSize:12,color:C.text,lineHeight:1.4}}>{DAILY_QUESTS[h.idx]?.[1]||"—"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {weeklyHist.length>0&&(
+                      <div>
+                        <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8}}>Weekly</div>
+                        {weeklyHist.map((h,i)=>(
+                          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:5}}>
+                            <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0,marginTop:1}}>{h.weekStr}</span>
+                            <span style={{fontSize:12,color:C.text,lineHeight:1.4}}>{WEEKLY_QUESTS[h.idx]?.[1]||"—"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </>
         );
       })()}
 
@@ -4710,7 +4793,15 @@ export default function App() {
               return(
                 <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Weekly Quest</span>
+                    <div style={{display:"flex",alignItems:"center",gap:7}}>
+                      <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Weekly Quest</span>
+                      {questData.lastWeeklyRefresh!==today&&!wq.done&&(
+                        <button onClick={refreshWeeklyQuest} title="Get a new weekly quest"
+                          style={{background:"none",border:"none",padding:2,cursor:"pointer",display:"flex",alignItems:"center",opacity:0.55,lineHeight:1}}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M23 20v-6h-6" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      )}
+                    </div>
                     <span style={{fontSize:11,color:C.faint}}>+10 XP</span>
                   </div>
                   <button onClick={()=>completeQuest("weekly")}
