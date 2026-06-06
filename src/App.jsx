@@ -2184,6 +2184,8 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
   const [uploading,setUploading]=useState(false);
   const [recError,setRecError]=useState("");
   const [folderPath,setFolderPath]=useState("");
+  const [editingFolder,setEditingFolder]=useState(false);
+  const [folderInput,setFolderInput]=useState("");
   const mediaRecorderRef=useRef(null);
   const streamRef=useRef(null);
   const chunksRef=useRef([]);
@@ -2202,7 +2204,7 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
   const [addingToMixtape,setAddingToMixtape]=useState(false);
 
   useEffect(()=>{
-    fetch("/api/recordings/folder").then(r=>r.json()).then(d=>setFolderPath(d.path||"")).catch(()=>{});
+    fetch("/api/recordings/folder").then(r=>r.json()).then(d=>{setFolderPath(d.path||"");setFolderInput(d.path||"");}).catch(()=>{});
     return()=>{
       if(mediaRecorderRef.current?.state==="recording")try{mediaRecorderRef.current.stop();}catch{}
       streamRef.current?.getTracks().forEach(t=>t.stop());
@@ -2251,11 +2253,22 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
     render();
   };
 
+  const saveFolder=async()=>{
+    const path=folderInput.trim();
+    await fetch("/api/data/music_recordings_folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:path})});
+    fetch("/api/recordings/folder").then(r=>r.json()).then(d=>{setFolderPath(d.path||"");setFolderInput(d.path||"");}).catch(()=>{});
+    setEditingFolder(false);
+  };
+
   const startRecording=async()=>{
     setRecError("");
+    if(!navigator.mediaDevices?.getUserMedia){
+      setRecError("Microphone unavailable — make sure the app is served over HTTPS");
+      return;
+    }
     try{
       const stream=await navigator.mediaDevices.getUserMedia({
-        audio:{sampleRate:48000,channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+        audio:{sampleRate:{ideal:48000},channelCount:{ideal:1},echoCancellation:false,noiseSuppression:false,autoGainControl:false}
       });
       streamRef.current=stream;
       const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
@@ -2278,7 +2291,18 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
       timerRef.current=setInterval(()=>setRecordingTime(t=>t+1),1000);
       drawCanvas();
     }catch(err){
-      setRecError(err.name==="NotAllowedError"?"Microphone access denied":"Could not start recording");
+      const msg=err.name==="NotAllowedError"||err.name==="PermissionDeniedError"
+        ?"Microphone permission denied — allow access in browser/system settings"
+        :err.name==="NotFoundError"||err.name==="DevicesNotFoundError"
+        ?"No microphone found on this device"
+        :err.name==="NotReadableError"||err.name==="TrackStartError"
+        ?"Microphone is in use by another app"
+        :err.name==="OverconstrainedError"
+        ?"Audio format not supported on this device"
+        :err.name==="SecurityError"
+        ?"Microphone blocked — app must be served over HTTPS"
+        :`Could not start recording (${err.name})`;
+      setRecError(msg);
     }
   };
 
@@ -2460,13 +2484,27 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
               </button>
             )}
             {recError&&<div style={{fontSize:12,color:"#ef4444",marginTop:10,textAlign:"center"}}>{recError}</div>}
-            {/* Folder path */}
-            {folderPath&&(
-              <div style={{width:"100%",marginTop:22,padding:"10px 12px",borderRadius:10,background:C.surf2,display:"flex",alignItems:"flex-start",gap:8}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{marginTop:1,flexShrink:0}}><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke={C.faint} strokeWidth="1.7" strokeLinejoin="round"/></svg>
-                <span className="mono" style={{fontSize:10.5,color:C.faint,wordBreak:"break-all",lineHeight:1.4}}>{folderPath}</span>
-              </div>
-            )}
+            {/* Recordings folder */}
+            <div style={{width:"100%",marginTop:22}}>
+              <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:6}}>Recordings folder</div>
+              {editingFolder?(
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  <input value={folderInput} onChange={e=>setFolderInput(e.target.value)}
+                    onKeyDown={e=>{if(e.key==="Enter")saveFolder();if(e.key==="Escape")setEditingFolder(false);}}
+                    placeholder="/mnt/user/Music/Recordings"
+                    className="mt-text" style={{flex:1,minWidth:0,padding:"9px 12px",fontSize:12}} autoFocus/>
+                  <button onClick={saveFolder}
+                    style={{background:C.accentGrad,border:"none",borderRadius:10,color:"#fff",padding:"9px 14px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Save</button>
+                  <button onClick={()=>setEditingFolder(false)} style={iconBtn}>{Icon.close()}</button>
+                </div>
+              ):(
+                <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.surf2,borderRadius:10,padding:"10px 12px"}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{marginTop:1,flexShrink:0}}><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke={C.faint} strokeWidth="1.7" strokeLinejoin="round"/></svg>
+                  <span className="mono" style={{flex:1,fontSize:10.5,color:C.faint,wordBreak:"break-all",lineHeight:1.4}}>{folderPath||"(default)"}</span>
+                  <button onClick={()=>setEditingFolder(true)} style={{...iconBtn,width:24,height:24,borderRadius:7,flexShrink:0}}>{Icon.pencil()}</button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

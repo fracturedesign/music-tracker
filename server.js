@@ -352,8 +352,13 @@ app.post("/api/projects/rename", (req, res) => {
 /* ── recordings API ── */
 const recordingUpload = multer({
   storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, RECORDINGS_DIR),
-    filename:    (req, file, cb) => {
+    destination: (req, file, cb) => {
+      const d      = readData();
+      const folder = d.music_recordings_folder || RECORDINGS_DIR;
+      try { mkdirSync(folder, { recursive: true }); } catch {}
+      cb(null, folder);
+    },
+    filename: (req, file, cb) => {
       const ts  = Date.now().toString();
       const rnd = Math.random().toString(36).slice(2, 6);
       const ext = extname(file.originalname).toLowerCase() || ".m4a";
@@ -364,7 +369,8 @@ const recordingUpload = multer({
 });
 
 app.get("/api/recordings/folder", (req, res) => {
-  res.json({ path: RECORDINGS_DIR });
+  const data = readData();
+  res.json({ path: data.music_recordings_folder || RECORDINGS_DIR });
 });
 
 app.get("/api/recordings", (req, res) => {
@@ -375,12 +381,12 @@ app.get("/api/recordings", (req, res) => {
 app.post("/api/recordings/upload", recordingUpload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
   const { name, projectName } = req.body;
-  const { filename, size } = req.file;
-  const filePath = join(RECORDINGS_DIR, filename);
+  const { filename, size, destination } = req.file;
+  const absolutePath = join(destination, filename);
   let duration = 0;
   try {
     const { stdout } = await execAsync(
-      `ffprobe -v quiet -print_format json -show_format "${filePath}"`,
+      `ffprobe -v quiet -print_format json -show_format "${absolutePath}"`,
       { timeout: 30_000 }
     );
     duration = parseFloat(JSON.parse(stdout).format?.duration || 0);
@@ -389,12 +395,13 @@ app.post("/api/recordings/upload", recordingUpload.single("file"), async (req, r
   const id  = filename.replace(ext, "");
   const meta = {
     id,
-    name:        name || `tape-${id}`,
+    name:         name || `tape-${id}`,
     filename,
+    absolutePath,
     duration,
-    size:        parseFloat((size / (1024 * 1024)).toFixed(2)),
-    projectName: projectName || null,
-    createdAt:   new Date().toISOString(),
+    size:         parseFloat((size / (1024 * 1024)).toFixed(2)),
+    projectName:  projectName || null,
+    createdAt:    new Date().toISOString(),
   };
   const data = readData();
   if (!data.music_recordings) data.music_recordings = [];
@@ -408,7 +415,7 @@ app.get("/api/recordings/stream/:id", (req, res) => {
   const data = readData();
   const rec  = (data.music_recordings || []).find(r => r.id === req.params.id);
   if (!rec) return res.status(404).json({ error: "Not found" });
-  const filePath = join(RECORDINGS_DIR, rec.filename);
+  const filePath = rec.absolutePath || join(RECORDINGS_DIR, rec.filename);
   if (!existsSync(filePath)) return res.status(404).json({ error: "File missing" });
   const stat = statSync(filePath);
   const ext  = extname(rec.filename).toLowerCase();
@@ -452,7 +459,7 @@ app.delete("/api/recordings/:id", (req, res) => {
   const recs = data.music_recordings || [];
   const rec  = recs.find(r => r.id === req.params.id);
   if (!rec) return res.status(404).json({ error: "Not found" });
-  try { unlinkSync(join(RECORDINGS_DIR, rec.filename)); } catch {}
+  try { unlinkSync(rec.absolutePath || join(RECORDINGS_DIR, rec.filename)); } catch {}
   data.music_recordings = recs.filter(r => r.id !== req.params.id);
   writeData(data);
   broadcast("music_recordings");
