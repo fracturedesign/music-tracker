@@ -2262,10 +2262,11 @@ function MiniPlayer({nowPlaying,onEnd,onClear,onOpenProject}) {
     return()=>{a.removeEventListener("timeupdate",onTime);a.removeEventListener("durationchange",onDur);a.removeEventListener("play",onPlay);a.removeEventListener("pause",onPause);a.removeEventListener("ended",onEnded);};
   },[]);// eslint-disable-line
 
-  // MediaSession API — tells iOS Control Center / lock screen what's playing
+  // MediaSession API — only manages the session when MiniPlayer is the active source.
+  // When nowPlaying is null, AudioFileCard may be playing; don't override its session.
   useEffect(()=>{
     if(!("mediaSession" in navigator))return;
-    if(!nowPlaying){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState="none";return;}
+    if(!nowPlaying)return;
     navigator.mediaSession.metadata=new MediaMetadata({title:nowPlaying.file.name});
     const a=audioRef.current;
     navigator.mediaSession.setActionHandler("play",()=>a?.play().catch(()=>{}));
@@ -2275,8 +2276,8 @@ function MiniPlayer({nowPlaying,onEnd,onClear,onOpenProject}) {
     navigator.mediaSession.setActionHandler("seekto",({seekTime})=>{if(a&&seekTime!=null)a.currentTime=seekTime;});
   },[nowPlaying]);// eslint-disable-line
   useEffect(()=>{
-    if(!("mediaSession" in navigator))return;
-    navigator.mediaSession.playbackState=nowPlaying?(playing?"playing":"paused"):"none";
+    if(!("mediaSession" in navigator)||!nowPlaying)return;
+    navigator.mediaSession.playbackState=playing?"playing":"paused";
   },[playing,nowPlaying]);
   useEffect(()=>{
     if(!("mediaSession" in navigator)||!nowPlaying||!(duration>0))return;
