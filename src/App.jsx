@@ -2249,7 +2249,7 @@ function MiniPlayer({nowPlaying,onEnd,onClear,onOpenProject}) {
   useEffect(()=>{
     if(!("mediaSession" in navigator))return;
     if(!nowPlaying){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState="none";return;}
-    navigator.mediaSession.metadata=new MediaMetadata({title:nowPlaying.file.name,artist:nowPlaying.projectName,album:"Orbit"});
+    navigator.mediaSession.metadata=new MediaMetadata({title:nowPlaying.file.name});
     const a=audioRef.current;
     navigator.mediaSession.setActionHandler("play",()=>a?.play().catch(()=>{}));
     navigator.mediaSession.setActionHandler("pause",()=>a?.pause());
