@@ -2188,7 +2188,7 @@ function TapeRow({rec,projects,playingId,onSetPlaying,onDelete,onRename,onRemove
           </div>
         )}
         <button onClick={()=>{setRenameVal(rec.name);setRenaming(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8}}>{Icon.pencil()}</button>
-        {confirmDel?(
+        {onDelete&&(confirmDel?(
           <>
             <span style={{fontSize:11,color:C.muted}}>Delete?</span>
             <button onClick={()=>onDelete(rec.id)}
@@ -2198,7 +2198,7 @@ function TapeRow({rec,projects,playingId,onSetPlaying,onDelete,onRename,onRemove
           </>
         ):(
           <button onClick={()=>setConfirmDel(true)} style={{...iconBtn,width:28,height:28,borderRadius:8}}>{Icon.trash()}</button>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -2313,9 +2313,12 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
       streamRef.current=stream;
       const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
       audioCtxRef.current=audioCtx;
+      if(audioCtx.state==="suspended")await audioCtx.resume();
       const source=audioCtx.createMediaStreamSource(stream);
       const analyser=audioCtx.createAnalyser();
       source.connect(analyser);
+      // connect to destination so iOS WebKit feeds the graph
+      analyser.connect(audioCtx.destination);
       analyserRef.current=analyser;
       const candidates=["audio/mp4","audio/webm;codecs=opus","audio/webm","audio/ogg"];
       const mimeType=candidates.find(t=>MediaRecorder.isTypeSupported(t))||"";
@@ -2582,9 +2585,9 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
           </div>
         )}
 
-        {/* ── TAPES ── */}
-        {!openMixtapeId&&tab==="tapes"&&(
-          <div>
+        {/* ── TAPES ── always rendered so WaveSurfer pre-loads; hidden when not active */}
+        {!openMixtapeId&&(
+          <div style={{display:tab==="tapes"?"block":"none"}}>
             {recordings.length===0?(
               <div style={{textAlign:"center",padding:"48px 0",color:C.faint}}>
                 <div style={{fontSize:40,marginBottom:10}}>🎙</div>
@@ -2689,7 +2692,7 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
               mixtapeTapes.map(rec=>(
                 <TapeRow key={rec.id} rec={rec} projects={projects}
                   playingId={tapesPlayingId} onSetPlaying={setTapesPlayingId}
-                  onDelete={handleDeleteRecording} onRename={handleRenameRecording}
+                  onRename={handleRenameRecording}
                   onRemoveFromMixtape={()=>removeFromMixtape(rec.id)}/>
               ))
             )}
