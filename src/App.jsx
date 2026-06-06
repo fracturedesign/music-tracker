@@ -4618,9 +4618,12 @@ export default function App() {
                       <div>
                         <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8}}>Weekly</div>
                         {weeklyHist.map((h,i)=>(
-                          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:5}}>
-                            <span className="mono" style={{fontSize:11,color:C.faint,flexShrink:0,marginTop:1}}>{h.weekStr}</span>
-                            <span style={{fontSize:12,color:C.text,lineHeight:1.4}}>{WEEKLY_QUESTS[h.idx]?.[1]||"—"}</span>
+                          <div key={i} style={{marginBottom:8}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                              <span className="mono" style={{fontSize:11,color:C.faint}}>{h.weekStr}</span>
+                              <span style={{fontSize:10,fontWeight:700,color:C.indigo,background:C.accentAlpha,borderRadius:5,padding:"1px 6px"}}>+10 XP</span>
+                            </div>
+                            <div style={{paddingLeft:8,fontSize:12,color:C.text,lineHeight:1.4}}>{WEEKLY_QUESTS[h.idx]?.[1]||"—"}</div>
                           </div>
                         ))}
                       </div>
