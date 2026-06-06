@@ -748,8 +748,10 @@ function AudioFileCard({file,projectName,onDelete,onRename,onMarkSeen}) {
       if("mediaSession" in navigator){
         navigator.mediaSession.metadata=new MediaMetadata({title:file.name});
         navigator.mediaSession.playbackState="playing";
-        navigator.mediaSession.setActionHandler("play",()=>ws.play());
-        navigator.mediaSession.setActionHandler("pause",()=>ws.pause());
+        // Use the underlying HTMLAudioElement directly — more reliable on iOS than ws.play/pause
+        const media=ws.getMediaElement?.();
+        navigator.mediaSession.setActionHandler("play",()=>media?media.play().catch(()=>{}):ws.play());
+        navigator.mediaSession.setActionHandler("pause",()=>media?media.pause():ws.pause());
         navigator.mediaSession.setActionHandler("seekbackward",({seekOffset})=>{const dur=ws.getDuration?.()??0;const t=ws.getCurrentTime?.()??0;if(dur>0)ws.seekTo(Math.max(0,t-(seekOffset||10))/dur);});
         navigator.mediaSession.setActionHandler("seekforward",({seekOffset})=>{const dur=ws.getDuration?.()??0;const t=ws.getCurrentTime?.()??0;if(dur>0)ws.seekTo(Math.min(1,(t+(seekOffset||10))/dur));});
         navigator.mediaSession.setActionHandler("seekto",({seekTime})=>{const dur=ws.getDuration?.()??0;if(seekTime!=null&&dur>0)ws.seekTo(Math.min(1,seekTime/dur));});
