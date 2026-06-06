@@ -2875,6 +2875,185 @@ function ABCompare({files,projectName,onClose}) {
 /* ─── main app ─── */
 const PROMPTS=["Make something beautiful today.","Chase the sound in your head.","Press record, see what happens.","One loop can become a song.","Start before you feel ready.","Trust your ears today.","Finish something today.","Show up for the music.","Turn an idea into a take."];
 
+// ── Stable module-level row components ───────────────────────────────────────
+// These MUST live outside App() so React sees a stable component type across
+// re-renders (including the 250ms timer tick), preventing unmount/remount and
+// keeping dropdown open-state alive while the timer runs.
+
+function TypeDropdown({name,type,onUpdate}){
+  const C=useTheme();const{iconBtn}=getStyles(C);
+  const cfg=GROUP_TYPE_CFG[type]||GROUP_TYPE_CFG.album;const dot=cfg.dot;
+  const[open,setOpen]=useState(false);const ref=useRef(null);
+  useEffect(()=>{if(!open)return;const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[open]);
+  return(
+    <div ref={ref} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+      <button onClick={()=>setOpen(v=>!v)} style={{...iconBtn,width:28,height:28,borderRadius:8,fontSize:10,fontWeight:700,color:dot,borderColor:`${dot}55`,background:`${dot}15`}}>{cfg.badge}</button>
+      <SmartDropdown anchorRef={ref} open={open} align="right" minHeight={120}
+        style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:130,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+        {Object.entries(GROUP_TYPE_CFG).map(([t,c])=>{const active=t===type;return(
+          <button key={t} onClick={()=>{onUpdate(name,t);setOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:9,border:"none",background:active?`${c.dot}18`:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:active?c.dot:C.text,textAlign:"left"}}>
+            <span style={{width:8,height:8,borderRadius:"50%",background:c.dot,flexShrink:0}}/>{c.label}
+            {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={c.dot} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </button>
+        );})}
+      </SmartDropdown>
+    </div>
+  );
+}
+
+function StatusDropdown({name,status,dotOnly,onStatusChange}){
+  const C=useTheme();
+  const[open,setOpen]=useState(false);const ref=useRef(null);
+  const cfg=STATUS_CFG[status]||STATUS_CFG.active;const dot=cfg.dot||C.indigo;
+  useEffect(()=>{if(!open)return;const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[open]);
+  return(
+    <div ref={ref} style={{position:"relative",flexShrink:0}}>
+      {dotOnly?(
+        <button onClick={()=>setOpen(o=>!o)} title={cfg.label} style={{width:10,height:10,borderRadius:"50%",background:dot,border:"none",cursor:"pointer",padding:0,flexShrink:0,marginTop:4,display:"block"}}/>
+      ):(
+        <button onClick={()=>setOpen(o=>!o)} style={{fontSize:10.5,fontWeight:700,color:dot,background:`${dot}1a`,border:`1.5px solid ${dot}55`,borderRadius:20,padding:"2px 8px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4}}>{cfg.label}</button>
+      )}
+      <SmartDropdown anchorRef={ref} open={open} align="left" minHeight={260}
+        style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+        {STATUS_ORDER.map(s=>{const sc=STATUS_CFG[s],sd=sc.dot||C.indigo,active=s===status;return(
+          <button key={s} onClick={()=>{onStatusChange(name,s);setOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:9,border:"none",background:active?`${sd}18`:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:active?sd:C.text,textAlign:"left"}}>
+            <span style={{width:8,height:8,borderRadius:"50%",background:sd,flexShrink:0}}/>{sc.label}
+            {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={sd} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </button>
+        );})}
+      </SmartDropdown>
+    </div>
+  );
+}
+
+function ProjectRow({p,insideGroup=false,projectColorMap,projectCounts,audioFileCounts,groupProjects,rouletteHL,rouletteWinner,onOpen,onStatusChange,onSaveTimeline,onArchive,onRemove,onMoveToGroup,onRemoveFromGroup}){
+  const C=useTheme();const{iconBtn}=getStyles(C);
+  const isDoneOrReleased=["done","released"].includes(p.status||"active");
+  const[moveOpen,setMoveOpen]=useState(false);const[confirmDel,setConfirmDel]=useState(false);
+  const moveRef=useRef(null);
+  useEffect(()=>{if(!moveOpen)return;const h=e=>{if(moveRef.current&&!moveRef.current.contains(e.target))setMoveOpen(false);};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[moveOpen]);
+  const[tlOpen,setTlOpen]=useState(false);const[tlS,setTlS]=useState(p.plannedStart||"");const[tlE,setTlE]=useState(p.plannedEnd||"");
+  const tlDropRef=useRef(null);
+  useEffect(()=>{setTlS(p.plannedStart||"");setTlE(p.plannedEnd||"");},[p.plannedStart,p.plannedEnd]);
+  useEffect(()=>{if(!tlOpen)return;const h=e=>{if(tlDropRef.current&&!tlDropRef.current.contains(e.target))setTlOpen(false);};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[tlOpen]);
+  const tlColor=(p.plannedStart||p.plannedEnd)?(projectColorMap[p.name]||C.indigo):C.dim;
+  const tlLabel=(()=>{const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";if(p.plannedStart&&p.plannedEnd&&p.plannedStart!==p.plannedEnd)return`${fmt(p.plannedStart)} → ${fmt(p.plannedEnd)}`;if(p.plannedStart&&p.plannedEnd&&p.plannedStart===p.plannedEnd)return fmt(p.plannedStart);if(p.plannedStart)return fmt(p.plannedStart);if(p.plannedEnd)return`due ${fmt(p.plannedEnd)}`;return null;})();
+  const cnt=projectCounts[p.name]||0;const audioCount=audioFileCounts[p.name]||0;
+  const isHL=rouletteHL===p.name;const isWin=rouletteWinner===p.name;const rouletteActive=isHL||isWin;
+  const rouletteShadow=isWin?`0 0 0 2.5px ${C.green}, 0 0 24px ${C.green}99`:isHL?`0 0 0 2px ${C.indigo}, 0 0 16px ${C.indigo}77`:"none";
+  return(
+    <div onClick={()=>onOpen(p.name)} style={{background:insideGroup?C.bg:C.surf2,borderRadius:insideGroup?10:14,padding:"11px 13px 11px 14px",cursor:"pointer",
+      boxShadow:rouletteShadow,transition:"box-shadow .1s linear, transform .25s cubic-bezier(.34,1.56,.64,1)",
+      ...(isWin?{transform:"scale(1.03)"}:{}),
+      ...(rouletteActive?{position:"relative",zIndex:isWin?2:1}:{})}}>
+      <div style={{display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+          <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+            <div ref={tlDropRef} style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
+              <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlLabel?tlColor:C.dim,fontWeight:tlLabel?500:400,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlLabel?tlColor:C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlLabel?tlColor:C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
+                {tlLabel||"dates"}
+              </button>
+              <RangePicker open={tlOpen} start={tlS} end={tlE}
+                onChange={(s,e)=>{setTlS(s);setTlE(e);if(!s&&!e){onSaveTimeline(p.name,"","");setTlOpen(false);}else if(s&&e){onSaveTimeline(p.name,s,e);setTlOpen(false);}}}
+                onClose={()=>setTlOpen(false)}/>
+            </div>
+            <span style={{color:C.dim}}>·</span>
+            <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
+            {audioCount>0&&<><span style={{color:C.dim}}>·</span>
+              <button onClick={e=>{e.stopPropagation();onOpen(p.name,"versions");}} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.green,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.green} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
+              </button>
+            </>}
+          </div>
+        </div>
+        <div onClick={e=>e.stopPropagation()}>
+          <StatusDropdown name={p.name} status={p.status||"active"} onStatusChange={onStatusChange}/>
+        </div>
+        {(insideGroup||(groupProjects&&groupProjects.length>0))&&(
+          <div ref={moveRef} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+            <button onClick={()=>setMoveOpen(v=>!v)} title={insideGroup?"Move / Remove from group":"Move to group"} style={{...iconBtn,width:28,height:28,borderRadius:8,background:moveOpen?C.accentAlpha:"transparent"}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M3 7h5l2-2h11v14H3V7z" stroke={C.muted} strokeWidth="1.7" strokeLinejoin="round"/><path d="M12 11v4M10 13h4" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round"/></svg>
+            </button>
+            <SmartDropdown anchorRef={moveRef} open={moveOpen} align="right" minHeight={160}
+              style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:160,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
+              {insideGroup&&(<button onClick={()=>{onRemoveFromGroup(p.name);setMoveOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:9,border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.dim,textAlign:"left"}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M5 12l7-7M5 12l7 7" stroke={C.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>Remove from group
+              </button>)}
+              {(groupProjects||[]).filter(g=>g.name!==p.parentGroup).map(g=>{
+                const gc=GROUP_TYPE_CFG[g.type];const gd=gc?.dot||C.indigo;
+                return(<button key={g.name} onClick={()=>{onMoveToGroup(p.name,g.name);setMoveOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",borderRadius:9,border:"none",background:"transparent",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left"}}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:gd,flexShrink:0}}/>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.name}</span>
+                  <span style={{marginLeft:"auto",fontSize:10,color:gd,fontWeight:700}}>{gc?.label}</span>
+                </button>);
+              })}
+            </SmartDropdown>
+          </div>
+        )}
+        {confirmDel?(
+          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+            <button onClick={()=>onRemove(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
+            <button onClick={()=>setConfirmDel(false)} style={{fontSize:11.5,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.lineS}`,borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Cancel</button>
+          </div>
+        ):isDoneOrReleased?(
+          <button onClick={e=>{e.stopPropagation();onArchive(p.name);}} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+          </button>
+        ):(
+          <button onClick={e=>{e.stopPropagation();setConfirmDel(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GroupRow({p,childProjects,projectCounts,onOpen,onStatusChange,onTypeChange,onRemove,onArchive,projectColorMap,audioFileCounts,groupProjects,rouletteHL,rouletteWinner,onSaveTimeline,onMoveToGroup,onRemoveFromGroup}){
+  const C=useTheme();const{iconBtn}=getStyles(C);
+  const cfg=GROUP_TYPE_CFG[p.type]||GROUP_TYPE_CFG.album;const dot=cfg.dot;
+  const[collapsed,setCollapsed]=useState(true);const[confirmDel,setConfirmDel]=useState(false);
+  const isDoneOrReleased=["done","released"].includes(p.status||"active");
+  const totalSessions=childProjects.reduce((s,c)=>s+(projectCounts[c.name]||0),0)+(projectCounts[p.name]||0);
+  return(
+    <div onClick={()=>onOpen(p.name)} style={{background:C.surf2,borderRadius:14,overflow:"visible",cursor:"pointer",border:`1px solid ${dot}55`}}>
+      <div style={{padding:"11px 13px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
+        <button onClick={e=>{e.stopPropagation();setCollapsed(v=>!v);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"flex",alignItems:"center",color:C.faint,flexShrink:0}}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .18s"}}><path d="M6 9l6 6 6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+          <div style={{fontSize:11.5,color:C.dim,marginTop:2}}>{childProjects.length} track{childProjects.length!==1?"s":""}{totalSessions>0&&` · ${totalSessions} session${totalSessions!==1?"s":""}`}</div>
+        </div>
+        <div onClick={e=>e.stopPropagation()}>
+          <StatusDropdown name={p.name} status={p.status||"active"} onStatusChange={onStatusChange}/>
+        </div>
+        <TypeDropdown name={p.name} type={p.type||"album"} onUpdate={onTypeChange}/>
+        {confirmDel?(
+          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+            <button onClick={()=>onRemove(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
+            <button onClick={()=>setConfirmDel(false)} style={{fontSize:11.5,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.lineS}`,borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Cancel</button>
+          </div>
+        ):isDoneOrReleased?(
+          <button onClick={e=>{e.stopPropagation();onArchive(p.name);}} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
+          </button>
+        ):(
+          <button onClick={e=>{e.stopPropagation();setConfirmDel(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
+        )}
+      </div>
+      {!collapsed&&childProjects.length>0&&(
+        <div style={{borderTop:`1px solid ${C.line}`,paddingLeft:16,paddingRight:8,paddingBottom:8,display:"flex",flexDirection:"column",gap:6,marginTop:0,paddingTop:8}}>
+          {childProjects.map(c=><ProjectRow key={c.name} p={c} insideGroup projectColorMap={projectColorMap} projectCounts={projectCounts} audioFileCounts={audioFileCounts} groupProjects={groupProjects} rouletteHL={rouletteHL} rouletteWinner={rouletteWinner} onOpen={onOpen} onStatusChange={onStatusChange} onSaveTimeline={onSaveTimeline} onArchive={onArchive} onRemove={onRemove} onMoveToGroup={onMoveToGroup} onRemoveFromGroup={onRemoveFromGroup}/>)}
+        </div>
+      )}
+      {!collapsed&&childProjects.length===0&&(
+        <div style={{borderTop:`1px solid ${C.line}`,padding:"8px 14px 10px",fontSize:12,color:C.faint,fontStyle:"italic"}}>No tracks yet — move a track here from the list below</div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const today=toDateStr(new Date());
   const yesterday=toDateStr(new Date(Date.now()-86400000));
@@ -2957,7 +3136,7 @@ export default function App() {
       }}catch{}
       try{const g=await storage.get("music_goal");if(g?.value)setGoalHours(JSON.parse(g.value));}catch{}
       try{const m=await storage.get("music_milestones");if(m?.value)setUnlockedMilestones(JSON.parse(m.value));}catch{}
-      try{const t=await storage.get("music_timer");if(t?.value)setTimer(JSON.parse(t.value));}catch{}
+      try{const t=await storage.get("music_timer");if(t?.value){const saved=JSON.parse(t.value);setTimer({phase:saved.phase,target:saved.target,endsAt:saved.endsAt,remaining:saved.remaining});if(saved.project)setTimerProject(saved.project);if(saved.note)setTimerNote(saved.note);}}catch{}
       try{const af=await storage.get("music_audio_files");if(af?.value&&typeof af.value==="object"){setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}}catch{}
       try{const gf=await storage.get("music_global_audio_folder");if(gf?.value)setGlobalAudioFolder(gf.value);}catch{}
       try{const ar=await storage.get("music_archived_projects");if(ar?.value)setArchivedProjects(JSON.parse(ar.value));}catch{}
@@ -3184,7 +3363,7 @@ export default function App() {
   const [prompt]=useState(()=>PROMPTS[Math.floor(Math.random()*PROMPTS.length)]);
   const [tick,setTick]=useState(0);
 
-  useEffect(()=>{if(!loaded)return;storage.set("music_timer",JSON.stringify(timer)).catch(()=>{});},[timer,loaded]);
+  useEffect(()=>{if(!loaded)return;storage.set("music_timer",JSON.stringify({...timer,project:timerProject,note:timerNote})).catch(()=>{});},[timer,timerProject,timerNote,loaded]);// eslint-disable-line
   useEffect(()=>{
     const h=e=>setNowPlaying(e.detail);
     audioEventBus.addEventListener("audiohandoff",h);
@@ -3442,146 +3621,7 @@ export default function App() {
 
   const {card,eyebrow,iconBtn}=getStyles(C);
 
-  const TypeDropdown=({name,type,onUpdate})=>{
-    const cfg=GROUP_TYPE_CFG[type]||GROUP_TYPE_CFG.album;
-    const dot=cfg.dot;
-    const [open,setOpen]=useState(false);
-    const ref=useRef(null);
-    useEffect(()=>{
-      if(!open)return;
-      const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
-      document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
-    },[open]);
-    return(
-      <div ref={ref} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
-        <button onClick={()=>setOpen(v=>!v)} style={{...iconBtn,width:28,height:28,borderRadius:8,fontSize:10,fontWeight:700,color:dot,borderColor:`${dot}55`,background:`${dot}15`}}>
-          {cfg.badge}
-        </button>
-        <SmartDropdown anchorRef={ref} open={open} align="right" minHeight={120}
-          style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:130,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-          {Object.entries(GROUP_TYPE_CFG).map(([t,c])=>{
-            const active=t===type;
-            return(
-              <button key={t} onClick={()=>{onUpdate(name,t);setOpen(false);}} style={{
-                display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                borderRadius:9,border:"none",background:active?`${c.dot}18`:"transparent",
-                cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
-                color:active?c.dot:C.text,textAlign:"left",
-              }}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:c.dot,flexShrink:0}}/>
-                {c.label}
-                {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={c.dot} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-              </button>
-            );
-          })}
-        </SmartDropdown>
-      </div>
-    );
-  };
-
-  const StatusDropdown=({name,status,dotOnly})=>{
-    const [open,setOpen]=useState(false);
-    const ref=useRef(null);
-    const cfg=STATUS_CFG[status]||STATUS_CFG.active;
-    const dot=cfg.dot||C.indigo;
-    useEffect(()=>{
-      if(!open)return;
-      const handler=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
-      document.addEventListener("mousedown",handler);
-      return()=>document.removeEventListener("mousedown",handler);
-    },[open]);
-    return(
-      <div ref={ref} style={{position:"relative",flexShrink:0}}>
-        {dotOnly?(
-          <button onClick={()=>setOpen(o=>!o)} title={cfg.label} style={{
-            width:10,height:10,borderRadius:"50%",background:dot,border:"none",
-            cursor:"pointer",padding:0,flexShrink:0,marginTop:4,display:"block",
-          }}/>
-        ):(
-        <button onClick={()=>setOpen(o=>!o)} style={{
-          fontSize:10.5,fontWeight:700,color:dot,background:`${dot}1a`,
-          border:`1.5px solid ${dot}55`,borderRadius:20,padding:"2px 8px",
-          cursor:"pointer",whiteSpace:"nowrap",fontFamily:"var(--font-sans)",lineHeight:1.4,
-        }}>{cfg.label}</button>
-        )}
-        <SmartDropdown anchorRef={ref} open={open} align="left" minHeight={260}
-          style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:140,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-          {STATUS_ORDER.map(s=>{
-            const sc=STATUS_CFG[s],sd=sc.dot||C.indigo,active=s===status;
-            return(
-              <button key={s} onClick={()=>{updateProjectStatus(name,s);setOpen(false);}} style={{
-                display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                borderRadius:9,border:"none",background:active?`${sd}18`:"transparent",
-                cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,
-                color:active?sd:C.text,textAlign:"left",
-              }}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:sd,flexShrink:0}}/>
-                {sc.label}
-                {active&&<svg style={{marginLeft:"auto"}} width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={sd} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-              </button>
-            );
-          })}
-        </SmartDropdown>
-      </div>
-    );
-  };
-
-  const GroupRow=({p})=>{
-    const cfg=GROUP_TYPE_CFG[p.type]||GROUP_TYPE_CFG.album;
-    const dot=cfg.dot;
-    const [collapsed,setCollapsed]=useState(true);
-    const [confirmDel,setConfirmDel]=useState(false);
-    const children=childrenOf(p.name);
-    const isDoneOrReleased=["done","released"].includes(p.status||"active");
-    const totalSessions=children.reduce((s,c)=>s+(projectCounts[c.name]||0),0)+(projectCounts[p.name]||0);
-    return(
-      <div onClick={()=>openProject(p.name)} style={{background:C.surf2,borderRadius:14,overflow:"visible",cursor:"pointer",border:`1px solid ${dot}55`}}>
-        {/* Group header */}
-        <div style={{padding:"11px 13px 11px 14px",display:"flex",gap:10,alignItems:"center"}}>
-          <button onClick={e=>{e.stopPropagation();setCollapsed(v=>!v);}} style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"flex",alignItems:"center",color:C.faint,flexShrink:0}}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .18s"}}>
-              <path d="M6 9l6 6 6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-            <div style={{fontSize:11.5,color:C.dim,marginTop:2}}>
-              {children.length} track{children.length!==1?"s":""}{totalSessions>0&&` · ${totalSessions} session${totalSessions!==1?"s":""}`}
-            </div>
-          </div>
-          {/* Status left of type badge */}
-          <div onClick={e=>e.stopPropagation()}>
-            <StatusDropdown name={p.name} status={p.status||"active"}/>
-          </div>
-          {/* Type badge — square button with dropdown */}
-          <TypeDropdown name={p.name} type={p.type||"album"} onUpdate={updateProjectType}/>
-          {confirmDel?(
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>removeProject(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
-              <button onClick={()=>setConfirmDel(false)} style={{fontSize:11.5,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.lineS}`,borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Cancel</button>
-            </div>
-          ):isDoneOrReleased?(
-            <button onClick={e=>{e.stopPropagation();archiveProject(p.name);}} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
-            </button>
-          ):(
-            <button onClick={e=>{e.stopPropagation();setConfirmDel(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
-          )}
-        </div>
-        {/* Children */}
-        {!collapsed&&children.length>0&&(
-          <div style={{borderTop:`1px solid ${C.line}`,paddingLeft:16,paddingRight:8,paddingBottom:8,display:"flex",flexDirection:"column",gap:6,marginTop:0,paddingTop:8}}>
-            {children.map(c=><ProjectRow key={c.name} p={c} insideGroup/>)}
-          </div>
-        )}
-        {!collapsed&&children.length===0&&(
-          <div style={{borderTop:`1px solid ${C.line}`,padding:"8px 14px 10px",fontSize:12,color:C.faint,fontStyle:"italic"}}>
-            No tracks yet — move a track here from the list below
-          </div>
-        )}
-      </div>
-    );
-  };
+  // TypeDropdown, StatusDropdown, ProjectRow, GroupRow are now module-level (stable component types)
 
   const finishRoulette=name=>{
     updateProjectStatus(name,"active");
@@ -3621,134 +3661,6 @@ export default function App() {
     tick();
   };
 
-  const ProjectRow=({p,insideGroup=false})=>{
-    const isDoneOrReleased=["done","released"].includes(p.status||"active");
-    const [moveOpen,setMoveOpen]=useState(false);
-    const [confirmDel,setConfirmDel]=useState(false);
-    const moveRef=useRef(null);
-    useEffect(()=>{
-      if(!moveOpen)return;
-      const h=e=>{if(moveRef.current&&!moveRef.current.contains(e.target))setMoveOpen(false);};
-      document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
-    },[moveOpen]);
-    const [tlOpen,setTlOpen]=useState(false);
-    const [tlS,setTlS]=useState(p.plannedStart||"");
-    const [tlE,setTlE]=useState(p.plannedEnd||"");
-    const tlDropRef=useRef(null);
-    useEffect(()=>{setTlS(p.plannedStart||"");setTlE(p.plannedEnd||"");},[p.plannedStart,p.plannedEnd]);
-    useEffect(()=>{
-      if(!tlOpen)return;
-      const h=e=>{if(tlDropRef.current&&!tlDropRef.current.contains(e.target))setTlOpen(false);};
-      document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
-    },[tlOpen]);
-    const tlColor=(p.plannedStart||p.plannedEnd)?(projectColorMap[p.name]||C.indigo):C.dim;
-    const tlLabel=(()=>{
-      const fmt=ds=>ds?new Date(ds+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"}):"";
-      if(p.plannedStart&&p.plannedEnd&&p.plannedStart!==p.plannedEnd)return`${fmt(p.plannedStart)} → ${fmt(p.plannedEnd)}`;
-      if(p.plannedStart&&p.plannedEnd&&p.plannedStart===p.plannedEnd)return fmt(p.plannedStart);
-      if(p.plannedStart)return fmt(p.plannedStart);
-      if(p.plannedEnd)return`due ${fmt(p.plannedEnd)}`;
-      return null;
-    })();
-    const saveTl=()=>{saveTimeline(p.name,tlS,tlE);setTlOpen(false);};
-    const statusCfg=STATUS_CFG[p.status||"active"]||STATUS_CFG.active;
-    const statusDot=statusCfg.dot||C.indigo;
-    const cnt=projectCounts[p.name]||0;
-    const rel=fmtRelativeDate(lastSessionDateOf(p.name));
-    const audioCount=audioFileCounts[p.name]||0;
-    const isHL=rouletteHL===p.name;
-    const isWin=rouletteWinner===p.name;
-    const rouletteActive=isHL||isWin;
-    const rouletteShadow=isWin
-      ?`0 0 0 2.5px ${C.green}, 0 0 24px ${C.green}99`
-      :isHL?`0 0 0 2px ${C.indigo}, 0 0 16px ${C.indigo}77`:"none";
-    return(
-    <div onClick={()=>openProject(p.name)} style={{background:insideGroup?C.bg:C.surf2,borderRadius:insideGroup?10:14,padding:"11px 13px 11px 14px",cursor:"pointer",
-      boxShadow:rouletteShadow,transition:"box-shadow .1s linear, transform .25s cubic-bezier(.34,1.56,.64,1)",
-      // only create a stacking context during the roulette spin so status dropdowns aren't clipped otherwise
-      ...(isWin?{transform:"scale(1.03)"}:{}),
-      ...(rouletteActive?{position:"relative",zIndex:isWin?2:1}:{})}}>
-      <div style={{display:"flex",gap:10,alignItems:"center"}}>
-        {/* Content */}
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-          <div style={{fontSize:11.5,color:C.dim,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-            <div ref={tlDropRef} style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>setTlOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:tlLabel?tlColor:C.dim,fontWeight:tlLabel?500:400,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke={tlLabel?tlColor:C.dim} strokeWidth="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke={tlLabel?tlColor:C.dim} strokeWidth="2" strokeLinecap="round"/></svg>
-                {tlLabel||"dates"}
-              </button>
-              <RangePicker open={tlOpen} start={tlS} end={tlE}
-                onChange={(s,e)=>{setTlS(s);setTlE(e);if(!s&&!e){saveTimeline(p.name,"","");setTlOpen(false);}else if(s&&e){saveTimeline(p.name,s,e);setTlOpen(false);}}}
-                onClose={()=>setTlOpen(false)}/>
-            </div>
-            <span style={{color:C.dim}}>·</span>
-            <span>{cnt?`${cnt} session${cnt>1?"s":""}`:  "no sessions"}</span>
-            {audioCount>0&&<><span style={{color:C.dim}}>·</span>
-              <button onClick={e=>{e.stopPropagation();openProject(p.name,"versions");}} style={{display:"flex",alignItems:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:0,color:C.green,fontSize:11.5,fontFamily:"var(--font-sans)"}}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M2 13h4l2-9 4 18 3-12 2 5 3-2h2" stroke={C.green} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>{audioCount}
-              </button>
-            </>}
-          </div>
-        </div>
-        {/* Status pill + move + action */}
-        <div onClick={e=>e.stopPropagation()}>
-          <StatusDropdown name={p.name} status={p.status||"active"}/>
-        </div>
-        {/* Move to group / remove from group */}
-        {(insideGroup||groupProjects.length>0)&&(
-          <div ref={moveRef} style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
-            <button onClick={()=>setMoveOpen(v=>!v)} title={insideGroup?"Move / Remove from group":"Move to group"} style={{...iconBtn,width:28,height:28,borderRadius:8,background:moveOpen?C.accentAlpha:"transparent"}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <path d="M3 7h5l2-2h11v14H3V7z" stroke={C.muted} strokeWidth="1.7" strokeLinejoin="round"/>
-                <path d="M12 11v4M10 13h4" stroke={C.muted} strokeWidth="1.7" strokeLinecap="round"/>
-              </svg>
-            </button>
-            <SmartDropdown anchorRef={moveRef} open={moveOpen} align="right" minHeight={160}
-              style={{background:C.surf,border:`1px solid ${C.lineS}`,borderRadius:14,padding:5,minWidth:160,boxShadow:`0 8px 24px -6px rgba(0,0,0,0.35)`}}>
-                {insideGroup&&(
-                  <button onClick={()=>{removeFromGroup(p.name);setMoveOpen(false);}} style={{
-                    display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                    borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
-                    fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.dim,textAlign:"left",
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M5 12l7-7M5 12l7 7" stroke={C.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    Remove from group
-                  </button>
-                )}
-                {groupProjects.filter(g=>g.name!==p.parentGroup).map(g=>{
-                  const gc=GROUP_TYPE_CFG[g.type];const gd=gc?.dot||C.indigo;
-                  return(
-                    <button key={g.name} onClick={()=>{moveToGroup(p.name,g.name);setMoveOpen(false);}} style={{
-                      display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 12px",
-                      borderRadius:9,border:"none",background:"transparent",cursor:"pointer",
-                      fontFamily:"var(--font-sans)",fontSize:13,fontWeight:600,color:C.text,textAlign:"left",
-                    }}>
-                      <span style={{width:8,height:8,borderRadius:"50%",background:gd,flexShrink:0}}/>
-                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.name}</span>
-                      <span style={{marginLeft:"auto",fontSize:10,color:gd,fontWeight:700}}>{gc?.label}</span>
-                    </button>
-                  );
-                })}
-            </SmartDropdown>
-          </div>
-        )}
-        {confirmDel?(
-          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
-            <button onClick={()=>removeProject(p.name)} style={{fontSize:11.5,fontWeight:700,color:"#fff",background:C.flame,border:"none",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Delete</button>
-            <button onClick={()=>setConfirmDel(false)} style={{fontSize:11.5,fontWeight:600,color:C.dim,background:C.surf2,border:`1px solid ${C.lineS}`,borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"var(--font-sans)"}}>Cancel</button>
-          </div>
-        ):isDoneOrReleased?(
-          <button onClick={e=>{e.stopPropagation();archiveProject(p.name);}} title="Archive" style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="5" rx="1.5" stroke={C.faint} strokeWidth="1.7"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/><path d="M10 12h4" stroke={C.faint} strokeWidth="1.7" strokeLinecap="round"/></svg>
-          </button>
-        ):(
-          <button onClick={e=>{e.stopPropagation();setConfirmDel(true);}} style={{...iconBtn,width:28,height:28,borderRadius:8,flexShrink:0}}>{Icon.trash()}</button>
-        )}
-      </div>
-      {/* Inline timeline editor — full width below the main row */}
-    </div>
-  );};
 
   // ── Today section (reused in idle card + timer card) ─────────────────
   const todaySection=(()=>{
@@ -4276,10 +4188,10 @@ export default function App() {
         )}
         {topLevelActive.length>0&&(
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {topLevelActive.map(p=>GROUP_TYPE_CFG[p.type]
-              ?<GroupRow key={p.name} p={p}/>
-              :<ProjectRow key={p.name} p={p}/>
-            )}
+            {topLevelActive.map(p=>{const sharedRowProps={projectColorMap,projectCounts,audioFileCounts,groupProjects,rouletteHL,rouletteWinner,onOpen:openProject,onStatusChange:updateProjectStatus,onSaveTimeline:saveTimeline,onArchive:archiveProject,onRemove:removeProject,onMoveToGroup:moveToGroup,onRemoveFromGroup:removeFromGroup};return GROUP_TYPE_CFG[p.type]
+              ?<GroupRow key={p.name} p={p} childProjects={childrenOf(p.name)} projectCounts={projectCounts} onOpen={openProject} onStatusChange={updateProjectStatus} onTypeChange={updateProjectType} onRemove={removeProject} onArchive={archiveProject} projectColorMap={projectColorMap} audioFileCounts={audioFileCounts} groupProjects={groupProjects} rouletteHL={rouletteHL} rouletteWinner={rouletteWinner} onSaveTimeline={saveTimeline} onMoveToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup}/>
+              :<ProjectRow key={p.name} p={p} {...sharedRowProps}/>;
+            })}
           </div>
         )}
         {/* Ideas / Backlog section */}
@@ -4304,7 +4216,7 @@ export default function App() {
                 </button>
               )}
             </div>
-            {showIdea&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{ideaProjects.map(p=><ProjectRow key={p.name} p={p}/>)}</div>}
+            {showIdea&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{ideaProjects.map(p=><ProjectRow key={p.name} p={p} projectColorMap={projectColorMap} projectCounts={projectCounts} audioFileCounts={audioFileCounts} groupProjects={groupProjects} rouletteHL={rouletteHL} rouletteWinner={rouletteWinner} onOpen={openProject} onStatusChange={updateProjectStatus} onSaveTimeline={saveTimeline} onArchive={archiveProject} onRemove={removeProject} onMoveToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup}/>)}</div>}
           </div>
         )}
 
@@ -4315,7 +4227,7 @@ export default function App() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:showDone?"rotate(90deg)":"none",transition:"transform .2s"}}><path d="M9 6l6 6-6 6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               <span style={{fontSize:12,fontWeight:600,color:C.faint}}>Done ({doneProjects.length})</span>
             </button>
-            {showDone&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{doneProjects.map(p=><ProjectRow key={p.name} p={p}/>)}</div>}
+            {showDone&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{doneProjects.map(p=><ProjectRow key={p.name} p={p} projectColorMap={projectColorMap} projectCounts={projectCounts} audioFileCounts={audioFileCounts} groupProjects={groupProjects} rouletteHL={rouletteHL} rouletteWinner={rouletteWinner} onOpen={openProject} onStatusChange={updateProjectStatus} onSaveTimeline={saveTimeline} onArchive={archiveProject} onRemove={removeProject} onMoveToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup}/>)}</div>}
           </div>
         )}
 
@@ -4326,7 +4238,7 @@ export default function App() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{transform:showReleased?"rotate(90deg)":"none",transition:"transform .2s"}}><path d="M9 6l6 6-6 6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               <span style={{fontSize:12,fontWeight:600,color:C.faint}}>Released / Archive ({releasedProjects.length})</span>
             </button>
-            {showReleased&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{releasedProjects.map(p=><ProjectRow key={p.name} p={p}/>)}</div>}
+            {showReleased&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{releasedProjects.map(p=><ProjectRow key={p.name} p={p} projectColorMap={projectColorMap} projectCounts={projectCounts} audioFileCounts={audioFileCounts} groupProjects={groupProjects} rouletteHL={rouletteHL} rouletteWinner={rouletteWinner} onOpen={openProject} onStatusChange={updateProjectStatus} onSaveTimeline={saveTimeline} onArchive={archiveProject} onRemove={removeProject} onMoveToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup}/>)}</div>}
           </div>
         )}
       </div>
