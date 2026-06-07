@@ -437,7 +437,48 @@ app.get("/api/recordings/folder", (req, res) => {
 
 app.get("/api/recordings", (req, res) => {
   const data = readData();
-  res.json({ recordings: data.music_recordings || [] });
+  const recs = data.music_recordings || [];
+  const audioExts = new Set([".m4a", ".webm", ".ogg", ".wav", ".mp3"]);
+
+  // Build set of all currently-tracked paths so we don't steal a path
+  // that belongs to another entry.
+  const trackedPaths = new Set(recs.map(r => r.absolutePath || join(RECORDINGS_DIR, r.filename)).filter(Boolean));
+
+  let dirty = false;
+  for (const rec of recs) {
+    const currentPath = rec.absolutePath || join(RECORDINGS_DIR, rec.filename);
+    if (existsSync(currentPath)) continue; // still alive, nothing to do
+
+    // File is gone — look for a renamed file in the same directory
+    const dir = dirname(currentPath);
+    const ext = extname(currentPath).toLowerCase();
+    let candidates;
+    try {
+      candidates = readdirSync(dir)
+        .filter(f => extname(f).toLowerCase() === ext && audioExts.has(extname(f).toLowerCase()))
+        .map(f => join(dir, f))
+        .filter(f => !trackedPaths.has(f));
+    } catch { continue; }
+
+    if (candidates.length === 1) {
+      // Exactly one untracked file with same extension in same dir → rename detected
+      const newPath = candidates[0];
+      trackedPaths.delete(currentPath);
+      trackedPaths.add(newPath);
+      rec.absolutePath = newPath;
+      rec.filename     = basename(newPath);
+      rec.name         = basename(newPath, ext);
+      dirty = true;
+    }
+  }
+
+  if (dirty) {
+    data.music_recordings = recs;
+    writeData(data);
+    broadcast("music_recordings");
+  }
+
+  res.json({ recordings: recs });
 });
 
 app.post("/api/recordings/upload", recordingUpload.single("file"), async (req, res) => {
