@@ -2698,11 +2698,8 @@ function WeeklyReviewSheet({sessions,questData,projects,weekStart,prevWeekStart,
   // XP earned this week from quest history
   const qd=questData||{};
   const dailyXp=(qd.completedDailyHistory||[]).filter(h=>h.date>=weekStart&&h.date<=toDateStr(wEnd)).length;
-  const thisWeekStr=getISOWeek(weekStart);
-  const weeklyFromHistory=(qd.completedWeeklyHistory||[]).filter(h=>(h.weekStr||"")===thisWeekStr).length;
-  // Also count the current week's active quest if completed (not yet rolled into history)
-  const weeklyFromCurrent=(qd.currentWeekly?.done&&(qd.weeklyDate||"")===thisWeekStr)?1:0;
-  const weeklyXp=(weeklyFromHistory+weeklyFromCurrent)*10;
+  // currentWeekly.done = completed this week (not yet rolled to history)
+  const weeklyXp=((qd.currentWeekly?.done?1:0))*10;
   const totalXp=dailyXp+weeklyXp;
 
   // Projects with no session in last 7 days
