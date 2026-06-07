@@ -278,10 +278,35 @@ app.post("/api/audio/:project/scan", async (req, res) => {
     if (stripped && stripped !== f) return matchesBase(base, stripped);
     return false;
   };
-  const toAdd = walkDir(folderPath)
+  const allFound = walkDir(folderPath)
     .filter(f => audioExts.includes(extname(f).toLowerCase()))
-    .filter(f => nameMatchesProject(f, nameFilter))
-    .filter(f => !existingPaths.has(f));
+    .filter(f => nameMatchesProject(f, nameFilter));
+
+  // Reconcile stale linked entries: if a known file no longer exists at its
+  // linkedPath but a newly found file lives in the same directory, treat it as
+  // a rename rather than adding a duplicate.
+  const reconciledPaths = new Set();
+  for (const entry of existing) {
+    if (!entry.linkedPath) continue;
+    if (existsSync(entry.linkedPath)) continue; // still alive — no action needed
+    const staleDir = dirname(entry.linkedPath);
+    const staleExt = extname(entry.linkedPath).toLowerCase();
+    const candidates = allFound.filter(f =>
+      dirname(f) === staleDir &&
+      extname(f).toLowerCase() === staleExt &&
+      !existingPaths.has(f) &&
+      !reconciledPaths.has(f)
+    );
+    if (candidates.length === 1) {
+      // Exactly one new file in the same dir with the same ext → it's a rename
+      const newPath = candidates[0];
+      reconciledPaths.add(newPath);
+      entry.linkedPath = newPath;
+      entry.name       = basename(newPath, extname(newPath));
+    }
+  }
+
+  const toAdd = allFound.filter(f => !existingPaths.has(f) && !reconciledPaths.has(f));
 
   const added = [];
   for (const filePath of toAdd) {
@@ -320,7 +345,32 @@ app.patch("/api/audio/:project/:id", (req, res) => {
   if (!files) return res.status(404).json({ error: "Project not found" });
   const idx = files.findIndex(f => f.id === id);
   if (idx === -1) return res.status(404).json({ error: "File not found" });
-  if (name  !== undefined) files[idx] = { ...files[idx], name };
+
+  if (name !== undefined) {
+    const file = files[idx];
+    // Determine which path to rename on disk
+    const oldDiskPath = file.linkedPath || (file.filename ? join(AUDIO_DIR, file.filename) : null);
+    let updated = { ...file, name };
+    if (oldDiskPath && existsSync(oldDiskPath)) {
+      const dir     = dirname(oldDiskPath);
+      const ext     = extname(oldDiskPath).toLowerCase();
+      const newBase = name.replace(/[^\w\s.()\-]/g, "_").trim() || "audio";
+      let   newFile = `${newBase}${ext}`;
+      let   n       = 1;
+      while (existsSync(join(dir, newFile)) && join(dir, newFile) !== oldDiskPath) {
+        newFile = `${newBase}_${n++}${ext}`;
+      }
+      const newPath = join(dir, newFile);
+      try {
+        renameSync(oldDiskPath, newPath);
+        if (file.linkedPath) updated.linkedPath = newPath;
+        else                  updated.filename   = newFile;
+      } catch (e) {
+        console.error("rename failed:", e.message);
+      }
+    }
+    files[idx] = updated;
+  }
   if (isNew !== undefined) files[idx] = { ...files[idx], isNew };
   writeData(data);
   res.json({ ok: true });
