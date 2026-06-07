@@ -2698,11 +2698,11 @@ function WeeklyReviewSheet({sessions,questData,projects,weekStart,prevWeekStart,
   // XP earned this week from quest history
   const qd=questData||{};
   const dailyXp=(qd.completedDailyHistory||[]).filter(h=>h.date>=weekStart&&h.date<=toDateStr(wEnd)).length;
-  const weeklyXp=(qd.completedWeeklyHistory||[]).filter(h=>{
-    // weekStr is like "2024-W12" — compare to weekStart
-    const ws=h.weekStr||"";
-    return ws===getISOWeek(weekStart);
-  }).length*10;
+  const thisWeekStr=getISOWeek(weekStart);
+  const weeklyFromHistory=(qd.completedWeeklyHistory||[]).filter(h=>(h.weekStr||"")===thisWeekStr).length;
+  // Also count the current week's active quest if completed (not yet rolled into history)
+  const weeklyFromCurrent=(qd.currentWeekly?.done&&(qd.weeklyDate||"")===thisWeekStr)?1:0;
+  const weeklyXp=(weeklyFromHistory+weeklyFromCurrent)*10;
   const totalXp=dailyXp+weeklyXp;
 
   // Projects with no session in last 7 days
@@ -4680,7 +4680,7 @@ export default function App() {
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
       {weeklyReviewOpen&&<WeeklyReviewSheet sessions={sessions} questData={questData} projects={projects}
         weekStart={getWeekStart(0)} prevWeekStart={getWeekStart(1)}
-        onClose={()=>dismissWeeklyReview(getISOWeek(today))}/>}
+        onClose={()=>setWeeklyReviewOpen(false)}/>}
       {recorderOpen&&<RecorderSheet recordings={recordings} mixtapes={mixtapes} projects={projects} onClose={()=>setRecorderOpen(false)} onRecordingsChange={async()=>{try{const r=await fetch("/api/recordings").then(x=>x.json());setRecordings(r.recordings||[]);}catch{}}} onMixtapesChange={setMixtapes}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived} questsEnabled={questData?.enabled!==false} onQuestsToggle={toggleQuests}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
@@ -4698,19 +4698,6 @@ export default function App() {
           <div style={{fontSize:13,color:C.faint,marginTop:4}}>Keep the habit. One session at a time.</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          {(()=>{
-            const dow=(parseDate(today).getDay()+6)%7; // 0=Mon…6=Sun
-            if(dow!==6)return null; // Sunday only
-            const reviewWeekStr=getISOWeek(today);
-            if(weeklyReviewDismissed===reviewWeekStr)return null;
-            return(
-              <button className="weekly-review-bar"
-                onClick={()=>setWeeklyReviewOpen(true)}
-                style={{"--glow-color":C.accentGlow,display:"flex",alignItems:"center",gap:7,padding:"7px 14px",borderRadius:12,border:`1px solid ${C.accentBorder}`,background:C.accentAlpha,cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:12.5,fontWeight:700,color:C.indigo,whiteSpace:"nowrap"}}>
-                📋 Weekly Review Available
-              </button>
-            );
-          })()}
           <button onClick={()=>setReviewOpen(true)} title="Analytics" style={iconBtn}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2" y="13" width="4" height="9" rx="1.5" fill={C.faint}/><rect x="10" y="7" width="4" height="15" rx="1.5" fill={C.faint}/><rect x="18" y="2" width="4" height="20" rx="1.5" fill={C.faint}/></svg>
           </button>
@@ -4793,6 +4780,25 @@ export default function App() {
               </div>
             )}
           </>
+        );
+      })()}
+
+      {/* Weekly review card — Sunday only, not dismissed */}
+      {(()=>{
+        const dow=(parseDate(today).getDay()+6)%7;
+        if(dow!==6)return null;
+        if(weeklyReviewDismissed===getISOWeek(today))return null;
+        return(
+          <button className="weekly-review-bar"
+            onClick={()=>setWeeklyReviewOpen(true)}
+            style={{"--glow-color":C.accentGlow,width:"100%",display:"flex",alignItems:"center",gap:12,padding:"13px 18px",borderRadius:16,border:`1px solid ${C.accentBorder}`,background:C.accentAlpha,cursor:"pointer",fontFamily:"var(--font-sans)",boxSizing:"border-box",marginBottom:12,textAlign:"left"}}>
+            <span style={{fontSize:22,flexShrink:0}}>📋</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,color:C.indigo}}>Weekly Review Available</div>
+              <div style={{fontSize:12,color:C.faint,marginTop:1}}>See how your week went</div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.indigo} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
         );
       })()}
 
