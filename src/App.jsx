@@ -2456,7 +2456,7 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
         {!openMixtapeId&&(
           <div style={{display:"flex",gap:2,background:C.surf2,borderRadius:10,padding:2,marginBottom:18}}>
             {TABS_R.map(([t,l])=>(
-              <button key={t} onClick={()=>setTab(t)} style={{flex:1,fontSize:11.5,fontWeight:600,padding:"6px 4px",borderRadius:8,border:"none",cursor:"pointer",
+              <button key={t} onClick={()=>{setTab(t);if(t==="tapes")onRecordingsChange();}} style={{flex:1,fontSize:11.5,fontWeight:600,padding:"6px 4px",borderRadius:8,border:"none",cursor:"pointer",
                 background:tab===t?C.surf:"transparent",color:tab===t?C.text:C.faint,whiteSpace:"nowrap"}}>{l}</button>
             ))}
           </div>
