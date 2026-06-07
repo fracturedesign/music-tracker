@@ -2682,6 +2682,141 @@ function RecorderSheet({recordings,mixtapes,projects,onClose,onRecordingsChange,
   );
 }
 
+/* ─── weekly review sheet ─── */
+function WeeklyReviewSheet({sessions,questData,projects,weekStart,prevWeekStart,onClose}) {
+  const C=useTheme(); const {iconBtn}=getStyles(C);
+  const fmtH=m=>{const h=Math.floor(m/60),mn=m%60;return h?`${h}h${mn?` ${mn}m`:""}`:mn?`${mn}m`:"0m";};
+  const fmtDate2=ds=>{const d=parseDate(ds);return`${DAYS_FULL[(d.getDay()+6)%7].slice(0,3)} ${monthNames[d.getMonth()].slice(0,3)} ${d.getDate()}`;};
+
+  // This week's sessions (Mon–Sun)
+  const wStart=parseDate(weekStart);
+  const wEnd=new Date(wStart);wEnd.setDate(wStart.getDate()+6);
+  const weekSessions=sessions.filter(s=>{const d=parseDate(s.date);return d>=wStart&&d<=wEnd;});
+  const weekMins=weekSessions.reduce((a,s)=>a+s.duration,0);
+  const weekDays=[...new Set(weekSessions.map(s=>s.date))].length;
+
+  // XP earned this week from quest history
+  const qd=questData||{};
+  const dailyXp=(qd.completedDailyHistory||[]).filter(h=>h.date>=weekStart&&h.date<=toDateStr(wEnd)).length;
+  const weeklyXp=(qd.completedWeeklyHistory||[]).filter(h=>{
+    // weekStr is like "2024-W12" — compare to weekStart
+    const ws=h.weekStr||"";
+    return ws===getISOWeek(weekStart);
+  }).length*10;
+  const totalXp=dailyXp+weeklyXp;
+
+  // Projects with no session in last 7 days
+  const cutoff=weekStart;
+  const inactive=projects.filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active")).filter(p=>{
+    const last=sessions.filter(s=>s.project===p.name).reduce((best,s)=>s.date>best?s.date:best,"");
+    return !last||last<cutoff;
+  });
+
+  // Per-project hours this week
+  const byProject={};
+  weekSessions.forEach(s=>{if(s.project)byProject[s.project]=(byProject[s.project]||0)+s.duration;});
+  const topProjects=Object.entries(byProject).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  const prevWStart=parseDate(prevWeekStart);
+  const prevWEnd=new Date(prevWStart);prevWEnd.setDate(prevWStart.getDate()+6);
+  const prevMins=sessions.filter(s=>{const d=parseDate(s.date);return d>=prevWStart&&d<=prevWEnd;}).reduce((a,s)=>a+s.duration,0);
+  const diff=weekMins-prevMins;
+
+  return(
+    <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="sheet" onClick={e=>e.stopPropagation()} style={{maxHeight:"85vh",overflowY:"auto"}}>
+        <div className="grab"/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <div>
+            <div style={{fontSize:19,fontWeight:700,color:C.text}}>Weekly Review</div>
+            <div style={{fontSize:12,color:C.faint,marginTop:2}}>{fmtDate2(weekStart)} – {fmtDate2(toDateStr(wEnd))}</div>
+          </div>
+          <button onClick={onClose} style={iconBtn}>{Icon.close()}</button>
+        </div>
+
+        {/* Big stats row */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
+          {[
+            [weekSessions.length,"sessions",null],
+            [fmtH(weekMins),"logged",prevMins>0?`${diff>=0?"+":""}${fmtH(Math.abs(diff))} vs last week`:null],
+            [weekDays,"days active",null],
+          ].map(([v,label,sub])=>(
+            <div key={label} style={{background:C.surf2,borderRadius:14,padding:"14px 12px",textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:700,color:C.text,letterSpacing:"-0.01em"}}>{v}</div>
+              <div style={{fontSize:11,color:C.faint,marginTop:2}}>{label}</div>
+              {sub&&<div style={{fontSize:10,color:diff>=0?C.green:C.flame,fontWeight:600,marginTop:3}}>{sub}</div>}
+            </div>
+          ))}
+        </div>
+
+        {/* XP earned */}
+        {totalXp>0&&(
+          <div style={{background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:14,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:24}}>⭐</span>
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:C.text}}>+{totalXp} XP earned</div>
+              <div style={{fontSize:12,color:C.faint,marginTop:1}}>
+                {dailyXp>0&&`${dailyXp} daily quest${dailyXp!==1?"s":""}`}
+                {dailyXp>0&&weeklyXp>0&&" · "}
+                {weeklyXp>0&&"weekly quest complete"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Top projects */}
+        {topProjects.length>0&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8}}>Time by project</div>
+            {topProjects.map(([name,mins])=>{
+              const pct=weekMins>0?mins/weekMins:0;
+              const col=projects.find(p=>p.name===name)?.color||C.indigo;
+              return(
+                <div key={name} style={{marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:13,fontWeight:600,color:C.text}}>{name}</span>
+                    <span style={{fontSize:12,color:C.muted}}>{fmtH(mins)}</span>
+                  </div>
+                  <div style={{height:5,borderRadius:999,background:C.surf2,overflow:"hidden"}}>
+                    <div style={{height:"100%",borderRadius:999,background:col,width:`${pct*100}%`,transition:"width .5s ease"}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Inactive projects */}
+        {inactive.length>0&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:8}}>No activity this week</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {inactive.map(p=>(
+                <span key={p.name} style={{fontSize:12,fontWeight:600,color:C.muted,background:C.surf2,borderRadius:8,padding:"4px 10px"}}>
+                  {p.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {weekSessions.length===0&&(
+          <div style={{textAlign:"center",padding:"24px 0",color:C.faint}}>
+            <div style={{fontSize:32,marginBottom:8}}>😴</div>
+            <div style={{fontSize:14,fontWeight:600,color:C.muted}}>No sessions logged this week</div>
+            <div style={{fontSize:12,marginTop:4}}>That's ok — new week starts now.</div>
+          </div>
+        )}
+
+        <button onClick={onClose}
+          style={{width:"100%",padding:"13px",borderRadius:14,border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:15,fontWeight:700,color:"#fff",background:C.accentGrad,marginTop:4}}>
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── settings sheet ─── */
 function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived,questsEnabled,onQuestsToggle}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
@@ -3792,6 +3927,8 @@ export default function App() {
   const [mixtapes,setMixtapes]=useState([]);
   const [questData,setQuestData]=useState(null);
   const [questHistoryOpen,setQuestHistoryOpen]=useState(false);
+  const [weeklyReviewOpen,setWeeklyReviewOpen]=useState(false);
+  const [weeklyReviewDismissed,setWeeklyReviewDismissed]=useState("");
   const [dateNonce,setDateNonce]=useState(0);// incremented to force midnight re-renders
   const [toast,setToast]=useState("");
   const toastTimer=useRef(null);
@@ -3829,6 +3966,7 @@ export default function App() {
       }catch{}
       try{const r=await fetch("/api/recordings").then(x=>x.json());setRecordings(r.recordings||[]);}catch{}
       try{const mx=await storage.get("music_mixtapes");if(mx?.value)setMixtapes(JSON.parse(mx.value));}catch{}
+      try{const wr=await storage.get("music_weekly_review_dismissed");if(wr?.value)setWeeklyReviewDismissed(wr.value);}catch{}
       setLoaded(true);
     })();
   },[]);
@@ -4053,6 +4191,12 @@ export default function App() {
     if(!questData)return;
     const next={...questData,enabled:!questData.enabled};
     setQuestData(next);saveQuestData(next);
+  };
+
+  const dismissWeeklyReview=async(weekStr)=>{
+    setWeeklyReviewDismissed(weekStr);
+    setWeeklyReviewOpen(false);
+    try{await storage.set("music_weekly_review_dismissed",weekStr);}catch{}
   };
 
   /* milestones */
@@ -4534,6 +4678,13 @@ export default function App() {
       })}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
+      {weeklyReviewOpen&&(()=>{
+        const dow=(parseDate(today).getDay()+6)%7;
+        const reviewWeekStart=dow===0?getWeekStart(1):getWeekStart(0);
+        return<WeeklyReviewSheet sessions={sessions} questData={questData} projects={projects}
+          weekStart={reviewWeekStart} prevWeekStart={getWeekStart(dow===0?2:1)}
+          onClose={()=>dismissWeeklyReview(getISOWeek(reviewWeekStart))}/>;
+      })()}
       {recorderOpen&&<RecorderSheet recordings={recordings} mixtapes={mixtapes} projects={projects} onClose={()=>setRecorderOpen(false)} onRecordingsChange={async()=>{try{const r=await fetch("/api/recordings").then(x=>x.json());setRecordings(r.recordings||[]);}catch{}}} onMixtapesChange={setMixtapes}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived} questsEnabled={questData?.enabled!==false} onQuestsToggle={toggleQuests}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
@@ -4773,6 +4924,31 @@ export default function App() {
           </>
         )}
       </div>
+
+      {/* Weekly review banner — show on Sunday (dow=6) and Monday (dow=0) until dismissed */}
+      {(()=>{
+        const dow=(parseDate(today).getDay()+6)%7; // 0=Mon…6=Sun
+        const reviewWeekStart=dow===0?getWeekStart(1):getWeekStart(0); // Sunday/Mon → show last week
+        const reviewWeekStr=getISOWeek(reviewWeekStart);
+        if((dow===6||dow===0)&&weeklyReviewDismissed!==reviewWeekStr){
+          return(
+            <div style={{background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+              <span style={{fontSize:26,flexShrink:0}}>📋</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.text}}>Weekly Review ready</div>
+                <div style={{fontSize:12,color:C.faint,marginTop:1}}>See how last week went</div>
+              </div>
+              <div style={{display:"flex",gap:8,flexShrink:0}}>
+                <button onClick={()=>setWeeklyReviewOpen(true)}
+                  style={{fontSize:12,fontWeight:700,color:"#fff",background:C.accentGrad,border:"none",borderRadius:10,padding:"7px 14px",cursor:"pointer"}}>Open</button>
+                <button onClick={()=>dismissWeeklyReview(reviewWeekStr)}
+                  style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",alignItems:"center"}}>{Icon.close()}</button>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* All-time stats */}
       <div className="card" style={{...card,display:"flex",padding:"18px 8px"}}>
