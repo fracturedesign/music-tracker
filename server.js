@@ -971,6 +971,30 @@ app.post("/api/obsidian/sync", async (req, res) => {
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
+// Diagnostic: read up to 5 real LiveSync docs + our 4 orbit docs for format comparison
+app.get("/api/obsidian/inspect", async (req, res) => {
+  const cfg = getObsidianCfg();
+  if (!cfg?.url || !cfg?.db) return res.status(400).json({ error:"not configured" });
+  const auth = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
+  const base = `${cfg.url}/${cfg.db}`;
+  try {
+    // Get all doc ids
+    const allR = await insecureFetch(`${base}/_all_docs?limit=20&include_docs=true`, { headers:{Authorization:auth} });
+    const allJ = await allR.json();
+    const docs = (allJ.rows||[]).map(r=>({
+      id: r.id,
+      type: r.doc?.type,
+      dataType: Array.isArray(r.doc?.data) ? "array" : typeof r.doc?.data,
+      dataPreview: typeof r.doc?.data === "string" ? r.doc.data.slice(0,60) : JSON.stringify(r.doc?.data)?.slice(0,60),
+      children: r.doc?.children,
+      size: r.doc?.size,
+      deleted: r.doc?.deleted,
+      fields: Object.keys(r.doc||{})
+    }));
+    res.json({ total: allJ.total_rows, docs });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 /* ── SSL info & cert download ── */
 app.get("/api/ssl-info", (req, res) => {
   const available = existsSync(CERT_FILE) && existsSync(KEY_FILE);
