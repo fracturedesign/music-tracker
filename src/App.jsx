@@ -4783,11 +4783,10 @@ export default function App() {
         );
       })()}
 
-      {/* Weekly review card — Sunday only, not dismissed */}
+      {/* Weekly review card — Sunday only */}
       {(()=>{
         const dow=(parseDate(today).getDay()+6)%7;
         if(dow!==6)return null;
-        if(weeklyReviewDismissed===getISOWeek(today))return null;
         return(
           <button className="weekly-review-bar"
             onClick={()=>setWeeklyReviewOpen(true)}
