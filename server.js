@@ -1,11 +1,35 @@
 import express from "express";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, createReadStream, statSync, renameSync } from "fs";
 import { createServer as createHttpServer } from "http";
-import { createServer as createHttpsServer } from "https";
+import { createServer as createHttpsServer, Agent as HttpsAgent } from "https";
 import { fileURLToPath } from "url";
 import { dirname, join, extname, basename } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+
+// Allow self-signed certs for internal NAS / Tailscale CouchDB calls
+// undici is the underlying HTTP library for Node 18+ built-in fetch
+let _undiciAgent = null;
+async function insecureFetch(url, opts={}) {
+  if (!url.startsWith("https://")) return fetch(url, opts);
+  if (!_undiciAgent) {
+    try {
+      const undici = await import("undici");
+      _undiciAgent = new undici.Agent({ connect:{ rejectUnauthorized:false } });
+    } catch {
+      // undici not available — fall back to env flag
+      _undiciAgent = "env";
+    }
+  }
+  if (_undiciAgent !== "env") {
+    return fetch(url, { ...opts, dispatcher:_undiciAgent });
+  }
+  // env flag fallback
+  const prev = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  try { return await fetch(url, opts); }
+  finally { process.env.NODE_TLS_REJECT_UNAUTHORIZED = prev ?? undefined; }
+}
 import multer from "multer";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -654,21 +678,29 @@ function getObsidianCfg() { return readData().music_obsidian_config || null; }
 
 async function obsidianPut(docPath, markdown) {
   const cfg = getObsidianCfg();
-  if (!cfg?.url || !cfg?.db) return;
+  if (!cfg?.url || !cfg?.db) throw new Error("Obsidian not configured");
   const auth = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
   const content = cfg.passphrase ? await liveSyncEncrypt(markdown, cfg.passphrase) : markdown;
   const now = Date.now();
   const apiUrl = `${cfg.url}/${cfg.db}/${encodeURIComponent(docPath)}`;
   let rev;
   try {
-    const r = await fetch(apiUrl, { headers:{ Authorization:auth }, signal: AbortSignal.timeout(8000) });
+    const r = await insecureFetch(apiUrl, { headers:{ Authorization:auth }, signal: AbortSignal.timeout(8000) });
     if (r.ok) { const j = await r.json(); rev = j._rev; }
-  } catch {}
+    else if (r.status !== 404) {
+      const txt = await r.text().catch(()=>"");
+      throw new Error(`CouchDB GET ${r.status}: ${txt.slice(0,120)}`);
+    }
+  } catch(e) { if (e.message?.startsWith("CouchDB")) throw e; /* network err on GET — try PUT anyway */ }
   const doc = { _id:docPath, ...(rev?{_rev:rev}:{}), type:"newnotes", data:content,
     ctime:now, mtime:now, size:markdown.length, children:[], deleted:false, tags:[] };
-  await fetch(apiUrl, { method:"PUT",
+  const pr = await insecureFetch(apiUrl, { method:"PUT",
     headers:{ "Content-Type":"application/json", Authorization:auth },
     body: JSON.stringify(doc), signal: AbortSignal.timeout(10000) });
+  if (!pr.ok) {
+    const txt = await pr.text().catch(()=>"");
+    throw new Error(`CouchDB PUT ${pr.status}: ${txt.slice(0,200)}`);
+  }
 }
 
 // ── Markdown generators ──
@@ -900,7 +932,8 @@ async function syncAllObsidianNotes(specificDate) {
 app.get("/api/obsidian/config", (req, res) => {
   const cfg = getObsidianCfg() || {};
   res.json({ url:cfg.url||"", db:cfg.db||"", user:cfg.user||"",
-    folder:cfg.folder||"AIOS/Orbit", hasPass:!!(cfg.pass), hasPassphrase:!!(cfg.passphrase) });
+    pass:cfg.pass||"", passphrase:cfg.passphrase||"",
+    folder:cfg.folder||"AIOS/Orbit" });
 });
 
 app.post("/api/obsidian/config", (req, res) => {

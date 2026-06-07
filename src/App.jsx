@@ -2833,7 +2833,7 @@ function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChang
   const [obsExpanded,setObsExpanded]=useState(false);
   useEffect(()=>{
     fetch("/api/obsidian/config").then(r=>r.json()).then(d=>{
-      setObsCfg(cfg=>({...cfg,url:d.url||"",db:d.db||"",user:d.user||"",folder:d.folder||"AIOS/Orbit"}));
+      setObsCfg({url:d.url||"",db:d.db||"",user:d.user||"",pass:d.pass||"",passphrase:d.passphrase||"",folder:d.folder||"AIOS/Orbit"});
       setObsLoaded(true);
     }).catch(()=>setObsLoaded(true));
   },[]);
@@ -2845,7 +2845,8 @@ function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChang
     setObsSyncing(true);setObsSyncMsg("");
     try{
       const r=await fetch("/api/obsidian/sync",{method:"POST"});
-      setObsSyncMsg(r.ok?"✓ Synced to Obsidian":"✗ Sync failed — check config");
+      if(r.ok){setObsSyncMsg("✓ Synced to Obsidian");}
+      else{const j=await r.json().catch(()=>({}));setObsSyncMsg("✗ "+(j.error||"Sync failed — check config"));}
     }catch{setObsSyncMsg("✗ Network error");}
     setObsSyncing(false);setTimeout(()=>setObsSyncMsg(""),4000);
   };
