@@ -4678,13 +4678,9 @@ export default function App() {
       })}
       {allOpen&&<AllSessions sessions={recent} projects={projects} projectMap={projectMap} onEdit={s=>startEdit(s)} onDelete={deleteSession} onClose={()=>setAllOpen(false)}/>}
       {sheet&&<LogSheet initial={sheet.form} editing={sheet.editing} projects={projects} onSubmit={form=>commitSession(form,sheet.id,sheet.fromTimer)} onDelete={()=>deleteSession(sheet.id)} onClose={()=>setSheet(null)}/>}
-      {weeklyReviewOpen&&(()=>{
-        const dow=(parseDate(today).getDay()+6)%7;
-        const reviewWeekStart=dow===0?getWeekStart(1):getWeekStart(0);
-        return<WeeklyReviewSheet sessions={sessions} questData={questData} projects={projects}
-          weekStart={reviewWeekStart} prevWeekStart={getWeekStart(dow===0?2:1)}
-          onClose={()=>dismissWeeklyReview(getISOWeek(reviewWeekStart))}/>;
-      })()}
+      {weeklyReviewOpen&&<WeeklyReviewSheet sessions={sessions} questData={questData} projects={projects}
+        weekStart={getWeekStart(0)} prevWeekStart={getWeekStart(1)}
+        onClose={()=>dismissWeeklyReview(getISOWeek(today))}/>}
       {recorderOpen&&<RecorderSheet recordings={recordings} mixtapes={mixtapes} projects={projects} onClose={()=>setRecorderOpen(false)} onRecordingsChange={async()=>{try{const r=await fetch("/api/recordings").then(x=>x.json());setRecordings(r.recordings||[]);}catch{}}} onMixtapesChange={setMixtapes}/>}
       {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived} questsEnabled={questData?.enabled!==false} onQuestsToggle={toggleQuests}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
@@ -4702,6 +4698,19 @@ export default function App() {
           <div style={{fontSize:13,color:C.faint,marginTop:4}}>Keep the habit. One session at a time.</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {(()=>{
+            const dow=(parseDate(today).getDay()+6)%7; // 0=Mon…6=Sun
+            if(dow!==6)return null; // Sunday only
+            const reviewWeekStr=getISOWeek(today);
+            if(weeklyReviewDismissed===reviewWeekStr)return null;
+            return(
+              <button className="weekly-review-bar"
+                onClick={()=>setWeeklyReviewOpen(true)}
+                style={{"--glow-color":C.accentGlow,display:"flex",alignItems:"center",gap:7,padding:"7px 14px",borderRadius:12,border:`1px solid ${C.accentBorder}`,background:C.accentAlpha,cursor:"pointer",fontFamily:"var(--font-sans)",fontSize:12.5,fontWeight:700,color:C.indigo,whiteSpace:"nowrap"}}>
+                📋 Weekly Review Available
+              </button>
+            );
+          })()}
           <button onClick={()=>setReviewOpen(true)} title="Analytics" style={iconBtn}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2" y="13" width="4" height="9" rx="1.5" fill={C.faint}/><rect x="10" y="7" width="4" height="15" rx="1.5" fill={C.faint}/><rect x="18" y="2" width="4" height="20" rx="1.5" fill={C.faint}/></svg>
           </button>
@@ -4925,30 +4934,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Weekly review banner — show on Sunday (dow=6) and Monday (dow=0) until dismissed */}
-      {(()=>{
-        const dow=(parseDate(today).getDay()+6)%7; // 0=Mon…6=Sun
-        const reviewWeekStart=dow===0?getWeekStart(1):getWeekStart(0); // Sunday/Mon → show last week
-        const reviewWeekStr=getISOWeek(reviewWeekStart);
-        if((dow===6||dow===0)&&weeklyReviewDismissed!==reviewWeekStr){
-          return(
-            <div style={{background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
-              <span style={{fontSize:26,flexShrink:0}}>📋</span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:700,color:C.text}}>Weekly Review ready</div>
-                <div style={{fontSize:12,color:C.faint,marginTop:1}}>See how last week went</div>
-              </div>
-              <div style={{display:"flex",gap:8,flexShrink:0}}>
-                <button onClick={()=>setWeeklyReviewOpen(true)}
-                  style={{fontSize:12,fontWeight:700,color:"#fff",background:C.accentGrad,border:"none",borderRadius:10,padding:"7px 14px",cursor:"pointer"}}>Open</button>
-                <button onClick={()=>dismissWeeklyReview(reviewWeekStr)}
-                  style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",alignItems:"center"}}>{Icon.close()}</button>
-              </div>
-            </div>
-          );
-        }
-        return null;
-      })()}
 
       {/* All-time stats */}
       <div className="card" style={{...card,display:"flex",padding:"18px 8px"}}>
