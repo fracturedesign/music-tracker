@@ -455,19 +455,38 @@ app.get("/api/recordings", (req, res) => {
     let candidates;
     try {
       candidates = readdirSync(dir)
-        .filter(f => extname(f).toLowerCase() === ext && audioExts.has(extname(f).toLowerCase()))
+        .filter(f => audioExts.has(extname(f).toLowerCase()) && extname(f).toLowerCase() === ext)
         .map(f => join(dir, f))
         .filter(f => !trackedPaths.has(f));
     } catch { continue; }
 
-    if (candidates.length === 1) {
-      // Exactly one untracked file with same extension in same dir → rename detected
-      const newPath = candidates[0];
+    if (candidates.length === 0) continue;
+
+    // Pick best candidate by mtime proximity to the recording's createdAt timestamp.
+    // If the recording has no createdAt, fall back to single-candidate rule.
+    let best = null;
+    if (rec.createdAt) {
+      const created = new Date(rec.createdAt).getTime();
+      let minDiff = Infinity;
+      for (const f of candidates) {
+        try {
+          const mtime = statSync(f).mtimeMs;
+          const diff = Math.abs(mtime - created);
+          if (diff < minDiff) { minDiff = diff; best = f; }
+        } catch {}
+      }
+      // Only accept if mtime is within 10 minutes of createdAt (avoids wild mismatches)
+      if (minDiff > 10 * 60 * 1000) best = candidates.length === 1 ? candidates[0] : null;
+    } else {
+      best = candidates.length === 1 ? candidates[0] : null;
+    }
+
+    if (best) {
       trackedPaths.delete(currentPath);
-      trackedPaths.add(newPath);
-      rec.absolutePath = newPath;
-      rec.filename     = basename(newPath);
-      rec.name         = basename(newPath, ext);
+      trackedPaths.add(best);
+      rec.absolutePath = best;
+      rec.filename     = basename(best);
+      rec.name         = basename(best, ext);
       dirty = true;
     }
   }
