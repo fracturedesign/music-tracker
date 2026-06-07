@@ -724,20 +724,26 @@ function mdISOWeek(dateStr) {
 function mdSyncLine() {
   return new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 }
+// Values in data.json may be raw objects/arrays OR JSON strings depending on client
+function mdVal(raw) {
+  if (raw == null) return null;
+  if (typeof raw === "string") { try { return JSON.parse(raw); } catch { return raw; } }
+  return raw;
+}
 function mdParseQuests(data) {
-  try { return data.music_quests ? JSON.parse(data.music_quests) : null; } catch { return null; }
+  try { return mdVal(data.music_quests); } catch { return null; }
 }
 
 function generateDashboardMd(data) {
-  const sessions = data.music_sessions || [];
-  const projects = (data.music_projects || []).filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
+  const sessions = mdVal(data.music_sessions) || [];
+  const projects = (mdVal(data.music_projects) || []).filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
   const quests = mdParseQuests(data);
   const today = new Date().toISOString().slice(0,10);
   const ws = mdWeekStart(today), we = mdWeekEnd(ws);
   const wSess = sessions.filter(s=>s.date>=ws&&s.date<=we);
   const wMins = wSess.reduce((a,s)=>a+s.duration,0);
   const tMins = sessions.reduce((a,s)=>a+s.duration,0);
-  const goal  = (data.music_goal||0)*60;
+  const goal  = (mdVal(data.music_goal)||0)*60;
 
   // streak
   const dateSet=new Set(sessions.map(s=>s.date));
@@ -789,8 +795,8 @@ ${weeklyQ?`## 🗓 Weekly Quest\n\n${weeklyQ}\n`:""}`;
 }
 
 function generateActiveProjectsMd(data) {
-  const sessions = data.music_sessions || [];
-  const allProjects = data.music_projects || [];
+  const sessions = mdVal(data.music_sessions) || [];
+  const allProjects = mdVal(data.music_projects) || [];
   const active  = allProjects.filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
   const done    = allProjects.filter(p=>["done","released"].includes(p.status||""));
   const today   = new Date().toISOString().slice(0,10);
@@ -824,7 +830,7 @@ ${done.map(p=>`- [[${p.name}]] · ${p.status}`).join("\n")||"_None yet_"}`;
 }
 
 function generateSessionMd(data, dateStr) {
-  const daySessions = (data.music_sessions||[]).filter(s=>s.date===dateStr).sort((a,b)=>(a.hour||0)-(b.hour||0));
+  const daySessions = (mdVal(data.music_sessions)||[]).filter(s=>s.date===dateStr).sort((a,b)=>(a.hour||0)-(b.hour||0));
   const d = new Date(dateStr+"T12:00:00");
   const heading = `${MD_DAYS[d.getDay()]} ${d.getDate()} ${MD_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
   const totalMins = daySessions.reduce((a,s)=>a+s.duration,0);
@@ -852,8 +858,8 @@ ${daySessions.length ? `**${daySessions.length} session${daySessions.length!==1?
 }
 
 function generateWeeklyReviewMd(data, weekStart) {
-  const sessions = data.music_sessions || [];
-  const projects = (data.music_projects||[]).filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
+  const sessions = mdVal(data.music_sessions) || [];
+  const projects = (mdVal(data.music_projects)||[]).filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
   const quests   = mdParseQuests(data);
   const we  = mdWeekEnd(weekStart);
   const wk  = mdISOWeek(weekStart);
