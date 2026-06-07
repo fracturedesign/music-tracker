@@ -35,6 +35,22 @@ function writeData(data) {
   writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
+// Seed Obsidian config on first run (values set here are overridable from settings UI)
+(function seedObsidianConfig() {
+  const data = readData();
+  if (!data.music_obsidian_config?.url) {
+    data.music_obsidian_config = {
+      url:        "https://tower-1.tail88bb12.ts.net:8443",
+      db:         "obsidian",
+      user:       "admin",
+      pass:       "Plains789",
+      passphrase: "BorisVilly",
+      folder:     "AIOS/Orbit",
+    };
+    writeData(data);
+  }
+})();
+
 /* ── audio analysis via ffmpeg ──
    Parse only the Summary block so we never pick up a per-frame I: value
    (per-frame values start near -70 LUFS and converge; the Summary is final). */
@@ -157,6 +173,11 @@ app.post("/api/data/:key", (req, res) => {
   writeData(data);
   broadcast(req.params.key);
   res.json({ ok: true });
+  // Auto-sync Obsidian on sessions or projects change
+  const k = req.params.key;
+  if (k === "music_sessions" || k === "music_projects") {
+    syncAllObsidianNotes().catch(()=>{});
+  }
 });
 
 /* ── audio API ── */
@@ -608,6 +629,304 @@ app.delete("/api/recordings/:id", (req, res) => {
   writeData(data);
   broadcast("music_recordings");
   res.json({ ok: true });
+});
+
+/* ── Obsidian LiveSync integration ── */
+
+// Encrypt content using Self-Hosting LiveSync's E2E format
+async function liveSyncEncrypt(plaintext, passphrase) {
+  if (!passphrase) return plaintext;
+  const { subtle } = globalThis.crypto;
+  const enc = new TextEncoder();
+  const keyMaterial = await subtle.importKey("raw", enc.encode(passphrase), { name:"PBKDF2" }, false, ["deriveKey"]);
+  const key = await subtle.deriveKey(
+    { name:"PBKDF2", salt:enc.encode("novelt"), iterations:1000, hash:"SHA-256" },
+    keyMaterial, { name:"AES-GCM", length:256 }, false, ["encrypt"]
+  );
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await subtle.encrypt({ name:"AES-GCM", iv }, key, enc.encode(plaintext));
+  const out = new Uint8Array(12 + cipher.byteLength);
+  out.set(iv); out.set(new Uint8Array(cipher), 12);
+  return "e+" + Buffer.from(out).toString("base64");
+}
+
+function getObsidianCfg() { return readData().music_obsidian_config || null; }
+
+async function obsidianPut(docPath, markdown) {
+  const cfg = getObsidianCfg();
+  if (!cfg?.url || !cfg?.db) return;
+  const auth = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
+  const content = cfg.passphrase ? await liveSyncEncrypt(markdown, cfg.passphrase) : markdown;
+  const now = Date.now();
+  const apiUrl = `${cfg.url}/${cfg.db}/${encodeURIComponent(docPath)}`;
+  let rev;
+  try {
+    const r = await fetch(apiUrl, { headers:{ Authorization:auth }, signal: AbortSignal.timeout(8000) });
+    if (r.ok) { const j = await r.json(); rev = j._rev; }
+  } catch {}
+  const doc = { _id:docPath, ...(rev?{_rev:rev}:{}), type:"newnotes", data:content,
+    ctime:now, mtime:now, size:markdown.length, children:[], deleted:false, tags:[] };
+  await fetch(apiUrl, { method:"PUT",
+    headers:{ "Content-Type":"application/json", Authorization:auth },
+    body: JSON.stringify(doc), signal: AbortSignal.timeout(10000) });
+}
+
+// ── Markdown generators ──
+
+const MD_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MD_DAYS   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function mdDurMins(m) { const h=Math.floor(m/60),mn=m%60; return h?`${h}h${mn?` ${mn}m`:""}`:`${mn}m`; }
+function mdWeekStart(dateStr, off=0) {
+  const d=new Date(dateStr+"T12:00:00"); const dow=(d.getDay()+6)%7;
+  d.setDate(d.getDate()-dow-off*7); return d.toISOString().slice(0,10);
+}
+function mdWeekEnd(weekStartStr) {
+  const d=new Date(weekStartStr+"T12:00:00"); d.setDate(d.getDate()+6); return d.toISOString().slice(0,10);
+}
+function mdISOWeek(dateStr) {
+  const d=new Date(dateStr+"T12:00:00");
+  const jan4=new Date(d.getFullYear(),0,4); const dow=(jan4.getDay()+6)%7;
+  const wk=Math.ceil((((d-jan4)/86400000)+dow+1)/7);
+  return `${d.getFullYear()}-W${String(wk).padStart(2,"0")}`;
+}
+function mdSyncLine() {
+  return new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+}
+function mdParseQuests(data) {
+  try { return data.music_quests ? JSON.parse(data.music_quests) : null; } catch { return null; }
+}
+
+function generateDashboardMd(data) {
+  const sessions = data.music_sessions || [];
+  const projects = (data.music_projects || []).filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
+  const quests = mdParseQuests(data);
+  const today = new Date().toISOString().slice(0,10);
+  const ws = mdWeekStart(today), we = mdWeekEnd(ws);
+  const wSess = sessions.filter(s=>s.date>=ws&&s.date<=we);
+  const wMins = wSess.reduce((a,s)=>a+s.duration,0);
+  const tMins = sessions.reduce((a,s)=>a+s.duration,0);
+  const goal  = (data.music_goal||0)*60;
+
+  // streak
+  const dateSet=new Set(sessions.map(s=>s.date));
+  let streak=0; const sd=new Date();
+  while(dateSet.has(sd.toISOString().slice(0,10))){ streak++; sd.setDate(sd.getDate()-1); }
+
+  const last = sessions.length ? sessions.reduce((a,b)=>a.date>b.date?a:b) : null;
+  const xp   = quests?.xp||0;
+  const lvl  = Math.floor(xp/50)+1;
+  const xpIn = xp%50;
+
+  const goalRow = goal ? `| Goal progress | ${mdDurMins(wMins)} / ${mdDurMins(goal)} (${Math.min(100,Math.round(wMins/goal*100))}%) |\n` : "";
+  const projRows = projects.map(p=>`- [[${p.name}]] · ${p.status||"active"}`).join("\n")||"_No active projects_";
+  const dailyQ  = quests?.currentDaily ? quests.currentDaily.map(q=>`- [${q.done?"x":" "}] ${q.text||""}`).join("\n") : "";
+  const weeklyQ = quests?.currentWeekly ? `- [${quests.currentWeekly.done?"x":" "}] ${quests.currentWeekly.text||""}` : "";
+
+  return `---
+type: orbit-dashboard
+updated: ${today}
+---
+
+# 🎵 Orbit Dashboard
+*Last synced: ${mdSyncLine()}*
+
+## 📊 This Week (${ws} → ${we})
+
+| Metric | Value |
+|--------|-------|
+| Sessions | ${wSess.length} |
+| Time logged | ${mdDurMins(wMins)} |
+| Days active | ${[...new Set(wSess.map(s=>s.date))].length}/7 |
+${goalRow}
+## 🔥 Overall
+
+| | |
+|--|--|
+| Current streak | ${streak} day${streak!==1?"s":""} |
+| Total sessions | ${sessions.length} |
+| Total time | ${mdDurMins(tMins)} |
+| Last session | ${last?last.date:"—"} |
+| XP Level | ⭐ Level ${lvl} · ${xpIn}/50 XP |
+
+## 🎯 Active Projects (${projects.length})
+
+${projRows}
+
+${dailyQ?`## ✅ Daily Quests\n\n${dailyQ}\n`:""}
+${weeklyQ?`## 🗓 Weekly Quest\n\n${weeklyQ}\n`:""}`;
+}
+
+function generateActiveProjectsMd(data) {
+  const sessions = data.music_sessions || [];
+  const allProjects = data.music_projects || [];
+  const active  = allProjects.filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
+  const done    = allProjects.filter(p=>["done","released"].includes(p.status||""));
+  const today   = new Date().toISOString().slice(0,10);
+  const ws = mdWeekStart(today), we = mdWeekEnd(ws);
+
+  const rows = active.map(p => {
+    const ps = sessions.filter(s=>s.project===p.name);
+    const last = ps.length ? ps.reduce((a,b)=>a.date>b.date?a:b).date : "—";
+    const wm = ps.filter(s=>s.date>=ws&&s.date<=we).reduce((a,s)=>a+s.duration,0);
+    const tm = ps.reduce((a,s)=>a+s.duration,0);
+    return `| [[${p.name}]] | ${p.status||"active"} | ${last} | ${wm?mdDurMins(wm):"—"} | ${tm?mdDurMins(tm):"—"} |`;
+  });
+
+  return `---
+type: orbit-projects
+updated: ${today}
+---
+
+# 🎵 Active Projects
+*Last synced: ${mdSyncLine()}*
+
+| Project | Status | Last Session | This Week | Total |
+|---------|--------|--------------|-----------|-------|
+${rows.join("\n")||"| _None_ | — | — | — | — |"}
+
+---
+
+## ✅ Done / Released
+
+${done.map(p=>`- [[${p.name}]] · ${p.status}`).join("\n")||"_None yet_"}`;
+}
+
+function generateSessionMd(data, dateStr) {
+  const daySessions = (data.music_sessions||[]).filter(s=>s.date===dateStr).sort((a,b)=>(a.hour||0)-(b.hour||0));
+  const d = new Date(dateStr+"T12:00:00");
+  const heading = `${MD_DAYS[d.getDay()]} ${d.getDate()} ${MD_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  const totalMins = daySessions.reduce((a,s)=>a+s.duration,0);
+  const moodMap = { great:"🟢 Great", good:"🟡 Good", okay:"🟠 Okay", rough:"🔴 Rough" };
+
+  const blocks = daySessions.map(s => {
+    const timeStr = s.hour!=null ? ` · ${String(s.hour).padStart(2,"0")}:00` : "";
+    const mood    = s.mood ? ` · ${moodMap[s.mood]||s.mood}` : "";
+    return `### ${s.project?`[[${s.project}]]`:"_No project_"} · ${mdDurMins(s.duration)}${timeStr}${mood}
+
+${s.notes||"_No notes_"}`;
+  }).join("\n\n");
+
+  return `---
+type: orbit-session
+date: ${dateStr}
+sessions: ${daySessions.length}
+total_mins: ${totalMins}
+projects: [${[...new Set(daySessions.filter(s=>s.project).map(s=>s.project))].join(", ")}]
+---
+
+# Sessions — ${heading}
+
+${daySessions.length ? `**${daySessions.length} session${daySessions.length!==1?"s":""} · ${mdDurMins(totalMins)} total**\n\n${blocks}` : "_No sessions logged this day._"}`;
+}
+
+function generateWeeklyReviewMd(data, weekStart) {
+  const sessions = data.music_sessions || [];
+  const projects = (data.music_projects||[]).filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
+  const quests   = mdParseQuests(data);
+  const we  = mdWeekEnd(weekStart);
+  const wk  = mdISOWeek(weekStart);
+  const wSess = sessions.filter(s=>s.date>=weekStart&&s.date<=we);
+  const wMins = wSess.reduce((a,s)=>a+s.duration,0);
+  const wDays = [...new Set(wSess.map(s=>s.date))].length;
+
+  const byProj = {};
+  wSess.forEach(s=>{ if(s.project) byProj[s.project]=(byProj[s.project]||0)+s.duration; });
+  const topProj = Object.entries(byProj).sort((a,b)=>b[1]-a[1]);
+
+  const inactive = projects.filter(p=>{
+    const last = sessions.filter(s=>s.project===p.name).reduce((best,s)=>s.date>best?s.date:best,"");
+    return !last||last<weekStart;
+  });
+
+  const dailyXp = quests ? (quests.completedDailyHistory||[]).filter(h=>h.date>=weekStart&&h.date<=we).length : 0;
+  const weeklyXp = quests?.currentWeekly?.done ? 10 : 0;
+  const totalXp = dailyXp+weeklyXp;
+
+  const d1=new Date(weekStart+"T12:00:00"), d2=new Date(we+"T12:00:00");
+  const fmt=d=>`${d.getDate()} ${MD_MONTHS[d.getMonth()]}`;
+
+  const projBars = topProj.map(([name,mins])=>{
+    const pct=wMins>0?Math.round(mins/wMins*10):0;
+    return `- **[[${name}]]** · ${mdDurMins(mins)} \`${"█".repeat(pct)}${"░".repeat(10-pct)}\``;
+  }).join("\n")||"_No sessions this week_";
+
+  return `---
+type: orbit-weekly-review
+week: ${wk}
+week_start: ${weekStart}
+week_end: ${we}
+sessions: ${wSess.length}
+total_mins: ${wMins}
+days_active: ${wDays}
+xp_earned: ${totalXp}
+---
+
+# Weekly Review — ${wk}
+## ${fmt(d1)} – ${fmt(d2)} ${d2.getFullYear()}
+
+## 📊 Summary
+
+| Metric | Value |
+|--------|-------|
+| Sessions | ${wSess.length} |
+| Time logged | ${mdDurMins(wMins)} |
+| Days active | ${wDays}/7 |
+| ⭐ XP earned | +${totalXp}${dailyXp?` (${dailyXp} daily${weeklyXp?" + weekly":""})`:""}  |
+
+## 🎵 Time by Project
+
+${projBars}
+
+${inactive.length ? `## 😴 No Activity This Week\n\n${inactive.map(p=>`- [[${p.name}]]`).join("\n")}` : ""}`;
+}
+
+async function syncAllObsidianNotes(specificDate) {
+  const cfg = getObsidianCfg();
+  if (!cfg?.url || !cfg?.db) return;
+  const folder = (cfg.folder||"AIOS/Orbit").replace(/\/+$/,"");
+  const data = readData();
+  const today = new Date().toISOString().slice(0,10);
+  const dateToSync = specificDate || today;
+  const ws = mdWeekStart(today);
+  await Promise.allSettled([
+    obsidianPut(`${folder}/Dashboard.md`,             generateDashboardMd(data)),
+    obsidianPut(`${folder}/Active Projects.md`,       generateActiveProjectsMd(data)),
+    obsidianPut(`${folder}/Sessions/${dateToSync}.md`,generateSessionMd(data,dateToSync)),
+    obsidianPut(`${folder}/Weekly Review/${mdISOWeek(ws)}.md`, generateWeeklyReviewMd(data,ws)),
+  ]);
+}
+
+// Config endpoints
+app.get("/api/obsidian/config", (req, res) => {
+  const cfg = getObsidianCfg() || {};
+  res.json({ url:cfg.url||"", db:cfg.db||"", user:cfg.user||"",
+    folder:cfg.folder||"AIOS/Orbit", hasPass:!!(cfg.pass), hasPassphrase:!!(cfg.passphrase) });
+});
+
+app.post("/api/obsidian/config", (req, res) => {
+  const { url, db, user, pass, passphrase, folder } = req.body;
+  const data = readData();
+  const existing = data.music_obsidian_config || {};
+  data.music_obsidian_config = {
+    url: url||existing.url||"",
+    db:  db||existing.db||"",
+    user:user||existing.user||"",
+    pass:pass!==undefined?pass:existing.pass||"",
+    passphrase:passphrase!==undefined?passphrase:existing.passphrase||"",
+    folder:folder||existing.folder||"AIOS/Orbit",
+  };
+  writeData(data);
+  res.json({ ok:true });
+});
+
+// Manual sync endpoint
+app.post("/api/obsidian/sync", async (req, res) => {
+  const cfg = getObsidianCfg();
+  if (!cfg?.url || !cfg?.db) return res.status(400).json({ error:"Obsidian not configured" });
+  try {
+    await syncAllObsidianNotes();
+    res.json({ ok:true });
+  } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
 /* ── SSL info & cert download ── */

@@ -2824,6 +2824,31 @@ function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChang
   const saveGoal=()=>{const v=Number(goalInput);if(v>0&&v<=168){onGoalChange(v);setEditingGoal(false);}};
   const saveFolder=()=>{onGlobalFolderChange(folderInput.trim());setEditingFolder(false);};
   const clearFolder=()=>{setFolderInput("");onGlobalFolderChange("");setEditingFolder(false);};
+
+  // Obsidian config
+  const [obsCfg,setObsCfg]=useState({url:"",db:"",user:"",folder:"",pass:"",passphrase:""});
+  const [obsLoaded,setObsLoaded]=useState(false);
+  const [obsSyncing,setObsSyncing]=useState(false);
+  const [obsSyncMsg,setObsSyncMsg]=useState("");
+  const [obsExpanded,setObsExpanded]=useState(false);
+  useEffect(()=>{
+    fetch("/api/obsidian/config").then(r=>r.json()).then(d=>{
+      setObsCfg(cfg=>({...cfg,url:d.url||"",db:d.db||"",user:d.user||"",folder:d.folder||"AIOS/Orbit"}));
+      setObsLoaded(true);
+    }).catch(()=>setObsLoaded(true));
+  },[]);
+  const saveObsCfg=async()=>{
+    await fetch("/api/obsidian/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(obsCfg)});
+    setObsSyncMsg("Config saved");setTimeout(()=>setObsSyncMsg(""),2000);
+  };
+  const doObsSync=async()=>{
+    setObsSyncing(true);setObsSyncMsg("");
+    try{
+      const r=await fetch("/api/obsidian/sync",{method:"POST"});
+      setObsSyncMsg(r.ok?"✓ Synced to Obsidian":"✗ Sync failed — check config");
+    }catch{setObsSyncMsg("✗ Network error");}
+    setObsSyncing(false);setTimeout(()=>setObsSyncMsg(""),4000);
+  };
   return (
     <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
@@ -2852,6 +2877,44 @@ function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChang
                 <div style={{fontSize:12,color:C.faint,marginTop:2}}>Target for your weekly progress ring</div>
               </div>
               <button onClick={()=>{setGoalInput(String(goalHours));setEditingGoal(true);}} style={{...iconBtn}}>{Icon.pencil()}</button>
+            </div>
+          )}
+        </div>
+
+        {/* Obsidian */}
+        <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:12}}>Obsidian</div>
+        <div style={{background:C.surf2,borderRadius:14,padding:"14px 16px",marginBottom:22}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:obsExpanded?14:0}}>
+            <span style={{fontSize:18}}>📓</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:600,color:C.text}}>LiveSync Integration</div>
+              <div style={{fontSize:11.5,color:C.faint,marginTop:1}}>Auto-sync notes to your vault</div>
+            </div>
+            <button onClick={doObsSync} disabled={obsSyncing}
+              style={{fontSize:12,fontWeight:700,color:"#fff",background:C.accentGrad,border:"none",borderRadius:10,padding:"7px 14px",cursor:"pointer",opacity:obsSyncing?0.6:1,whiteSpace:"nowrap"}}>
+              {obsSyncing?"Syncing…":"Sync now"}
+            </button>
+            <button onClick={()=>setObsExpanded(v=>!v)} style={{...iconBtn,flexShrink:0}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d={obsExpanded?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"} stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+          {obsSyncMsg&&<div style={{fontSize:12,color:obsSyncMsg.startsWith("✓")?C.green:obsSyncMsg.startsWith("✗")?C.flame:C.indigo,marginBottom:obsExpanded?10:0,marginTop:obsExpanded?0:8}}>{obsSyncMsg}</div>}
+          {obsExpanded&&obsLoaded&&(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {[["CouchDB URL","url","https://…"],["Database","db","obsidian"],["Username","user","admin"],["Password","pass","••••••","password"],["Passphrase","passphrase","E2E passphrase","password"],["Vault folder","folder","AIOS/Orbit"]].map(([label,key,ph,type])=>(
+                <div key={key}>
+                  <div style={{fontSize:11,color:C.faint,marginBottom:3}}>{label}</div>
+                  <input className="mt-text" type={type||"text"} placeholder={ph}
+                    value={obsCfg[key]||""} onChange={e=>setObsCfg(c=>({...c,[key]:e.target.value}))}
+                    style={{width:"100%",padding:"8px 10px",boxSizing:"border-box",fontSize:13}}/>
+                </div>
+              ))}
+              <button onClick={saveObsCfg}
+                style={{marginTop:4,padding:"9px 16px",background:C.accentGrad,border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Save config</button>
+              <div style={{fontSize:11,color:C.faint,lineHeight:1.5}}>
+                Auto-syncs on session log & project changes.<br/>
+                Files: Dashboard · Active Projects · Sessions/date · Weekly Review/week
+              </div>
             </div>
           )}
         </div>
