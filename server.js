@@ -662,15 +662,18 @@ async function liveSyncEncrypt(plaintext, passphrase) {
   if (!passphrase) return plaintext;
   const { subtle } = globalThis.crypto;
   const enc = new TextEncoder();
+  // LiveSync e2ee_v2 format: random 32-byte salt + 12-byte IV + ciphertext
+  // salt is stored in the output so LiveSync can derive the same key on decryption
+  const salt = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  const iv   = globalThis.crypto.getRandomValues(new Uint8Array(12));
   const keyMaterial = await subtle.importKey("raw", enc.encode(passphrase), { name:"PBKDF2" }, false, ["deriveKey"]);
   const key = await subtle.deriveKey(
-    { name:"PBKDF2", salt:enc.encode("novelt"), iterations:1000, hash:"SHA-256" },
+    { name:"PBKDF2", salt, iterations:1000, hash:"SHA-256" },
     keyMaterial, { name:"AES-GCM", length:256 }, false, ["encrypt"]
   );
-  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
   const cipher = await subtle.encrypt({ name:"AES-GCM", iv }, key, enc.encode(plaintext));
-  const out = new Uint8Array(12 + cipher.byteLength);
-  out.set(iv); out.set(new Uint8Array(cipher), 12);
+  const out = new Uint8Array(32 + 12 + cipher.byteLength);
+  out.set(salt, 0); out.set(iv, 32); out.set(new Uint8Array(cipher), 44);
   return "e+" + Buffer.from(out).toString("base64");
 }
 
