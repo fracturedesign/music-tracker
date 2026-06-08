@@ -659,17 +659,33 @@ app.delete("/api/recordings/:id", (req, res) => {
 
 function getObsidianCfg() { return readData().music_obsidian_config || null; }
 
-// Compute a LiveSync-compatible chunk ID: "h:+" + first 8 bytes of SHA-256 as base36
 import { createHash } from "crypto";
+
+// LiveSync e2ee_v1: key = SHA-256(passphrase), output = "%=" + base64(iv[12] + ciphertext)
+// Chunk doc gets e_:true when encrypted. This matches what LiveSync actually writes.
+async function liveSyncEncrypt(plaintext, passphrase) {
+  if (!passphrase) return { data: plaintext, encrypted: false };
+  const { subtle } = globalThis.crypto;
+  const enc = new TextEncoder();
+  const keyHash = await subtle.digest("SHA-256", enc.encode(passphrase));
+  const key = await subtle.importKey("raw", keyHash, { name:"AES-GCM" }, false, ["encrypt"]);
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await subtle.encrypt({ name:"AES-GCM", iv }, key, enc.encode(plaintext));
+  const out = new Uint8Array(12 + cipher.byteLength);
+  out.set(iv, 0); out.set(new Uint8Array(cipher), 12);
+  return { data: "%=" + Buffer.from(out).toString("base64"), encrypted: true };
+}
+
+// Chunk ID: "h:+" + first 8 bytes of SHA-256(content) as base36, 13 chars
 function liveSyncChunkId(content) {
   const hash = createHash("sha256").update(content).digest();
   const num = BigInt("0x" + hash.slice(0, 8).toString("hex"));
   return "h:+" + num.toString(36).padStart(13, "0");
 }
 
-// Write one note using LiveSync's actual chunked "plain" format:
-//   parent doc  → { type:"plain", children:[chunkId], path, ctime, mtime, size, eden:{} }
-//   chunk doc   → { type:"leaf", data: markdown }
+// Write one note using LiveSync's actual format:
+//   chunk doc  → { type:"leaf", data: encrypted, e_:true }
+//   parent doc → { type:"plain", children:[chunkId], path, ctime, mtime, size, eden:{} }
 async function obsidianPut(docPath, markdown) {
   const cfg = getObsidianCfg();
   if (!cfg?.url || !cfg?.db) throw new Error("Obsidian not configured");
@@ -677,22 +693,25 @@ async function obsidianPut(docPath, markdown) {
   const base  = `${cfg.url}/${cfg.db}`;
   const now   = Date.now();
 
-  // ── 1. Write chunk document (content-addressed, skip if already exists) ──
-  const chunkId  = liveSyncChunkId(markdown);
+  // ── 1. Encrypt content ──
+  const { data: chunkData, encrypted } = await liveSyncEncrypt(markdown, cfg.passphrase);
+
+  // ── 2. Write chunk (content-addressed by encrypted data, skip if exists) ──
+  const chunkId  = liveSyncChunkId(chunkData);
   const chunkUrl = `${base}/${encodeURIComponent(chunkId)}`;
   const chunkGet = await insecureFetch(chunkUrl, { headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
   if (chunkGet.status === 404) {
+    const chunkDoc = { _id:chunkId, type:"leaf", data:chunkData, ...(encrypted ? { e_:true } : {}) };
     const cp = await insecureFetch(chunkUrl, { method:"PUT",
       headers:{ "Content-Type":"application/json", Authorization:auth },
-      body: JSON.stringify({ _id:chunkId, type:"leaf", data:markdown }),
-      signal: AbortSignal.timeout(10000) });
+      body: JSON.stringify(chunkDoc), signal: AbortSignal.timeout(10000) });
     if (!cp.ok) {
       const txt = await cp.text().catch(()=>"");
       throw new Error(`CouchDB chunk PUT ${cp.status}: ${txt.slice(0,200)}`);
     }
   }
 
-  // ── 2. Get current _rev of parent doc ──
+  // ── 3. Get current _rev of parent doc ──
   const parentUrl = `${base}/${encodeURIComponent(docPath)}`;
   let rev;
   try {
@@ -704,7 +723,7 @@ async function obsidianPut(docPath, markdown) {
     }
   } catch(e) { if (e.message?.startsWith("CouchDB")) throw e; }
 
-  // ── 3. Write parent document ──
+  // ── 4. Write parent document ──
   const doc = { _id:docPath, ...(rev?{_rev:rev}:{}),
     type:"plain", children:[chunkId], path:docPath,
     ctime:now, mtime:now, size:markdown.length, eden:{} };
