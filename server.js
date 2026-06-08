@@ -200,7 +200,7 @@ app.post("/api/data/:key", (req, res) => {
   // Auto-sync Obsidian on sessions or projects change
   const k = req.params.key;
   if (k === "music_sessions" || k === "music_projects") {
-    syncAllObsidianNotes().catch(()=>{});
+    syncAllObsidianNotes().catch(e=>console.error("[Obsidian sync]", e.message));
   }
 });
 
@@ -929,7 +929,7 @@ async function syncAllObsidianNotes(specificDate) {
   const today = new Date().toISOString().slice(0,10);
   const dateToSync = specificDate || today;
   const ws = mdWeekStart(today);
-  await Promise.allSettled([
+  await Promise.all([
     obsidianPut(`${folder}/Dashboard.md`,             generateDashboardMd(data)),
     obsidianPut(`${folder}/Active Projects.md`,       generateActiveProjectsMd(data)),
     obsidianPut(`${folder}/Sessions/${dateToSync}.md`,generateSessionMd(data,dateToSync)),
@@ -979,7 +979,7 @@ app.get("/api/obsidian/inspect", async (req, res) => {
   const base = `${cfg.url}/${cfg.db}`;
   try {
     // Get all doc ids
-    const allR = await insecureFetch(`${base}/_all_docs?limit=20&include_docs=true`, { headers:{Authorization:auth} });
+    const allR = await insecureFetch(`${base}/_all_docs?limit=20&include_docs=true`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
     const allJ = await allR.json();
     const docs = (allJ.rows||[]).map(r=>({
       id: r.id,
