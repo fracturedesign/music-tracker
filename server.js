@@ -759,22 +759,24 @@ async function obsidianPut(docPath, markdown) {
   const pbkdf2Salt = cfg.passphrase ? await getPbkdf2Salt(cfg, auth) : null;
   const { data: chunkData, encrypted } = await liveSyncEncrypt(markdown, cfg.passphrase, pbkdf2Salt);
 
-  // ── 2. Write chunk. Chunk ID derived from PLAINTEXT (encryption is randomised,
-  //    so ciphertext differs each run; plaintext keeps the ID stable for dedup). ──
-  const chunkId  = liveSyncChunkId("orbit:" + docPath + ":" + markdown);
+  // ── 2. Write chunk. LiveSync treats chunks as IMMUTABLE (write-once) and the
+  //    replicator assumes an h:+ doc never changes. So the chunk ID must change
+  //    whenever the *content* changes. We hash plaintext (content-addressed); if a
+  //    chunk with that ID already exists we leave it untouched (never bump _rev). ──
+  const chunkId  = liveSyncChunkId("orbit-v2:" + docPath + ":" + markdown);
   const chunkUrl = `${base}/${encodeURIComponent(chunkId)}`;
   const chunkGet = await insecureFetch(chunkUrl, { headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
-  let chunkRev;
-  if (chunkGet.ok) { chunkRev = (await chunkGet.json())._rev; }
-  // Always (re)write the chunk so its ciphertext is fresh & decryptable
-  const chunkDoc = { _id:chunkId, ...(chunkRev?{_rev:chunkRev}:{}), type:"leaf", data:chunkData, ...(encrypted ? { e_:true } : {}) };
-  const cp = await insecureFetch(chunkUrl, { method:"PUT",
-    headers:{ "Content-Type":"application/json", Authorization:auth },
-    body: JSON.stringify(chunkDoc), signal: AbortSignal.timeout(10000) });
-  if (!cp.ok) {
-    const txt = await cp.text().catch(()=>"");
-    throw new Error(`CouchDB chunk PUT ${cp.status}: ${txt.slice(0,200)}`);
+  if (chunkGet.status === 404) {
+    const chunkDoc = { _id:chunkId, type:"leaf", data:chunkData, ...(encrypted ? { e_:true } : {}) };
+    const cp = await insecureFetch(chunkUrl, { method:"PUT",
+      headers:{ "Content-Type":"application/json", Authorization:auth },
+      body: JSON.stringify(chunkDoc), signal: AbortSignal.timeout(10000) });
+    if (!cp.ok) {
+      const txt = await cp.text().catch(()=>"");
+      throw new Error(`CouchDB chunk PUT ${cp.status}: ${txt.slice(0,200)}`);
+    }
   }
+  // else: chunk already exists with identical content — immutable, leave as-is.
 
   // ── 3. Get current _rev of parent doc ──
   const parentUrl = `${base}/${encodeURIComponent(docPath)}`;
@@ -1031,6 +1033,39 @@ async function syncAllObsidianNotes(specificDate) {
     obsidianPut(`${folder}/Weekly Review/${mdISOWeek(ws)}.md`, generateWeeklyReviewMd(data,ws)),
   ]);
 }
+
+// Clean slate: delete our 4 parent docs so their broken revision history (from
+// earlier failed sync attempts) is cleared. Next sync recreates them pristine.
+app.post("/api/obsidian/reset", async (req, res) => {
+  const cfg = getObsidianCfg();
+  if (!cfg?.url || !cfg?.db) return res.status(400).json({ error:"not configured" });
+  const auth = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
+  const base = `${cfg.url}/${cfg.db}`;
+  const folder = (cfg.folder||"AIOS/Orbit").replace(/\/+$/,"");
+  const today = new Date().toISOString().slice(0,10);
+  const ws = mdWeekStart(today);
+  const ids = [
+    `${folder}/Dashboard.md`,
+    `${folder}/Active Projects.md`,
+    `${folder}/Sessions/${today}.md`,
+    `${folder}/Weekly Review/${mdISOWeek(ws)}.md`,
+  ];
+  const deleted = [];
+  try {
+    for (const id of ids) {
+      const url = `${base}/${encodeURIComponent(id)}`;
+      const r = await insecureFetch(url, { headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
+      if (r.ok) {
+        const doc = await r.json();
+        const del = await insecureFetch(`${url}?rev=${doc._rev}`, { method:"DELETE", headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
+        deleted.push(`${id}: ${del.status}`);
+      } else {
+        deleted.push(`${id}: not found (${r.status})`);
+      }
+    }
+    res.json({ ok:true, deleted });
+  } catch(e) { res.status(500).json({ error:e.message, deleted }); }
+});
 
 // Config endpoints
 app.get("/api/obsidian/config", (req, res) => {
