@@ -779,7 +779,11 @@ async function obsidianPut(docPath, markdown) {
   // else: chunk already exists with identical content — immutable, leave as-is.
 
   // ── 3. Get current _rev of parent doc ──
-  const parentUrl = `${base}/${encodeURIComponent(docPath)}`;
+  // With case-insensitive mode (default on macOS/iOS) LiveSync derives the doc _id
+  // by lowercasing the path, while preserving real casing in the `path` field.
+  // We must match that or the client cannot map the doc to a file.
+  const docId = docPath.toLowerCase();
+  const parentUrl = `${base}/${encodeURIComponent(docId)}`;
   let rev;
   try {
     const r = await insecureFetch(parentUrl, { headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
@@ -790,8 +794,8 @@ async function obsidianPut(docPath, markdown) {
     }
   } catch(e) { if (e.message?.startsWith("CouchDB")) throw e; }
 
-  // ── 4. Write parent document ──
-  const doc = { _id:docPath, ...(rev?{_rev:rev}:{}),
+  // ── 4. Write parent document (_id lowercased, path keeps original case) ──
+  const doc = { _id:docId, ...(rev?{_rev:rev}:{}),
     type:"plain", children:[chunkId], path:docPath,
     ctime:now, mtime:now, size:markdown.length, eden:{} };
   const pr = await insecureFetch(parentUrl, { method:"PUT",
@@ -1044,12 +1048,14 @@ app.post("/api/obsidian/reset", async (req, res) => {
   const folder = (cfg.folder||"AIOS/Orbit").replace(/\/+$/,"");
   const today = new Date().toISOString().slice(0,10);
   const ws = mdWeekStart(today);
-  const ids = [
+  const base_ids = [
     `${folder}/Dashboard.md`,
     `${folder}/Active Projects.md`,
     `${folder}/Sessions/${today}.md`,
     `${folder}/Weekly Review/${mdISOWeek(ws)}.md`,
   ];
+  // Delete both the old mixed-case IDs and the new lowercased IDs
+  const ids = [...new Set([...base_ids, ...base_ids.map(s=>s.toLowerCase())])];
   const deleted = [];
   try {
     for (const id of ids) {
