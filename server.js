@@ -714,6 +714,29 @@ async function liveSyncEncrypt(plaintext, passphrase, pbkdf2Salt) {
   return { data: "%=" + Buffer.from(out).toString("base64"), encrypted: true };
 }
 
+// Inverse of liveSyncEncrypt — used to verify our crypto matches the vault.
+async function liveSyncDecrypt(input, passphrase, pbkdf2Salt) {
+  if (!input.startsWith("%=")) throw new Error("not a %= HKDF blob");
+  const { subtle } = globalThis.crypto;
+  const bin = new Uint8Array(Buffer.from(input.slice(2), "base64"));
+  const iv       = bin.slice(0, IV_LENGTH);
+  const hkdfSalt = bin.slice(IV_LENGTH, IV_LENGTH + HKDF_SALT_LENGTH);
+  const data     = bin.slice(IV_LENGTH + HKDF_SALT_LENGTH);
+  const keyMaterial = await subtle.importKey("raw", new TextEncoder().encode(passphrase), { name:"PBKDF2" }, false, ["deriveKey"]);
+  const masterKeyRaw = await subtle.deriveKey(
+    { name:"PBKDF2", salt:pbkdf2Salt, iterations:PBKDF2_ITERATIONS, hash:"SHA-256" },
+    keyMaterial, { name:"AES-GCM", length:256 }, true, ["encrypt","decrypt"]
+  );
+  const masterKeyBuf = await subtle.exportKey("raw", masterKeyRaw);
+  const hkdfKey = await subtle.importKey("raw", masterKeyBuf, { name:"HKDF" }, false, ["deriveKey"]);
+  const chunkKey = await subtle.deriveKey(
+    { name:"HKDF", salt:hkdfSalt, info:new Uint8Array(), hash:"SHA-256" },
+    hkdfKey, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]
+  );
+  const plain = await subtle.decrypt({ name:"AES-GCM", iv, tagLength:128 }, chunkKey, data);
+  return new TextDecoder().decode(plain);
+}
+
 // Chunk ID: "h:+" prefix (encrypted chunk) + unique hash. LiveSync fetches chunks
 // by the IDs listed in the parent's children[], so the hash only needs to be unique.
 function liveSyncChunkId(content) {
@@ -1045,6 +1068,46 @@ app.post("/api/obsidian/sync", async (req, res) => {
 });
 
 // Diagnostic: inspect our orbit docs + a real chunk vs our chunk
+// Decisive test: can we decrypt a REAL vault chunk with the configured passphrase
+// + shared salt? If yes, our encryption is guaranteed readable by LiveSync.
+app.get("/api/obsidian/verify", async (req, res) => {
+  const cfg = getObsidianCfg();
+  if (!cfg?.url || !cfg?.db) return res.status(400).json({ error:"not configured" });
+  if (!cfg.passphrase) return res.status(400).json({ error:"no passphrase set in config" });
+  const auth = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
+  const base = `${cfg.url}/${cfg.db}`;
+  const result = {};
+  try {
+    // 1. Read the shared salt
+    _pbkdf2SaltCache = null;
+    let salt;
+    try { salt = await getPbkdf2Salt(cfg, auth); result.saltFound = true; result.saltLen = salt.length; }
+    catch(e) { result.saltFound = false; result.saltError = e.message; return res.json(result); }
+
+    // 2. Find a real (non-orbit) encrypted chunk and try to decrypt it
+    const allR = await insecureFetch(`${base}/_all_docs?limit=60&include_docs=true&startkey=${encodeURIComponent('"h:+"')}&endkey=${encodeURIComponent('"h:+￿"')}`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
+    const allJ = await allR.json();
+    const realChunk = (allJ.rows||[]).map(r=>r.doc).find(d=>d?.e_===true && typeof d.data==="string" && d.data.startsWith("%="));
+    if (!realChunk) { result.realChunkFound = false; }
+    else {
+      result.realChunkFound = true;
+      result.realChunkId = realChunk._id;
+      try {
+        const dec = await liveSyncDecrypt(realChunk.data, cfg.passphrase, salt);
+        result.realChunkDecrypted = true;
+        result.realChunkPreview = dec.slice(0, 100);
+      } catch(e) { result.realChunkDecrypted = false; result.decryptError = e.message; }
+    }
+
+    // 3. Round-trip our own encryption against the same salt
+    const enc = await liveSyncEncrypt("orbit round-trip test ✔️", cfg.passphrase, salt);
+    const back = await liveSyncDecrypt(enc.data, cfg.passphrase, salt);
+    result.ourRoundTrip = (back === "orbit round-trip test ✔️");
+
+    res.json(result);
+  } catch(e) { res.status(500).json({ error:e.message, ...result }); }
+});
+
 app.get("/api/obsidian/inspect", async (req, res) => {
   const cfg = getObsidianCfg();
   if (!cfg?.url) return res.status(400).json({ error:"not configured" });
