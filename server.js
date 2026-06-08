@@ -64,7 +64,7 @@ function writeData(data) {
   const data = readData();
   if (!data.music_obsidian_config?.url) {
     data.music_obsidian_config = {
-      url:        "http://172.20.0.2:5984",
+      url:        "http://192.168.68.79:5984",
       db:         "obsidian",
       user:       "admin",
       pass:       "Plains789",
