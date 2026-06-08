@@ -795,9 +795,11 @@ async function obsidianPut(docPath, markdown) {
   } catch(e) { if (e.message?.startsWith("CouchDB")) throw e; }
 
   // ── 4. Write parent document (_id lowercased, path keeps original case) ──
+  // size MUST be the UTF-8 byte length (Blob.size), not JS string length —
+  // LiveSync rejects the file as corrupted if size != decrypted-content byte length.
   const doc = { _id:docId, ...(rev?{_rev:rev}:{}),
     type:"plain", children:[chunkId], path:docPath,
-    ctime:now, mtime:now, size:markdown.length, eden:{} };
+    ctime:now, mtime:now, size:Buffer.byteLength(markdown, "utf8"), eden:{} };
   const pr = await insecureFetch(parentUrl, { method:"PUT",
     headers:{ "Content-Type":"application/json", Authorization:auth },
     body: JSON.stringify(doc), signal: AbortSignal.timeout(10000) });
