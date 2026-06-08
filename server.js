@@ -1000,7 +1000,7 @@ app.get("/api/obsidian/inspect", async (req, res) => {
     let ourChunk = null;
     if (cfg.db) {
       try {
-        const allR = await insecureFetch(`${base}/_all_docs?limit=30&include_docs=true`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
+        const allR = await insecureFetch(`${base}/_all_docs?limit=30&include_docs=true&startkey=${encodeURIComponent('"AIOS"')}`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
         const allJ = await allR.json();
         const rows = allJ.rows||[];
         docs = rows.map(r=>({
