@@ -982,11 +982,12 @@ app.post("/api/obsidian/sync", async (req, res) => {
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
-// Diagnostic: list all CouchDB databases, then inspect docs in configured db
+// Diagnostic: inspect our orbit docs + a real chunk vs our chunk
 app.get("/api/obsidian/inspect", async (req, res) => {
   const cfg = getObsidianCfg();
   if (!cfg?.url) return res.status(400).json({ error:"not configured" });
   const auth = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
+  const base = `${cfg.url}/${cfg.db}`;
   try {
     // List all databases
     const dbsR = await insecureFetch(`${cfg.url}/_all_dbs`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
@@ -994,11 +995,15 @@ app.get("/api/obsidian/inspect", async (req, res) => {
 
     // Try to read docs from configured db
     let docs = [];
+    let orbitDocs = [];
+    let sampleChunk = null;
+    let ourChunk = null;
     if (cfg.db) {
       try {
-        const allR = await insecureFetch(`${cfg.url}/${cfg.db}/_all_docs?limit=20&include_docs=true`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
+        const allR = await insecureFetch(`${base}/_all_docs?limit=30&include_docs=true`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
         const allJ = await allR.json();
-        docs = (allJ.rows||[]).map(r=>({
+        const rows = allJ.rows||[];
+        docs = rows.map(r=>({
           id: r.id,
           type: r.doc?.type,
           dataType: Array.isArray(r.doc?.data) ? "array" : typeof r.doc?.data,
@@ -1007,9 +1012,24 @@ app.get("/api/obsidian/inspect", async (req, res) => {
           size: r.doc?.size,
           fields: Object.keys(r.doc||{})
         }));
+        // Find our orbit docs
+        orbitDocs = rows.filter(r=>r.id.startsWith("AIOS/")).map(r=>r.doc);
+        // Find a real chunk (h:+ from a non-orbit doc) and one of our chunks
+        const realChunkId = rows.find(r=>r.id.startsWith("h:+") && !orbitDocs.some(d=>d?.children?.includes(r.id)))?.id;
+        const ourChunkId  = orbitDocs[0]?.children?.[0];
+        if (realChunkId) {
+          const cr = await insecureFetch(`${base}/${encodeURIComponent(realChunkId)}`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(8000) });
+          sampleChunk = await cr.json();
+          sampleChunk._dataPreview = typeof sampleChunk.data === "string" ? sampleChunk.data.slice(0,120) : sampleChunk.data;
+        }
+        if (ourChunkId) {
+          const cr = await insecureFetch(`${base}/${encodeURIComponent(ourChunkId)}`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(8000) });
+          ourChunk = await cr.json();
+          ourChunk._dataPreview = typeof ourChunk.data === "string" ? ourChunk.data.slice(0,120) : ourChunk.data;
+        }
       } catch(e2) { docs = [{error: e2.message}]; }
     }
-    res.json({ allDatabases: dbs, configuredDb: cfg.db, docs });
+    res.json({ allDatabases: dbs, configuredDb: cfg.db, orbitDocs, sampleChunk, ourChunk, docs });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
