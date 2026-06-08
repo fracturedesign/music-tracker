@@ -971,27 +971,34 @@ app.post("/api/obsidian/sync", async (req, res) => {
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
-// Diagnostic: read up to 5 real LiveSync docs + our 4 orbit docs for format comparison
+// Diagnostic: list all CouchDB databases, then inspect docs in configured db
 app.get("/api/obsidian/inspect", async (req, res) => {
   const cfg = getObsidianCfg();
-  if (!cfg?.url || !cfg?.db) return res.status(400).json({ error:"not configured" });
+  if (!cfg?.url) return res.status(400).json({ error:"not configured" });
   const auth = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
-  const base = `${cfg.url}/${cfg.db}`;
   try {
-    // Get all doc ids
-    const allR = await insecureFetch(`${base}/_all_docs?limit=20&include_docs=true`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
-    const allJ = await allR.json();
-    const docs = (allJ.rows||[]).map(r=>({
-      id: r.id,
-      type: r.doc?.type,
-      dataType: Array.isArray(r.doc?.data) ? "array" : typeof r.doc?.data,
-      dataPreview: typeof r.doc?.data === "string" ? r.doc.data.slice(0,60) : JSON.stringify(r.doc?.data)?.slice(0,60),
-      children: r.doc?.children,
-      size: r.doc?.size,
-      deleted: r.doc?.deleted,
-      fields: Object.keys(r.doc||{})
-    }));
-    res.json({ total: allJ.total_rows, docs });
+    // List all databases
+    const dbsR = await insecureFetch(`${cfg.url}/_all_dbs`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
+    const dbs = await dbsR.json();
+
+    // Try to read docs from configured db
+    let docs = [];
+    if (cfg.db) {
+      try {
+        const allR = await insecureFetch(`${cfg.url}/${cfg.db}/_all_docs?limit=20&include_docs=true`, { headers:{Authorization:auth}, signal:AbortSignal.timeout(10000) });
+        const allJ = await allR.json();
+        docs = (allJ.rows||[]).map(r=>({
+          id: r.id,
+          type: r.doc?.type,
+          dataType: Array.isArray(r.doc?.data) ? "array" : typeof r.doc?.data,
+          dataPreview: typeof r.doc?.data === "string" ? r.doc.data.slice(0,80) : JSON.stringify(r.doc?.data)?.slice(0,80),
+          children: r.doc?.children,
+          size: r.doc?.size,
+          fields: Object.keys(r.doc||{})
+        }));
+      } catch(e2) { docs = [{error: e2.message}]; }
+    }
+    res.json({ allDatabases: dbs, configuredDb: cfg.db, docs });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
