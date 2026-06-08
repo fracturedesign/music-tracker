@@ -908,13 +908,42 @@ function generateActiveProjectsMd(data) {
   const today   = new Date().toISOString().slice(0,10);
   const ws = mdWeekStart(today), we = mdWeekEnd(ws);
 
-  const rows = active.map(p => {
+  // Days between today and a date (negative = past). Both as YYYY-MM-DD.
+  const daysUntil = (dateStr) => Math.round((new Date(dateStr+"T12:00:00") - new Date(today+"T12:00:00")) / 86400000);
+  // Schedule label for a project based on plannedStart/plannedEnd vs today
+  const scheduleOf = (p) => {
+    const s = p.plannedStart, e = p.plannedEnd;
+    if (!s && !e) return { label:"—", sort:5 };
+    if (e && daysUntil(e) < 0)               return { label:"⚠️ Overdue", sort:0 };
+    if (s && e && today>=s && today<=e)      return { label:"🟢 In window", sort:1 };
+    if (s && daysUntil(s) === 0)             return { label:"📅 Starts today", sort:0 };
+    if (s && daysUntil(s) > 0) {
+      const d = daysUntil(s);
+      return { label:`🔜 In ${d} day${d>1?"s":""}`, sort: d<=7 ? 2 : 4 };
+    }
+    if (e && daysUntil(e) >= 0) {
+      const d = daysUntil(e);
+      return { label:`⏳ Due ${d===0?"today":`in ${d}d`}`, sort: d<=7 ? 1 : 3 };
+    }
+    return { label:"—", sort:5 };
+  };
+  const fmtD = (d) => d || "—";
+
+  const enriched = active.map(p => {
     const ps = sessions.filter(s=>s.project===p.name);
     const last = ps.length ? ps.reduce((a,b)=>a.date>b.date?a:b).date : "—";
     const wm = ps.filter(s=>s.date>=ws&&s.date<=we).reduce((a,s)=>a+s.duration,0);
     const tm = ps.reduce((a,s)=>a+s.duration,0);
-    return `| [[${p.name}]] | ${p.status||"active"} | ${last} | ${wm?mdDurMins(wm):"—"} | ${tm?mdDurMins(tm):"—"} |`;
-  });
+    const sch = scheduleOf(p);
+    return { p, last, wm, tm, sch };
+  }).sort((a,b)=> a.sch.sort - b.sch.sort);
+
+  const rows = enriched.map(({p,last,wm,tm,sch}) =>
+    `| [[${p.name}]] | ${p.status||"active"} | ${sch.label} | ${fmtD(p.plannedStart)} | ${fmtD(p.plannedEnd)} | ${last} | ${wm?mdDurMins(wm):"—"} | ${tm?mdDurMins(tm):"—"} |`);
+
+  // "On deck": scheduled for today (in-window / starts today / due≤7d / overdue)
+  const onDeck = enriched.filter(({sch})=>sch.sort<=2);
+  const onDeckList = onDeck.map(({p,sch})=>`- ${sch.label} — [[${p.name}]]${p.plannedEnd?` (ends ${p.plannedEnd})`:""}`).join("\n");
 
   return `---
 type: orbit-projects
@@ -924,9 +953,14 @@ updated: ${today}
 # 🎵 Active Projects
 *Last synced: ${mdSyncLine()}*
 
-| Project | Status | Last Session | This Week | Total |
-|---------|--------|--------------|-----------|-------|
-${rows.join("\n")||"| _None_ | — | — | — | — |"}
+## 📌 On Deck
+${onDeck.length ? onDeckList : "_Nothing scheduled for now_"}
+
+---
+
+| Project | Status | Schedule | Start | End | Last Session | This Week | Total |
+|---------|--------|----------|-------|-----|--------------|-----------|-------|
+${rows.join("\n")||"| _None_ | — | — | — | — | — | — | — |"}
 
 ---
 
