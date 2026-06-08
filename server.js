@@ -966,6 +966,19 @@ ${rows.join("\n")||"| _None_ | — | — | — | — | — | — | — |"}
 
 ---
 
+## 📝 Project Notes
+
+${(()=>{
+  const withNotes = enriched.filter(({p})=>p.notes && p.notes.trim());
+  if (!withNotes.length) return "_No project notes yet_";
+  return withNotes.map(({p,sch})=>{
+    const tag = sch.sort<=2 ? ` · ${sch.label}` : "";
+    return `### [[${p.name}]]${tag}\n\n${p.notes.trim()}`;
+  }).join("\n\n");
+})()}
+
+---
+
 ## 💡 Ideas / On Hold
 
 ${onHold.map(p=>{
