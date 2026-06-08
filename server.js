@@ -31,6 +31,7 @@ async function insecureFetch(url, opts={}) {
   finally { process.env.NODE_TLS_REJECT_UNAUTHORIZED = prev ?? undefined; }
 }
 import multer from "multer";
+import { DAILY_QUESTS, WEEKLY_QUESTS } from "./questPools.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE   = process.env.DATA_PATH || join(__dirname, "data.json");
@@ -197,9 +198,9 @@ app.post("/api/data/:key", (req, res) => {
   writeData(data);
   broadcast(req.params.key);
   res.json({ ok: true });
-  // Auto-sync Obsidian on sessions or projects change
+  // Auto-sync Obsidian on sessions, projects, or quest changes
   const k = req.params.key;
-  if (k === "music_sessions" || k === "music_projects") {
+  if (k === "music_sessions" || k === "music_projects" || k === "music_quests") {
     syncAllObsidianNotes().catch(e=>console.error("[Obsidian sync]", e.message));
   }
 });
@@ -904,6 +905,7 @@ function generateActiveProjectsMd(data) {
   const sessions = mdVal(data.music_sessions) || [];
   const allProjects = mdVal(data.music_projects) || [];
   const active  = allProjects.filter(p=>!p.parentGroup&&!["done","released","idea"].includes(p.status||"active"));
+  const onHold  = allProjects.filter(p=>!p.parentGroup&&(p.status||"")==="idea");
   const done    = allProjects.filter(p=>["done","released"].includes(p.status||""));
   const today   = new Date().toISOString().slice(0,10);
   const ws = mdWeekStart(today), we = mdWeekEnd(ws);
@@ -961,6 +963,17 @@ ${onDeck.length ? onDeckList : "_Nothing scheduled for now_"}
 | Project | Status | Schedule | Start | End | Last Session | This Week | Total |
 |---------|--------|----------|-------|-----|--------------|-----------|-------|
 ${rows.join("\n")||"| _None_ | — | — | — | — | — | — | — |"}
+
+---
+
+## 💡 Ideas / On Hold
+
+${onHold.map(p=>{
+  const sch = scheduleOf(p);
+  const dates = (p.plannedStart||p.plannedEnd) ? ` · ${fmtD(p.plannedStart)} → ${fmtD(p.plannedEnd)}` : "";
+  const tag = sch.sort<=2 ? ` · ${sch.label}` : "";
+  return `- [[${p.name}]]${dates}${tag}`;
+}).join("\n")||"_None_"}
 
 ---
 
@@ -1073,6 +1086,96 @@ async function syncAllObsidianNotes(specificDate) {
     obsidianPut(`${folder}/Weekly Review/${mdISOWeek(ws)}.md`, generateWeeklyReviewMd(data,ws)),
   ]);
 }
+
+/* ── Server-side quest rotation (ported from src/App.jsx) ──
+   Lets daily/weekly quests refresh overnight even if no device opens the app,
+   so the morning Obsidian brief always has fresh quests. */
+function srvISOWeek(dateStr) {
+  const d=new Date(dateStr+"T00:00:00");
+  const jan4=new Date(d.getFullYear(),0,4);
+  const dow=jan4.getDay()||7;
+  const weekStart=new Date(jan4); weekStart.setDate(jan4.getDate()-dow+1);
+  const week=Math.floor((d-weekStart)/604800000)+1;
+  return `${d.getFullYear()}-W${String(week).padStart(2,"0")}`;
+}
+function srvPickQuestWeighted(pool, recentIdxs, count) {
+  const recentSet=new Set(recentIdxs);
+  const items=pool.map((q,i)=>({i,text:q[1],w:recentSet.has(i)?0.15:1.0}));
+  const result=[];
+  for(let p=0;p<Math.min(count,items.length);p++){
+    const avail=items.filter(x=>!result.some(r=>r.idx===x.i));
+    const total=avail.reduce((s,x)=>s+x.w,0);
+    let rand=Math.random()*total;
+    let picked=avail[avail.length-1];
+    for(const item of avail){rand-=item.w;if(rand<=0){picked=item;break;}}
+    result.push({idx:picked.i,text:picked.text,done:false});
+  }
+  return result;
+}
+function srvRefreshQuestsIfStale(qd, todayStr, weekStr) {
+  let next=qd, changed=false;
+  if(qd.dailyDate!==todayStr){
+    const newHist=[...(qd.completedDailyHistory||[])];
+    (qd.currentDaily||[]).forEach(q=>{
+      if(q.done&&!newHist.some(h=>h.idx===q.idx&&h.date===(qd.dailyDate||todayStr)))
+        newHist.push({idx:q.idx,date:qd.dailyDate||todayStr});
+    });
+    const cutDate=new Date(todayStr);cutDate.setDate(cutDate.getDate()-30);
+    const cutStr=cutDate.toISOString().slice(0,10);
+    const prunedHist=newHist.filter(h=>h.date>=cutStr);
+    const now=new Date(todayStr);
+    const recentIdxs=prunedHist.filter(h=>Math.round((now-new Date(h.date))/86400000)<7).map(h=>h.idx);
+    next={...next,currentDaily:srvPickQuestWeighted(DAILY_QUESTS,recentIdxs,3),dailyDate:todayStr,completedDailyHistory:prunedHist};
+    changed=true;
+  }
+  if(qd.weeklyDate!==weekStr){
+    const newWHist=[...(qd.completedWeeklyHistory||[])];
+    if(qd.currentWeekly?.done)newWHist.push({idx:qd.currentWeekly.idx,weekStr:qd.weeklyDate});
+    const prunedWHist=newWHist.slice(-24);
+    const recentWIdxs=prunedWHist.slice(-8).map(h=>h.idx);
+    const newWeekly=srvPickQuestWeighted(WEEKLY_QUESTS,recentWIdxs,1)[0];
+    next={...next,currentWeekly:newWeekly,weeklyDate:weekStr,completedWeeklyHistory:prunedWHist};
+    changed=true;
+  }
+  return changed?next:null;
+}
+
+// Refresh quests if a new day/week has started, persist, broadcast to live clients.
+// Returns true if anything changed. Quests must already be initialised by the app.
+function rotateQuestsIfNeeded() {
+  const data = readData();
+  const qd = mdVal(data.music_quests);
+  if (!qd || !qd.currentDaily) return false; // never initialised — leave to the app
+  const today = new Date().toISOString().slice(0,10);
+  const weekStr = srvISOWeek(today);
+  const next = srvRefreshQuestsIfStale(qd, today, weekStr);
+  if (!next) return false;
+  data.music_quests = (typeof data.music_quests === "string") ? JSON.stringify(next) : next;
+  writeData(data);
+  broadcast("music_quests");
+  return true;
+}
+
+// Daily scheduled job: rotate quests for the new day, then push fresh notes to
+// Obsidian — so the morning brief is ready even if Orbit was never opened.
+// Runs at next ~05:00 local, then every 24h. Also catches up on startup.
+function scheduleDailyMorningSync() {
+  const run = () => {
+    try { rotateQuestsIfNeeded(); } catch(e){ console.error("[quest rotate]", e.message); }
+    syncAllObsidianNotes().catch(e=>console.error("[morning sync]", e.message));
+  };
+  // Catch up shortly after boot (covers a NAS that was off overnight)
+  setTimeout(run, 15000);
+  const msUntil5am = () => {
+    const now=new Date(); const t=new Date(now);
+    t.setHours(5,0,0,0);
+    if (t <= now) t.setDate(t.getDate()+1);
+    return t - now;
+  };
+  const arm = () => setTimeout(() => { run(); arm(); }, msUntil5am());
+  arm();
+}
+scheduleDailyMorningSync();
 
 // Clean slate: delete our 4 parent docs so their broken revision history (from
 // earlier failed sync attempts) is cleared. Next sync recreates them pristine.
