@@ -4015,6 +4015,21 @@ export default function App() {
   },[timerProjDropOpen]);
   useEffect(()=>{if(timer.phase==="running"&&Date.now()>=timer.endsAt)setTimer(t=>t.phase==="running"?{...t,phase:"done",remaining:0,endsAt:0}:t);},[tick,timer.phase,timer.endsAt]);
 
+  // Fire notification when timer finishes
+  const prevTimerPhase=useRef(timer.phase);
+  useEffect(()=>{
+    if(prevTimerPhase.current!=="done"&&timer.phase==="done"){
+      const projLabel=timerProject?` — ${timerProject}`:"";
+      const msg={type:"TIMER_DONE",title:"⏱ Time's up!",body:`Your ${timerTargetMin}m session is done${projLabel}. Log it?`};
+      if(navigator.serviceWorker?.controller){
+        navigator.serviceWorker.controller.postMessage(msg);
+      } else if(Notification.permission==="granted"){
+        new Notification(msg.title,{body:msg.body,icon:"/icon-192.png",tag:"orbit-timer"});
+      }
+    }
+    prevTimerPhase.current=timer.phase;
+  },[timer.phase]);// eslint-disable-line
+
   const timerRemaining=timer.phase==="running"?Math.max(0,timer.endsAt-Date.now()):timer.remaining;
   const timerElapsed=Math.max(0,timer.target-timerRemaining);
   const timerProgress=timer.target?Math.min(1,timerElapsed/timer.target):0;
@@ -4030,7 +4045,12 @@ export default function App() {
     if(!projects.find(p=>p.name===name)){const proj={name,notes:"",status:"active"};await saveProjects([...projects,proj]);}
     setTimerProject(name);setTimerCreatingProj(false);setTimerNewProjInput("");
   };
-  const startCountdown=mins=>{const ms=Math.min(480,Math.max(1,Math.round(mins)))*60000;setTimer({phase:"running",target:ms,endsAt:Date.now()+ms,remaining:ms});};
+  const startCountdown=mins=>{
+    // Request notification permission the first time a timer starts
+    if("Notification"in window&&Notification.permission==="default")Notification.requestPermission();
+    const ms=Math.min(480,Math.max(1,Math.round(mins)))*60000;
+    setTimer({phase:"running",target:ms,endsAt:Date.now()+ms,remaining:ms});
+  };
   const pauseCountdown=()=>setTimer(t=>({...t,phase:"paused",remaining:Math.max(0,t.endsAt-Date.now()),endsAt:0}));
   const resumeCountdown=()=>setTimer(t=>({...t,phase:"running",endsAt:Date.now()+t.remaining}));
   const logCountdown=()=>{setTimer(t=>({...t,phase:t.phase==="running"?"paused":t.phase,remaining:timerRemaining,endsAt:0}));setSheet({form:{...newForm(),duration:timerLogMin,project:timerProject,note:timerNote},editing:false,id:null,fromTimer:true});};
