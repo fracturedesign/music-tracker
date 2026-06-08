@@ -1177,8 +1177,13 @@ function scheduleDailyMorningSync() {
     try { rotateQuestsIfNeeded(); } catch(e){ console.error("[quest rotate]", e.message); }
     syncAllObsidianNotes().catch(e=>console.error("[morning sync]", e.message));
   };
-  // Catch up shortly after boot (covers a NAS that was off overnight)
-  setTimeout(run, 15000);
+  // On boot: only sync Obsidian notes — do NOT rotate quests.
+  // Quest rotation on boot was causing the weekly quest to reset on every redeploy
+  // when the stored weeklyDate was from a prior week (perfectly normal mid-week).
+  // The 5am job handles rotation; the client handles it when the app is opened.
+  setTimeout(() => {
+    syncAllObsidianNotes().catch(e=>console.error("[boot sync]", e.message));
+  }, 15000);
   const msUntil5am = () => {
     const now=new Date(); const t=new Date(now);
     t.setHours(5,0,0,0);
@@ -1259,6 +1264,7 @@ app.post("/api/obsidian/sync", async (req, res) => {
     res.json({ ok:true });
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
+
 
 // Diagnostic: inspect our orbit docs + a real chunk vs our chunk
 // Decisive test: can we decrypt a REAL vault chunk with the configured passphrase
