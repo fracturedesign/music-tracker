@@ -657,47 +657,58 @@ app.delete("/api/recordings/:id", (req, res) => {
 
 /* ── Obsidian LiveSync integration ── */
 
-// Encrypt content using Self-Hosting LiveSync's E2E format
-async function liveSyncEncrypt(plaintext, passphrase) {
-  if (!passphrase) return plaintext;
-  const { subtle } = globalThis.crypto;
-  const enc = new TextEncoder();
-  // LiveSync e2ee_v2 format: random 32-byte salt + 12-byte IV + ciphertext
-  // salt is stored in the output so LiveSync can derive the same key on decryption
-  const salt = globalThis.crypto.getRandomValues(new Uint8Array(32));
-  const iv   = globalThis.crypto.getRandomValues(new Uint8Array(12));
-  const keyMaterial = await subtle.importKey("raw", enc.encode(passphrase), { name:"PBKDF2" }, false, ["deriveKey"]);
-  const key = await subtle.deriveKey(
-    { name:"PBKDF2", salt, iterations:1000, hash:"SHA-256" },
-    keyMaterial, { name:"AES-GCM", length:256 }, false, ["encrypt"]
-  );
-  const cipher = await subtle.encrypt({ name:"AES-GCM", iv }, key, enc.encode(plaintext));
-  const out = new Uint8Array(32 + 12 + cipher.byteLength);
-  out.set(salt, 0); out.set(iv, 32); out.set(new Uint8Array(cipher), 44);
-  return "e+" + Buffer.from(out).toString("base64");
-}
-
 function getObsidianCfg() { return readData().music_obsidian_config || null; }
 
+// Compute a LiveSync-compatible chunk ID: "h:+" + first 8 bytes of SHA-256 as base36
+import { createHash } from "crypto";
+function liveSyncChunkId(content) {
+  const hash = createHash("sha256").update(content).digest();
+  const num = BigInt("0x" + hash.slice(0, 8).toString("hex"));
+  return "h:+" + num.toString(36).padStart(13, "0");
+}
+
+// Write one note using LiveSync's actual chunked "plain" format:
+//   parent doc  → { type:"plain", children:[chunkId], path, ctime, mtime, size, eden:{} }
+//   chunk doc   → { type:"leaf", data: markdown }
 async function obsidianPut(docPath, markdown) {
   const cfg = getObsidianCfg();
   if (!cfg?.url || !cfg?.db) throw new Error("Obsidian not configured");
   const auth = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
-  const content = cfg.passphrase ? await liveSyncEncrypt(markdown, cfg.passphrase) : markdown;
-  const now = Date.now();
-  const apiUrl = `${cfg.url}/${cfg.db}/${encodeURIComponent(docPath)}`;
+  const base  = `${cfg.url}/${cfg.db}`;
+  const now   = Date.now();
+
+  // ── 1. Write chunk document (content-addressed, skip if already exists) ──
+  const chunkId  = liveSyncChunkId(markdown);
+  const chunkUrl = `${base}/${encodeURIComponent(chunkId)}`;
+  const chunkGet = await insecureFetch(chunkUrl, { headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
+  if (chunkGet.status === 404) {
+    const cp = await insecureFetch(chunkUrl, { method:"PUT",
+      headers:{ "Content-Type":"application/json", Authorization:auth },
+      body: JSON.stringify({ _id:chunkId, type:"leaf", data:markdown }),
+      signal: AbortSignal.timeout(10000) });
+    if (!cp.ok) {
+      const txt = await cp.text().catch(()=>"");
+      throw new Error(`CouchDB chunk PUT ${cp.status}: ${txt.slice(0,200)}`);
+    }
+  }
+
+  // ── 2. Get current _rev of parent doc ──
+  const parentUrl = `${base}/${encodeURIComponent(docPath)}`;
   let rev;
   try {
-    const r = await insecureFetch(apiUrl, { headers:{ Authorization:auth }, signal: AbortSignal.timeout(8000) });
+    const r = await insecureFetch(parentUrl, { headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
     if (r.ok) { const j = await r.json(); rev = j._rev; }
     else if (r.status !== 404) {
       const txt = await r.text().catch(()=>"");
       throw new Error(`CouchDB GET ${r.status}: ${txt.slice(0,120)}`);
     }
-  } catch(e) { if (e.message?.startsWith("CouchDB")) throw e; /* network err on GET — try PUT anyway */ }
-  const doc = { _id:docPath, ...(rev?{_rev:rev}:{}), type:"newnotes", data:content,
-    ctime:now, mtime:now, size:markdown.length, children:[], deleted:false, tags:[] };
-  const pr = await insecureFetch(apiUrl, { method:"PUT",
+  } catch(e) { if (e.message?.startsWith("CouchDB")) throw e; }
+
+  // ── 3. Write parent document ──
+  const doc = { _id:docPath, ...(rev?{_rev:rev}:{}),
+    type:"plain", children:[chunkId], path:docPath,
+    ctime:now, mtime:now, size:markdown.length, eden:{} };
+  const pr = await insecureFetch(parentUrl, { method:"PUT",
     headers:{ "Content-Type":"application/json", Authorization:auth },
     body: JSON.stringify(doc), signal: AbortSignal.timeout(10000) });
   if (!pr.ok) {
