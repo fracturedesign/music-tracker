@@ -659,24 +659,63 @@ app.delete("/api/recordings/:id", (req, res) => {
 
 function getObsidianCfg() { return readData().music_obsidian_config || null; }
 
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 
-// LiveSync e2ee_v1: key = SHA-256(passphrase), output = "%=" + base64(iv[12] + ciphertext)
-// Chunk doc gets e_:true when encrypted. This matches what LiveSync actually writes.
-async function liveSyncEncrypt(plaintext, passphrase) {
+const PBKDF2_ITERATIONS = 310_000;  // octagonal-wheels hkdf.ts
+const HKDF_SALT_LENGTH  = 32;
+const IV_LENGTH         = 12;
+
+// The shared PBKDF2 salt lives in a _local doc that LiveSync creates.
+// All clients share it; it is required to derive the same master key.
+const SYNC_PARAMS_DOCID = "_local/obsidian_livesync_sync_parameters";
+let _pbkdf2SaltCache = null;
+async function getPbkdf2Salt(cfg, auth) {
+  if (_pbkdf2SaltCache) return _pbkdf2SaltCache;
+  const url = `${cfg.url}/${cfg.db}/${encodeURIComponent(SYNC_PARAMS_DOCID)}`;
+  const r = await insecureFetch(url, { headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error(`Cannot read LiveSync sync params (${r.status}). Open Obsidian + sync once first.`);
+  const j = await r.json();
+  if (!j.pbkdf2salt) throw new Error("LiveSync sync params doc has no pbkdf2salt — E2E may not be set up yet.");
+  _pbkdf2SaltCache = new Uint8Array(Buffer.from(j.pbkdf2salt, "base64"));
+  return _pbkdf2SaltCache;
+}
+
+// LiveSync HKDF encryption (octagonal-wheels/encryption/hkdf.ts).
+//   masterKey  = PBKDF2(passphrase, pbkdf2Salt, 310000, SHA-256) -> AES-GCM-256 raw -> HKDF key
+//   chunkKey   = HKDF(masterKey, hkdfSalt[random32], info="", SHA-256) -> AES-GCM-256
+//   ciphertext = AES-GCM(chunkKey, iv[random12], utf8(plaintext))   (16-byte tag appended)
+//   output     = "%=" + base64( iv[12] || hkdfSalt[32] || ciphertext )
+async function liveSyncEncrypt(plaintext, passphrase, pbkdf2Salt) {
   if (!passphrase) return { data: plaintext, encrypted: false };
   const { subtle } = globalThis.crypto;
   const enc = new TextEncoder();
-  const keyHash = await subtle.digest("SHA-256", enc.encode(passphrase));
-  const key = await subtle.importKey("raw", keyHash, { name:"AES-GCM" }, false, ["encrypt"]);
-  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-  const cipher = await subtle.encrypt({ name:"AES-GCM", iv }, key, enc.encode(plaintext));
-  const out = new Uint8Array(12 + cipher.byteLength);
-  out.set(iv, 0); out.set(new Uint8Array(cipher), 12);
+
+  const keyMaterial = await subtle.importKey("raw", enc.encode(passphrase), { name:"PBKDF2" }, false, ["deriveKey"]);
+  const masterKeyRaw = await subtle.deriveKey(
+    { name:"PBKDF2", salt:pbkdf2Salt, iterations:PBKDF2_ITERATIONS, hash:"SHA-256" },
+    keyMaterial, { name:"AES-GCM", length:256 }, true, ["encrypt","decrypt"]
+  );
+  const masterKeyBuf = await subtle.exportKey("raw", masterKeyRaw);
+  const hkdfKey = await subtle.importKey("raw", masterKeyBuf, { name:"HKDF" }, false, ["deriveKey"]);
+
+  const hkdfSalt = randomBytes(HKDF_SALT_LENGTH);
+  const chunkKey = await subtle.deriveKey(
+    { name:"HKDF", salt:hkdfSalt, info:new Uint8Array(), hash:"SHA-256" },
+    hkdfKey, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]
+  );
+
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = new Uint8Array(await subtle.encrypt({ name:"AES-GCM", iv, tagLength:128 }, chunkKey, enc.encode(plaintext)));
+
+  const out = new Uint8Array(IV_LENGTH + HKDF_SALT_LENGTH + cipher.length);
+  out.set(iv, 0);
+  out.set(hkdfSalt, IV_LENGTH);
+  out.set(cipher, IV_LENGTH + HKDF_SALT_LENGTH);
   return { data: "%=" + Buffer.from(out).toString("base64"), encrypted: true };
 }
 
-// Chunk ID: "h:+" + first 8 bytes of SHA-256(content) as base36, 13 chars
+// Chunk ID: "h:+" prefix (encrypted chunk) + unique hash. LiveSync fetches chunks
+// by the IDs listed in the parent's children[], so the hash only needs to be unique.
 function liveSyncChunkId(content) {
   const hash = createHash("sha256").update(content).digest();
   const num = BigInt("0x" + hash.slice(0, 8).toString("hex"));
@@ -693,22 +732,25 @@ async function obsidianPut(docPath, markdown) {
   const base  = `${cfg.url}/${cfg.db}`;
   const now   = Date.now();
 
-  // ── 1. Encrypt content ──
-  const { data: chunkData, encrypted } = await liveSyncEncrypt(markdown, cfg.passphrase);
+  // ── 1. Fetch shared salt + encrypt content ──
+  const pbkdf2Salt = cfg.passphrase ? await getPbkdf2Salt(cfg, auth) : null;
+  const { data: chunkData, encrypted } = await liveSyncEncrypt(markdown, cfg.passphrase, pbkdf2Salt);
 
-  // ── 2. Write chunk (content-addressed by encrypted data, skip if exists) ──
-  const chunkId  = liveSyncChunkId(chunkData);
+  // ── 2. Write chunk. Chunk ID derived from PLAINTEXT (encryption is randomised,
+  //    so ciphertext differs each run; plaintext keeps the ID stable for dedup). ──
+  const chunkId  = liveSyncChunkId("orbit:" + docPath + ":" + markdown);
   const chunkUrl = `${base}/${encodeURIComponent(chunkId)}`;
   const chunkGet = await insecureFetch(chunkUrl, { headers:{ Authorization:auth }, signal:AbortSignal.timeout(8000) });
-  if (chunkGet.status === 404) {
-    const chunkDoc = { _id:chunkId, type:"leaf", data:chunkData, ...(encrypted ? { e_:true } : {}) };
-    const cp = await insecureFetch(chunkUrl, { method:"PUT",
-      headers:{ "Content-Type":"application/json", Authorization:auth },
-      body: JSON.stringify(chunkDoc), signal: AbortSignal.timeout(10000) });
-    if (!cp.ok) {
-      const txt = await cp.text().catch(()=>"");
-      throw new Error(`CouchDB chunk PUT ${cp.status}: ${txt.slice(0,200)}`);
-    }
+  let chunkRev;
+  if (chunkGet.ok) { chunkRev = (await chunkGet.json())._rev; }
+  // Always (re)write the chunk so its ciphertext is fresh & decryptable
+  const chunkDoc = { _id:chunkId, ...(chunkRev?{_rev:chunkRev}:{}), type:"leaf", data:chunkData, ...(encrypted ? { e_:true } : {}) };
+  const cp = await insecureFetch(chunkUrl, { method:"PUT",
+    headers:{ "Content-Type":"application/json", Authorization:auth },
+    body: JSON.stringify(chunkDoc), signal: AbortSignal.timeout(10000) });
+  if (!cp.ok) {
+    const txt = await cp.text().catch(()=>"");
+    throw new Error(`CouchDB chunk PUT ${cp.status}: ${txt.slice(0,200)}`);
   }
 
   // ── 3. Get current _rev of parent doc ──
@@ -988,6 +1030,7 @@ app.post("/api/obsidian/config", (req, res) => {
     folder:folder||existing.folder||"AIOS/Orbit",
   };
   writeData(data);
+  _pbkdf2SaltCache = null;  // re-fetch salt on next sync (db/url/creds may have changed)
   res.json({ ok:true });
 });
 

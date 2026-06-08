@@ -35,7 +35,8 @@
       "Bash(/opt/homebrew/bin/npm ls *)",
       "Bash(npm run *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(cd /tmp/clib && grep -n \"ensurePBKDF2Salt\\\\|getPBKDF2Salt\\\\|SALT_OF_PASSPHRASE\\\\|saltOfPassphrase\\\\|_local\\\\|salt\" src/replication/SyncParamsHandler.ts 2>/dev/null | head -40)"
     ]
   }
 }
