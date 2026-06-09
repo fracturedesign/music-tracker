@@ -102,9 +102,12 @@ function refreshQuestsIfStale(qd,todayStr,weekStr){
     next={...next,currentDaily:pickQuestWeighted(DAILY_QUESTS,recentIdxs,3),dailyDate:todayStr,completedDailyHistory:prunedHist};
     changed=true;
   }
-  if(qd.weeklyDate!==weekStr){
+  // Guard: never rotate a completed weekly quest unless we've actually moved to a new week.
+  // If weeklyDate is missing but the quest is already done, treat it as current week to be safe.
+  const weeklyIsDoneThisWeek=qd.currentWeekly?.done&&(!qd.weeklyDate||qd.weeklyDate===weekStr);
+  if(qd.weeklyDate!==weekStr&&!weeklyIsDoneThisWeek){
     const newWHist=[...(qd.completedWeeklyHistory||[])];
-    if(qd.currentWeekly?.done)newWHist.push({idx:qd.currentWeekly.idx,weekStr:qd.weeklyDate});
+    if(qd.currentWeekly?.done)newWHist.push({idx:qd.currentWeekly.idx,weekStr:qd.weeklyDate||weekStr});
     const prunedWHist=newWHist.slice(-24);
     const recentWIdxs=prunedWHist.slice(-8).map(h=>h.idx);
     const newWeekly=pickQuestWeighted(WEEKLY_QUESTS,recentWIdxs,1)[0];
@@ -4062,8 +4065,14 @@ export default function App() {
   const {currentStreak,longestStreak}=(()=>{
     if(!sortedDates.length)return{currentStreak:0,longestStreak:0};
     const set=new Set(sortedDates),dayMs=86400000;
-    let cur=0,t=keyToUTCms(sortedDates[sortedDates.length-1]);
-    while(set.has(dayKeyUTC(t))){cur++;t-=dayMs;}
+    // Only count a current streak if the most recent session was today or yesterday;
+    // otherwise the user broke the streak and cur should be 0.
+    const lastDate=sortedDates[sortedDates.length-1];
+    let cur=0;
+    if(lastDate===today||lastDate===yesterday){
+      let t=keyToUTCms(lastDate);
+      while(set.has(dayKeyUTC(t))){cur++;t-=dayMs;}
+    }
     let longest=0,streak=0,prev=null;
     for(const d of sortedDates){if(prev&&keyToUTCms(d)-keyToUTCms(prev)===dayMs)streak++;else streak=1;longest=Math.max(longest,streak);prev=d;}
     return{currentStreak:cur,longestStreak:longest};

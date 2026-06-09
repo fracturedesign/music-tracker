@@ -1141,9 +1141,12 @@ function srvRefreshQuestsIfStale(qd, todayStr, weekStr) {
     next={...next,currentDaily:srvPickQuestWeighted(DAILY_QUESTS,recentIdxs,3),dailyDate:todayStr,completedDailyHistory:prunedHist};
     changed=true;
   }
-  if(qd.weeklyDate!==weekStr){
+  // Guard: never rotate a completed weekly quest unless we've moved to a new week.
+  // A missing weeklyDate with done=true is treated as current week to be safe.
+  const weeklyIsDoneThisWeek=qd.currentWeekly?.done&&(!qd.weeklyDate||qd.weeklyDate===weekStr);
+  if(qd.weeklyDate!==weekStr&&!weeklyIsDoneThisWeek){
     const newWHist=[...(qd.completedWeeklyHistory||[])];
-    if(qd.currentWeekly?.done)newWHist.push({idx:qd.currentWeekly.idx,weekStr:qd.weeklyDate});
+    if(qd.currentWeekly?.done)newWHist.push({idx:qd.currentWeekly.idx,weekStr:qd.weeklyDate||weekStr});
     const prunedWHist=newWHist.slice(-24);
     const recentWIdxs=prunedWHist.slice(-8).map(h=>h.idx);
     const newWeekly=srvPickQuestWeighted(WEEKLY_QUESTS,recentWIdxs,1)[0];
