@@ -61,14 +61,46 @@ const pickProjectColor=(usedColors)=>{
 // ── Quest system ─────────────────────────────────────────────────────────────
 import { DAILY_QUESTS, WEEKLY_QUESTS, OBLIQUE_QUESTS } from "../questPools.js";
 
+// ISO-8601 week key, computed entirely in UTC so DST never shifts the boundary.
+// Rolls over on Monday: every day Mon–Sun of a week maps to the same key.
+// (The old implementation divided raw local-time ms, so after the spring-forward
+//  DST transition the week rolled over a day early — that caused weekly quests to
+//  rotate on Tuesday instead of Monday and on every redeploy.)
 function getISOWeek(dateStr) {
+  const [y,m,dd]=dateStr.split("-").map(Number);
+  const d=new Date(Date.UTC(y,m-1,dd));
+  const day=(d.getUTCDay()+6)%7;            // Mon=0 … Sun=6
+  d.setUTCDate(d.getUTCDate()-day+3);        // Thursday of this week decides the year
+  const firstThu=new Date(Date.UTC(d.getUTCFullYear(),0,4));
+  const ftDay=(firstThu.getUTCDay()+6)%7;
+  firstThu.setUTCDate(firstThu.getUTCDate()-ftDay+3);
+  return `${d.getUTCFullYear()}-W${String(1+Math.round((d-firstThu)/604800000)).padStart(2,"0")}`;
+}
+// Old, DST-buggy week function — kept ONLY to recognise weeklyDate values written by
+// previous builds so we can migrate them. Never use for new logic.
+function legacyISOWeek(dateStr) {
   const d=new Date(dateStr+"T00:00:00");
   const jan4=new Date(d.getFullYear(),0,4);
   const dow=jan4.getDay()||7;
   const weekStart=new Date(jan4);
   weekStart.setDate(jan4.getDate()-dow+1);
-  const week=Math.floor((d-weekStart)/604800000)+1;
-  return`${d.getFullYear()}-W${String(week).padStart(2,"0")}`;
+  return `${d.getFullYear()}-W${String(Math.floor((d-weekStart)/604800000)+1).padStart(2,"0")}`;
+}
+// One-time migration: if a stored weeklyDate was written by the old function for any
+// day of the CURRENT Mon–Sun week, re-stamp it to the corrected key so the in-flight
+// weekly quest is not rotated once on upgrade. A genuinely stale key (from a previous
+// week) is left alone so it still rotates normally.
+function migrateWeeklyKey(qd) {
+  if(!qd||!qd.weeklyDate) return qd;
+  const todayStr=toDateStr(new Date());
+  const fixedWeek=getISOWeek(todayStr);
+  if(qd.weeklyDate===fixedWeek) return qd;
+  const mon=parseDate(getWeekStart(0));
+  for(let i=0;i<7;i++){
+    const d=new Date(mon); d.setDate(mon.getDate()+i);
+    if(legacyISOWeek(toDateStr(d))===qd.weeklyDate) return {...qd,weeklyDate:fixedWeek};
+  }
+  return qd;
 }
 function questLevel(xp){const xpPerLevel=50;return{level:Math.floor(xp/xpPerLevel)+1,xpInLevel:xp%xpPerLevel,xpPerLevel};}
 function pickQuestWeighted(pool,recentIdxs,count){
@@ -102,10 +134,8 @@ function refreshQuestsIfStale(qd,todayStr,weekStr){
     next={...next,currentDaily:pickQuestWeighted(DAILY_QUESTS,recentIdxs,3),dailyDate:todayStr,completedDailyHistory:prunedHist};
     changed=true;
   }
-  // Guard: never rotate a completed weekly quest unless we've actually moved to a new week.
-  // If weeklyDate is missing but the quest is already done, treat it as current week to be safe.
-  const weeklyIsDoneThisWeek=qd.currentWeekly?.done&&(!qd.weeklyDate||qd.weeklyDate===weekStr);
-  if(qd.weeklyDate!==weekStr&&!weeklyIsDoneThisWeek){
+  // Rotate the weekly quest once per ISO week (on Monday), regardless of completion.
+  if(qd.weeklyDate!==weekStr){
     const newWHist=[...(qd.completedWeeklyHistory||[])];
     if(qd.currentWeekly?.done)newWHist.push({idx:qd.currentWeekly.idx,weekStr:qd.weeklyDate||weekStr});
     const prunedWHist=newWHist.slice(-24);
@@ -3726,7 +3756,12 @@ export default function App() {
       try{const ar=await storage.get("music_archived_projects");if(ar?.value)setArchivedProjects(JSON.parse(ar.value));}catch{}
       try{
         const q=await storage.get("music_quests");
-        if(q?.value){setQuestData(JSON.parse(q.value));}
+        if(q?.value){
+          const parsed=JSON.parse(q.value);
+          const migrated=migrateWeeklyKey(parsed);
+          setQuestData(migrated);
+          if(migrated!==parsed){try{await storage.set("music_quests",JSON.stringify(migrated));}catch{}}
+        }
         else{
           const todayNow=toDateStr(new Date());
           const weekNow=getISOWeek(todayNow);

@@ -822,11 +822,9 @@ function mdWeekStart(dateStr, off=0) {
 function mdWeekEnd(weekStartStr) {
   const d=new Date(weekStartStr+"T12:00:00"); d.setDate(d.getDate()+6); return d.toISOString().slice(0,10);
 }
+// Weekly-review filename label — delegate to the same DST-safe ISO week as quests.
 function mdISOWeek(dateStr) {
-  const d=new Date(dateStr+"T12:00:00");
-  const jan4=new Date(d.getFullYear(),0,4); const dow=(jan4.getDay()+6)%7;
-  const wk=Math.ceil((((d-jan4)/86400000)+dow+1)/7);
-  return `${d.getFullYear()}-W${String(wk).padStart(2,"0")}`;
+  return srvISOWeek(dateStr);
 }
 function mdSyncLine() {
   return new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
@@ -1103,13 +1101,17 @@ async function syncAllObsidianNotes(specificDate) {
 /* ── Server-side quest rotation (ported from src/App.jsx) ──
    Lets daily/weekly quests refresh overnight even if no device opens the app,
    so the morning Obsidian brief always has fresh quests. */
+// ISO-8601 week key in UTC — DST-safe, rolls over on Monday. Must match the
+// client's getISOWeek so stored weeklyDate values compare correctly.
 function srvISOWeek(dateStr) {
-  const d=new Date(dateStr+"T00:00:00");
-  const jan4=new Date(d.getFullYear(),0,4);
-  const dow=jan4.getDay()||7;
-  const weekStart=new Date(jan4); weekStart.setDate(jan4.getDate()-dow+1);
-  const week=Math.floor((d-weekStart)/604800000)+1;
-  return `${d.getFullYear()}-W${String(week).padStart(2,"0")}`;
+  const [y,m,dd]=dateStr.split("-").map(Number);
+  const d=new Date(Date.UTC(y,m-1,dd));
+  const day=(d.getUTCDay()+6)%7;
+  d.setUTCDate(d.getUTCDate()-day+3);
+  const firstThu=new Date(Date.UTC(d.getUTCFullYear(),0,4));
+  const ftDay=(firstThu.getUTCDay()+6)%7;
+  firstThu.setUTCDate(firstThu.getUTCDate()-ftDay+3);
+  return `${d.getUTCFullYear()}-W${String(1+Math.round((d-firstThu)/604800000)).padStart(2,"0")}`;
 }
 function srvPickQuestWeighted(pool, recentIdxs, count) {
   const recentSet=new Set(recentIdxs);
@@ -1125,7 +1127,7 @@ function srvPickQuestWeighted(pool, recentIdxs, count) {
   }
   return result;
 }
-function srvRefreshQuestsIfStale(qd, todayStr, weekStr) {
+function srvRefreshQuestsIfStale(qd, todayStr) {
   let next=qd, changed=false;
   if(qd.dailyDate!==todayStr){
     const newHist=[...(qd.completedDailyHistory||[])];
@@ -1141,18 +1143,10 @@ function srvRefreshQuestsIfStale(qd, todayStr, weekStr) {
     next={...next,currentDaily:srvPickQuestWeighted(DAILY_QUESTS,recentIdxs,3),dailyDate:todayStr,completedDailyHistory:prunedHist};
     changed=true;
   }
-  // Guard: never rotate a completed weekly quest unless we've moved to a new week.
-  // A missing weeklyDate with done=true is treated as current week to be safe.
-  const weeklyIsDoneThisWeek=qd.currentWeekly?.done&&(!qd.weeklyDate||qd.weeklyDate===weekStr);
-  if(qd.weeklyDate!==weekStr&&!weeklyIsDoneThisWeek){
-    const newWHist=[...(qd.completedWeeklyHistory||[])];
-    if(qd.currentWeekly?.done)newWHist.push({idx:qd.currentWeekly.idx,weekStr:qd.weeklyDate||weekStr});
-    const prunedWHist=newWHist.slice(-24);
-    const recentWIdxs=prunedWHist.slice(-8).map(h=>h.idx);
-    const newWeekly=srvPickQuestWeighted(WEEKLY_QUESTS,recentWIdxs,1)[0];
-    next={...next,currentWeekly:newWeekly,weeklyDate:weekStr,completedWeeklyHistory:prunedWHist};
-    changed=true;
-  }
+  // NOTE: weekly quest rotation is intentionally CLIENT-ONLY. The client rotates it
+  // on Monday in the user's real timezone (and migrates legacy keys). Rotating it here
+  // risked timezone/format mismatches that reset the weekly quest mid-week on redeploy,
+  // so the scheduled job only refreshes daily quests.
   return changed?next:null;
 }
 
@@ -1163,8 +1157,7 @@ function rotateQuestsIfNeeded() {
   const qd = mdVal(data.music_quests);
   if (!qd || !qd.currentDaily) return false; // never initialised — leave to the app
   const today = new Date().toISOString().slice(0,10);
-  const weekStr = srvISOWeek(today);
-  const next = srvRefreshQuestsIfStale(qd, today, weekStr);
+  const next = srvRefreshQuestsIfStale(qd, today);
   if (!next) return false;
   data.music_quests = (typeof data.music_quests === "string") ? JSON.stringify(next) : next;
   writeData(data);
