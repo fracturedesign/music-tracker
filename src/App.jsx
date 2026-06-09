@@ -4454,6 +4454,38 @@ export default function App() {
             </div>
           </div>
         )}
+        {/* Weekly quest */}
+        {questsEnabled&&questData?.currentWeekly&&(()=>{
+          const wq=questData.currentWeekly;
+          const wCheckbox=(<div style={{width:16,height:16,borderRadius:4,flexShrink:0,marginTop:1,background:wq.done?C.indigo:"transparent",border:`1.5px solid ${wq.done?C.indigo:C.dim}`,display:"flex",alignItems:"center",justifyContent:"center"}}>{wq.done&&<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>);
+          return(
+            <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:7}}>
+                  <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Weekly Quest</span>
+                  {questData.lastWeeklyRefresh!==today&&!wq.done&&(
+                    <button onClick={refreshWeeklyQuest} title="Get a new weekly quest"
+                      style={{background:"none",border:"none",padding:2,cursor:"pointer",display:"flex",alignItems:"center",opacity:0.55,lineHeight:1}}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M23 20v-6h-6" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  )}
+                </div>
+                <span style={{fontSize:11,color:C.faint}}>+10 XP</span>
+              </div>
+              <button onClick={()=>completeQuest("weekly")}
+                style={{display:"flex",alignItems:"flex-start",gap:10,width:"100%",padding:"10px 12px",borderRadius:12,
+                  background:wq.done?C.surf2:`${C.indigo}08`,border:"none",
+                  cursor:wq.done?"default":"pointer",textAlign:"left",fontFamily:"var(--font-sans)"}}>
+                {wCheckbox}
+                <span style={{fontSize:13,color:wq.done?C.dim:C.text,flex:1,lineHeight:1.4,textDecoration:wq.done?"line-through":"none",opacity:wq.done?0.65:1}}>{wq.text}</span>
+                {wq.done
+                  ?<span style={{fontSize:11,color:C.green,fontWeight:700,flexShrink:0}}>✓</span>
+                  :<span style={{fontSize:10.5,fontWeight:700,color:C.indigo,background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:6,padding:"2px 6px",flexShrink:0,whiteSpace:"nowrap"}}>+10 XP</span>
+                }
+              </button>
+            </div>
+          );
+        })()}
         {/* Oblique card */}
         {questsEnabled&&questData&&(
           <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
@@ -4820,38 +4852,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-            {/* Weekly quest */}
-            {questData?.enabled!==false&&questData?.currentWeekly&&(()=>{
-              const wq=questData.currentWeekly;
-              const wCheckbox=(<div style={{width:16,height:16,borderRadius:4,flexShrink:0,marginTop:1,background:wq.done?C.indigo:"transparent",border:`1.5px solid ${wq.done?C.indigo:C.dim}`,display:"flex",alignItems:"center",justifyContent:"center"}}>{wq.done&&<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>);
-              return(
-                <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div style={{display:"flex",alignItems:"center",gap:7}}>
-                      <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:"0.04em",textTransform:"uppercase"}}>Weekly Quest</span>
-                      {questData.lastWeeklyRefresh!==today&&!wq.done&&(
-                        <button onClick={refreshWeeklyQuest} title="Get a new weekly quest"
-                          style={{background:"none",border:"none",padding:2,cursor:"pointer",display:"flex",alignItems:"center",opacity:0.55,lineHeight:1}}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M23 20v-6h-6" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" stroke={C.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </button>
-                      )}
-                    </div>
-                    <span style={{fontSize:11,color:C.faint}}>+10 XP</span>
-                  </div>
-                  <button onClick={()=>completeQuest("weekly")}
-                    style={{display:"flex",alignItems:"flex-start",gap:10,width:"100%",padding:"10px 12px",borderRadius:12,
-                      background:wq.done?C.surf2:`${C.indigo}08`,border:"none",
-                      cursor:wq.done?"default":"pointer",textAlign:"left",fontFamily:"var(--font-sans)"}}>
-                    {wCheckbox}
-                    <span style={{fontSize:13,color:wq.done?C.dim:C.text,flex:1,lineHeight:1.4,textDecoration:wq.done?"line-through":"none",opacity:wq.done?0.65:1}}>{wq.text}</span>
-                    {wq.done
-                      ?<span style={{fontSize:11,color:C.green,fontWeight:700,flexShrink:0}}>✓</span>
-                      :<span style={{fontSize:10.5,fontWeight:700,color:C.indigo,background:C.accentAlpha,border:`1px solid ${C.accentBorder}`,borderRadius:6,padding:"2px 6px",flexShrink:0,whiteSpace:"nowrap"}}>+10 XP</span>
-                    }
-                  </button>
-                </div>
-              );
-            })()}
             {/* Past weeks history strip */}
             {goalHours>0&&(()=>{
               const past8=Array.from({length:8},(_,i)=>{
