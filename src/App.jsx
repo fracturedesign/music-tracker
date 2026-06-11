@@ -4036,7 +4036,7 @@ export default function App() {
   const [focusModeEnabled,setFocusModeEnabled]=useState(()=>{try{return localStorage.getItem("orbit_focus_mode")==="1";}catch{return false;}});
   const focusModeRef=useRef(focusModeEnabled);
   const toggleFocusMode=()=>setFocusModeEnabled(v=>{const next=!v;focusModeRef.current=next;try{localStorage.setItem("orbit_focus_mode",next?"1":"0");}catch{}return next;});
-  const triggerFocus=useCallback(()=>{fetch("/api/focus",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shortcut:"Music Production"})}).catch(()=>{});},[]);
+  const triggerFocus=useCallback(()=>{fetch("http://127.0.0.1:3099/focus",{method:"POST"}).catch(()=>{});},[]);
 
   /* timer */
   const TIMER_PRESETS=[30,45,60,90];
