@@ -211,6 +211,9 @@ const storage = {
   async get(key) { const r=await fetch(`/api/data/${key}`); return r.json(); },
   async set(key,value) { await fetch(`/api/data/${key}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value})}); },
 };
+// NAS values can arrive as a JSON string (written by the web app) or a plain object
+// (written by the macOS native app). Parse either form safely.
+const parseNasVal = v => { if(v==null)return null; if(typeof v==="string"){try{return JSON.parse(v);}catch{return null;}} return v; };
 
 /* ─── icons ─── */
 const Icon = {
@@ -701,7 +704,7 @@ function VersionsTab({projectName,onCountChange,globalAudioFolder,sectionLabel,s
   const saveScanPath=async path=>{
     try{
       const r=await fetch(`/api/data/music_scan_folders`).then(x=>x.json());
-      const existing=r?.value?JSON.parse(r.value):{};
+      const existing=r?.value?parseNasVal(r.value):{};
       if(path)existing[projectName]=path; else delete existing[projectName];
       await fetch(`/api/data/music_scan_folders`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:JSON.stringify(existing)})});
     }catch{}
@@ -3751,7 +3754,7 @@ export default function App() {
   /* load */
   useEffect(()=>{
     (async()=>{
-      try{const r=await storage.get("music_sessions");if(r?.value)setSessions(JSON.parse(r.value));}catch{}
+      try{const r=await storage.get("music_sessions");if(r?.value)setSessions(parseNasVal(r.value));}catch{}
       try{const p=await storage.get("music_projects");if(p?.value){
         const raw=JSON.parse(p.value).map(x=>typeof x==="string"?{name:x,notes:"",status:"active"}:{...x,status:x.status||"active"});
         // Migrate: assign a stored color to any project that doesn't have one
@@ -3762,15 +3765,15 @@ export default function App() {
         if(changed)await storage.set("music_projects",JSON.stringify(raw));
       }}catch{}
       try{const g=await storage.get("music_goal");if(g?.value)setGoalHours(JSON.parse(g.value));}catch{}
-      try{const m=await storage.get("music_milestones");if(m?.value)setUnlockedMilestones(JSON.parse(m.value));}catch{}
-      try{const t=await storage.get("music_timer");if(t?.value){const saved=JSON.parse(t.value);setTimer({phase:saved.phase,target:saved.target,endsAt:saved.endsAt,remaining:saved.remaining});if(saved.project)setTimerProject(saved.project);if(saved.note)setTimerNote(saved.note);}}catch{}
+      try{const m=await storage.get("music_milestones");if(m?.value)setUnlockedMilestones(parseNasVal(m.value));}catch{}
+      try{const t=await storage.get("music_timer");if(t?.value){const saved=parseNasVal(t.value);setTimer({phase:saved.phase,target:saved.target,endsAt:saved.endsAt,remaining:saved.remaining});if(saved.project)setTimerProject(saved.project);if(saved.note)setTimerNote(saved.note);}}catch{}
       try{const af=await storage.get("music_audio_files");if(af?.value&&typeof af.value==="object"){setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}}catch{}
       try{const gf=await storage.get("music_global_audio_folder");if(gf?.value)setGlobalAudioFolder(gf.value);}catch{}
-      try{const ar=await storage.get("music_archived_projects");if(ar?.value)setArchivedProjects(JSON.parse(ar.value));}catch{}
+      try{const ar=await storage.get("music_archived_projects");if(ar?.value)setArchivedProjects(parseNasVal(ar.value));}catch{}
       try{
         const q=await storage.get("music_quests");
         if(q?.value){
-          const parsed=JSON.parse(q.value);
+          const parsed=parseNasVal(q.value);
           const migrated=migrateWeeklyKey(parsed);
           setQuestData(migrated);
           if(migrated!==parsed){try{await storage.set("music_quests",JSON.stringify(migrated));}catch{}}
@@ -3784,7 +3787,7 @@ export default function App() {
         }
       }catch{}
       try{const r=await fetch("/api/recordings").then(x=>x.json());setRecordings(r.recordings||[]);}catch{}
-      try{const mx=await storage.get("music_mixtapes");if(mx?.value)setMixtapes(JSON.parse(mx.value));}catch{}
+      try{const mx=await storage.get("music_mixtapes");if(mx?.value)setMixtapes(parseNasVal(mx.value));}catch{}
       try{const wr=await storage.get("music_weekly_review_dismissed");if(wr?.value)setWeeklyReviewDismissed(wr.value);}catch{}
       setLoaded(true);
     })();
@@ -3842,7 +3845,7 @@ export default function App() {
     (async()=>{
       try{
         const r=await storage.get("music_backups");
-        const existing=r?.value?JSON.parse(r.value):{backups:[]};
+        const existing=r?.value?parseNasVal(r.value):{backups:[]};
         if(existing.backups[0]?.date===today)return;
         const backups=[{date:today,sessions,projects},...existing.backups.slice(0,6)];
         await storage.set("music_backups",JSON.stringify({backups}));
@@ -3865,25 +3868,25 @@ export default function App() {
         const{key}=JSON.parse(e.data);
         if(key==="music_projects"){
           const r=await fetch("/api/data/music_projects").then(x=>x.json());
-          if(r?.value!=null)setProjects(JSON.parse(r.value));
+          if(r?.value!=null)setProjects(parseNasVal(r.value));
         } else if(key==="music_sessions"){
           const r=await fetch("/api/data/music_sessions").then(x=>x.json());
-          if(r?.value!=null)setSessions(JSON.parse(r.value));
+          if(r?.value!=null)setSessions(parseNasVal(r.value));
         } else if(key==="music_goal"){
           const r=await fetch("/api/data/music_goal").then(x=>x.json());
-          if(r?.value!=null)setGoalHours(Number(JSON.parse(r.value))||0);
+          if(r?.value!=null)setGoalHours(Number(parseNasVal(r.value))||0);
         } else if(key==="music_archived_projects"){
           const r=await fetch("/api/data/music_archived_projects").then(x=>x.json());
-          if(r?.value!=null)setArchivedProjects(JSON.parse(r.value));
+          if(r?.value!=null)setArchivedProjects(parseNasVal(r.value));
         } else if(key==="music_quests"){
           const r=await fetch("/api/data/music_quests").then(x=>x.json());
-          if(r?.value!=null)setQuestData(JSON.parse(r.value));
+          if(r?.value!=null)setQuestData(parseNasVal(r.value));
         } else if(key==="music_recordings"){
           const r=await fetch("/api/recordings").then(x=>x.json());
           setRecordings(r.recordings||[]);
         } else if(key==="music_mixtapes"){
           const r=await fetch("/api/data/music_mixtapes").then(x=>x.json());
-          if(r?.value!=null)setMixtapes(JSON.parse(r.value));
+          if(r?.value!=null)setMixtapes(parseNasVal(r.value));
         }
       }catch{}
     };
@@ -4059,7 +4062,7 @@ export default function App() {
   },[]);
   useEffect(()=>{
     const iv=setInterval(async()=>{
-      try{const r=await storage.get("music_timer");if(!r?.value)return;const remote=JSON.parse(r.value);
+      try{const r=await storage.get("music_timer");if(!r?.value)return;const remote=parseNasVal(r.value);
         setTimer(local=>{if(remote.phase!==local.phase||remote.endsAt!==local.endsAt||remote.remaining!==local.remaining)return remote;return local;});}catch{}
     },3000);return()=>clearInterval(iv);
   },[]);
@@ -4320,7 +4323,7 @@ export default function App() {
     // Update scan folders key
     try{
       const r=await storage.get("music_scan_folders");
-      const folders=r?.value?JSON.parse(r.value):{};
+      const folders=r?.value?parseNasVal(r.value):{};
       if(folders[oldName]){folders[newName]=folders[oldName];delete folders[oldName];await storage.set("music_scan_folders",JSON.stringify(folders));}
     }catch{}
     // Update audio counts map
