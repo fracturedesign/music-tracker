@@ -1,6 +1,6 @@
 import { exec } from "child_process";
 
-const ORBIT_URL = process.env.ORBIT_URL || "https://tower-1.tail88bb12.ts.net";
+const ORBIT_URL = process.env.ORBIT_URL || "https://tower-1.tail88bb12.ts.net:3443";
 const POLL_MS   = 2000;
 const SHORTCUT  = "Music Production";
 
