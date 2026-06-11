@@ -1372,6 +1372,18 @@ app.get("/api/ssl-cert", (req, res) => {
   createReadStream(CERT_FILE).pipe(res);
 });
 
+/* ── Focus mode ── */
+app.post("/api/focus", async (req, res) => {
+  const { shortcut } = req.body;
+  if (!shortcut || typeof shortcut !== "string") return res.status(400).json({ error: "shortcut required" });
+  try {
+    await execAsync(`shortcuts run "${shortcut.replace(/"/g, '\\"')}"`, { timeout: 10_000 });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 /* ── SPA fallback ── */
 app.get("*", (req, res) => {
   const index = join(distPath, "index.html");

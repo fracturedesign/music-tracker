@@ -2556,7 +2556,7 @@ function WeeklyReviewSheet({sessions,questData,projects,weekStart,prevWeekStart,
 }
 
 /* ─── settings sheet ─── */
-function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived,questsEnabled,onQuestsToggle}) {
+function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChange,goalHours,onGoalChange,onDownloadBackup,onClose,globalAudioFolder,onGlobalFolderChange,archivedProjects,onRestoreArchived,onDeleteArchived,questsEnabled,onQuestsToggle,focusModeEnabled,onFocusModeToggle}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const [editingGoal,setEditingGoal]=useState(false);
   const [goalInput,setGoalInput]=useState(String(goalHours));
@@ -2683,6 +2683,18 @@ function SettingsSheet({themeDark,themeLight,onThemeDarkChange,onThemeLightChang
           </div>
           <button onClick={onQuestsToggle} style={{width:44,height:26,borderRadius:999,border:"none",cursor:"pointer",flexShrink:0,background:questsEnabled?C.accentGrad:C.lineS,position:"relative",transition:"background 0.2s"}}>
             <div style={{width:20,height:20,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:questsEnabled?21:3,transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}}/>
+          </button>
+        </div>
+
+        {/* Focus mode */}
+        <div style={{fontSize:11.5,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.faint,marginBottom:12}}>Focus</div>
+        <div style={{background:C.surf2,borderRadius:14,padding:"14px 16px",marginBottom:22,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:600,color:C.text}}>Music Production Focus</div>
+            <div style={{fontSize:12,color:C.faint,marginTop:2}}>Toggle macOS Focus when timer starts &amp; stops</div>
+          </div>
+          <button onClick={onFocusModeToggle} style={{width:44,height:26,borderRadius:999,border:"none",cursor:"pointer",flexShrink:0,background:focusModeEnabled?C.accentGrad:C.lineS,position:"relative",transition:"background 0.2s"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:focusModeEnabled?21:3,transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}}/>
           </button>
         </div>
 
@@ -4020,6 +4032,11 @@ export default function App() {
     }
   },[]);
 
+  /* focus mode */
+  const [focusModeEnabled,setFocusModeEnabled]=useState(()=>{try{return localStorage.getItem("orbit_focus_mode")==="1";}catch{return false;}});
+  const toggleFocusMode=()=>setFocusModeEnabled(v=>{const next=!v;try{localStorage.setItem("orbit_focus_mode",next?"1":"0");}catch{}return next;});
+  const triggerFocus=useCallback(()=>{fetch("/api/focus",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shortcut:"Music Production"})}).catch(()=>{});},[]);
+
   /* timer */
   const TIMER_PRESETS=[30,45,60,90];
   const [timer,setTimer]=useState({phase:"idle",target:0,endsAt:0,remaining:0});
@@ -4053,6 +4070,18 @@ export default function App() {
     document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
   },[timerProjDropOpen]);
   useEffect(()=>{if(timer.phase==="running"&&Date.now()>=timer.endsAt)setTimer(t=>t.phase==="running"?{...t,phase:"done",remaining:0,endsAt:0}:t);},[tick,timer.phase,timer.endsAt]);
+
+  // Trigger Focus mode when timer starts/stops running
+  const prevTimerPhaseForFocus=useRef(timer.phase);
+  useEffect(()=>{
+    const prev=prevTimerPhaseForFocus.current;
+    const cur=timer.phase;
+    if(focusModeEnabled){
+      if(prev!=="running"&&cur==="running")triggerFocus();
+      else if(prev==="running"&&cur!=="running")triggerFocus();
+    }
+    prevTimerPhaseForFocus.current=cur;
+  },[timer.phase]);// eslint-disable-line
 
   // Fire notification when timer finishes
   const prevTimerPhase=useRef(timer.phase);
@@ -4547,7 +4576,7 @@ export default function App() {
         weekStart={getWeekStart(0)} prevWeekStart={getWeekStart(1)}
         onClose={()=>setWeeklyReviewOpen(false)}/>}
       {recorderOpen&&<RecorderSheet recordings={recordings} mixtapes={mixtapes} projects={projects} onClose={()=>setRecorderOpen(false)} onRecordingsChange={async()=>{try{const r=await fetch("/api/recordings").then(x=>x.json());setRecordings(r.recordings||[]);}catch{}}} onMixtapesChange={setMixtapes}/>}
-      {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived} questsEnabled={questData?.enabled!==false} onQuestsToggle={toggleQuests}/>}
+      {settingsOpen&&<SettingsSheet themeDark={themeDark} themeLight={themeLight} onThemeDarkChange={changeThemeDark} onThemeLightChange={changeThemeLight} goalHours={goalHours} onGoalChange={saveGoal} onDownloadBackup={downloadBackup} onClose={()=>setSettingsOpen(false)} globalAudioFolder={globalAudioFolder} onGlobalFolderChange={saveGlobalFolder} archivedProjects={archivedProjects} onRestoreArchived={restoreFromArchive} onDeleteArchived={deleteArchived} questsEnabled={questData?.enabled!==false} onQuestsToggle={toggleQuests} focusModeEnabled={focusModeEnabled} onFocusModeToggle={toggleFocusMode}/>}
       {goalEditOpen&&<GoalEditSheet goalHours={goalHours} onSave={saveGoal} onClose={()=>setGoalEditOpen(false)}/>}
       {reviewOpen&&<AnalyticsSheet sessions={sessions} goalHours={goalHours} currentStreak={currentStreak} longestStreak={longestStreak} onClose={()=>setReviewOpen(false)}/>}
       <MiniPlayer nowPlaying={nowPlaying} onEnd={()=>setNowPlaying(null)} onClear={()=>setNowPlaying(null)} onOpenProject={openProject}/>
