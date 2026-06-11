@@ -4034,7 +4034,8 @@ export default function App() {
 
   /* focus mode */
   const [focusModeEnabled,setFocusModeEnabled]=useState(()=>{try{return localStorage.getItem("orbit_focus_mode")==="1";}catch{return false;}});
-  const toggleFocusMode=()=>setFocusModeEnabled(v=>{const next=!v;try{localStorage.setItem("orbit_focus_mode",next?"1":"0");}catch{}return next;});
+  const focusModeRef=useRef(focusModeEnabled);
+  const toggleFocusMode=()=>setFocusModeEnabled(v=>{const next=!v;focusModeRef.current=next;try{localStorage.setItem("orbit_focus_mode",next?"1":"0");}catch{}return next;});
   const triggerFocus=useCallback(()=>{fetch("/api/focus",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shortcut:"Music Production"})}).catch(()=>{});},[]);
 
   /* timer */
@@ -4076,7 +4077,7 @@ export default function App() {
   useEffect(()=>{
     const prev=prevTimerPhaseForFocus.current;
     const cur=timer.phase;
-    if(focusModeEnabled){
+    if(focusModeRef.current){
       if(prev!=="running"&&cur==="running")triggerFocus();
       else if(prev==="running"&&cur!=="running")triggerFocus();
     }
