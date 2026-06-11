@@ -4036,7 +4036,6 @@ export default function App() {
   const [focusModeEnabled,setFocusModeEnabled]=useState(()=>{try{return localStorage.getItem("orbit_focus_mode")==="1";}catch{return false;}});
   const focusModeRef=useRef(focusModeEnabled);
   const toggleFocusMode=()=>setFocusModeEnabled(v=>{const next=!v;focusModeRef.current=next;try{localStorage.setItem("orbit_focus_mode",next?"1":"0");}catch{}return next;});
-  const triggerFocus=useCallback(()=>{fetch("https://127.0.0.1:3099/focus",{method:"POST"}).catch(()=>{});},[]);
 
   /* timer */
   const TIMER_PRESETS=[30,45,60,90];
@@ -4072,16 +4071,10 @@ export default function App() {
   },[timerProjDropOpen]);
   useEffect(()=>{if(timer.phase==="running"&&Date.now()>=timer.endsAt)setTimer(t=>t.phase==="running"?{...t,phase:"done",remaining:0,endsAt:0}:t);},[tick,timer.phase,timer.endsAt]);
 
-  // Trigger Focus mode when timer starts/stops running
-  const prevTimerPhaseForFocus=useRef(timer.phase);
+  // Report timer phase to server so the Mac focus agent can poll it
   useEffect(()=>{
-    const prev=prevTimerPhaseForFocus.current;
-    const cur=timer.phase;
-    if(focusModeRef.current){
-      if(prev!=="running"&&cur==="running")triggerFocus();
-      else if(prev==="running"&&cur!=="running")triggerFocus();
-    }
-    prevTimerPhaseForFocus.current=cur;
+    if(!focusModeRef.current)return;
+    fetch("/api/timer-phase",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phase:timer.phase})}).catch(()=>{});
   },[timer.phase]);// eslint-disable-line
 
   // Fire notification when timer finishes

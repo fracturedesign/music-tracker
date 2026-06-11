@@ -1372,16 +1372,19 @@ app.get("/api/ssl-cert", (req, res) => {
   createReadStream(CERT_FILE).pipe(res);
 });
 
-/* ── Focus mode ── */
-app.post("/api/focus", async (req, res) => {
-  const { shortcut } = req.body;
-  if (!shortcut || typeof shortcut !== "string") return res.status(400).json({ error: "shortcut required" });
-  try {
-    await execAsync(`shortcuts run "${shortcut.replace(/"/g, '\\"')}"`, { timeout: 10_000 });
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+/* ── Timer phase (for focus agent polling) ── */
+app.post("/api/timer-phase", (req, res) => {
+  const { phase } = req.body;
+  if (!phase) return res.status(400).json({ error: "phase required" });
+  const data = readData();
+  data.timer_phase = phase;
+  writeData(data);
+  res.json({ ok: true });
+});
+
+app.get("/api/timer-phase", (req, res) => {
+  const data = readData();
+  res.json({ phase: data.timer_phase || "idle" });
 });
 
 /* ── SPA fallback ── */

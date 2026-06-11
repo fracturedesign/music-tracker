@@ -1,43 +1,32 @@
-import { createServer } from "https";
-import { readFileSync } from "fs";
 import { exec } from "child_process";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = 3099;
-const SHORTCUT = "Music Production";
+const ORBIT_URL = process.env.ORBIT_URL || "https://tower-1.tail88bb12.ts.net";
+const POLL_MS   = 2000;
+const SHORTCUT  = "Music Production";
 
-const ssl = {
-  key:  readFileSync(join(__dirname, ".focus-agent-ssl/key.pem")),
-  cert: readFileSync(join(__dirname, ".focus-agent-ssl/cert.pem")),
-};
+let prevPhase = null;
 
-createServer(ssl, (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+async function poll() {
+  try {
+    const res  = await fetch(`${ORBIT_URL}/api/timer-phase`);
+    const { phase } = await res.json();
 
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/focus") {
-    exec(`osascript -e 'tell application "Shortcuts Events" to run shortcut "${SHORTCUT}"'`, { timeout: 10_000 }, (err) => {
-      if (err) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: err.message }));
-      } else {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true }));
+    if (prevPhase !== null && prevPhase !== phase) {
+      const wasRunning = prevPhase === "running";
+      const isRunning  = phase     === "running";
+      if (wasRunning !== isRunning) {
+        console.log(`[focus-agent] ${prevPhase} → ${phase}, toggling focus`);
+        exec(`osascript -e 'tell application "Shortcuts Events" to run shortcut "${SHORTCUT}"'`,
+          (err) => { if (err) console.error("[focus-agent] shortcut error:", err.message); }
+        );
       }
-    });
-  } else {
-    res.writeHead(404);
-    res.end();
+    }
+    prevPhase = phase;
+  } catch (e) {
+    // server unreachable — silent, will retry
   }
-}).listen(PORT, "127.0.0.1", () =>
-  console.log(`Orbit focus agent → https://127.0.0.1:${PORT}`)
-);
+}
+
+console.log(`Orbit focus agent polling ${ORBIT_URL} every ${POLL_MS}ms`);
+poll();
+setInterval(poll, POLL_MS);
