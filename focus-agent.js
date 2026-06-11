@@ -1,10 +1,19 @@
-import { createServer } from "http";
+import { createServer } from "https";
+import { readFileSync } from "fs";
 import { exec } from "child_process";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 3099;
 const SHORTCUT = "Music Production";
 
-createServer((req, res) => {
+const ssl = {
+  key:  readFileSync(join(__dirname, ".focus-agent-ssl/key.pem")),
+  cert: readFileSync(join(__dirname, ".focus-agent-ssl/cert.pem")),
+};
+
+createServer(ssl, (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -30,5 +39,5 @@ createServer((req, res) => {
     res.end();
   }
 }).listen(PORT, "127.0.0.1", () =>
-  console.log(`Orbit focus agent → http://127.0.0.1:${PORT}`)
+  console.log(`Orbit focus agent → https://127.0.0.1:${PORT}`)
 );
