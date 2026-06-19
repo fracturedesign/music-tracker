@@ -211,7 +211,13 @@ app.post("/api/data/:key", (req, res) => {
 app.get("/api/audio/:project", (req, res) => {
   const data  = readData();
   const files = (data.music_audio_files || {})[req.params.project] || [];
-  res.json({ files });
+  // Prune any linked entries whose file no longer exists on disk.
+  const live = files.filter(f => !f.linkedPath || existsSync(f.linkedPath));
+  if (live.length !== files.length) {
+    data.music_audio_files[req.params.project] = live;
+    writeData(data);
+  }
+  res.json({ files: live });
 });
 
 // Stream a linked (scanned) file by project + id
@@ -352,7 +358,21 @@ app.post("/api/audio/:project/scan", async (req, res) => {
     }
   }
 
-  const toAdd = allFound.filter(f => !existingPaths.has(f) && !reconciledPaths.has(f));
+  // Prune entries whose file no longer exists on disk and wasn't reconciled as a rename.
+  const prunedIds = new Set();
+  data.music_audio_files[req.params.project] = existing.filter(entry => {
+    if (!entry.linkedPath) return true;          // uploaded (no linkedPath) — keep
+    if (!existsSync(entry.linkedPath) && !reconciledPaths.has(entry.linkedPath)) {
+      prunedIds.add(entry.id);
+      return false;
+    }
+    return true;
+  });
+  const pruned = existing.filter(e => prunedIds.has(e.id)); // for the response
+  const updatedExisting = data.music_audio_files[req.params.project];
+  const updatedPaths = new Set(updatedExisting.map(f => f.linkedPath).filter(Boolean));
+
+  const toAdd = allFound.filter(f => !updatedPaths.has(f) && !reconciledPaths.has(f));
 
   const added = [];
   for (const filePath of toAdd) {
@@ -372,14 +392,14 @@ app.post("/api/audio/:project/scan", async (req, res) => {
       isNew:      true,
       scannedAt:  new Date().toISOString(),
     };
-    existing.push(meta);
+    updatedExisting.push(meta);
     added.push(meta);
     // small delay so IDs are unique when folder has many files
     await new Promise(r => setTimeout(r, 2));
   }
 
   writeData(data);
-  res.json({ added: added.length, files: existing });
+  res.json({ added: added.length, pruned: prunedIds.size, files: updatedExisting });
 });
 
 // Rename / update metadata fields
