@@ -14,3 +14,5 @@ services:
       # Set to your NAS IP to enable HTTPS (required for microphone on iPhone)
       # Example: HTTPS_HOST=192.168.1.100
       - HTTPS_HOST=
+      # Session key from claude.ai browser cookies — used by /api/claude-usage proxy
+      - CLAUDE_SESSION_KEY=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

@@ -1407,6 +1407,75 @@ app.get("/api/timer-phase", (req, res) => {
   res.json({ phase: data.timer_phase || "idle" });
 });
 
+/* ── Claude.ai plan usage proxy ── */
+// The ESP32 can't call claude.ai directly (Cloudflare bot-blocks it).
+// This endpoint proxies the request from Node.js and returns minimal JSON.
+const CLAUDE_SESSION_KEY = process.env.CLAUDE_SESSION_KEY || "";
+let _claudeOrgUuid = "";
+
+app.get("/api/claude-usage", async (req, res) => {
+  try {
+    // Step 1: discover org UUID (cached)
+    if (!_claudeOrgUuid) {
+      const r = await fetch("https://claude.ai/api/organizations", {
+        headers: {
+          "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}`,
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": "https://claude.ai/settings",
+          "Origin": "https://claude.ai",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+        },
+      });
+      if (!r.ok) {
+        console.error("[claude-usage] orgs HTTP", r.status);
+        return res.status(502).json({ error: "orgs fetch failed", status: r.status });
+      }
+      const orgs = await r.json();
+      _claudeOrgUuid = orgs?.[0]?.uuid || "";
+      console.log("[claude-usage] org UUID:", _claudeOrgUuid);
+    }
+
+    // Step 2: fetch usage limits
+    const r2 = await fetch(
+      `https://claude.ai/api/organizations/${_claudeOrgUuid}/usage_limits`,
+      {
+        headers: {
+          "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}`,
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": "https://claude.ai/settings",
+          "Origin": "https://claude.ai",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+        },
+      }
+    );
+
+    if (!r2.ok) {
+      const body = await r2.text();
+      console.error("[claude-usage] usage_limits HTTP", r2.status, body.slice(0, 200));
+      // Reset org cache on auth failure so it gets re-fetched next time
+      if (r2.status === 401 || r2.status === 403) _claudeOrgUuid = "";
+      return res.status(502).json({ error: "usage fetch failed", status: r2.status });
+    }
+
+    const data = await r2.json();
+    console.log("[claude-usage] raw:", JSON.stringify(data).slice(0, 400));
+
+    // Return raw + parsed in one response so ESP32 can log and parse
+    res.json({ ok: true, raw: data });
+  } catch (e) {
+    console.error("[claude-usage] error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 /* ── SPA fallback ── */
 app.get("*", (req, res) => {
   const index = join(distPath, "index.html");
