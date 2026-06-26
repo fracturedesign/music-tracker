@@ -1439,52 +1439,38 @@ app.get("/api/claude-usage", async (req, res) => {
       console.log("[claude-usage] org UUID:", _claudeOrgUuid);
     }
 
-    const hdrs = {
-      "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}`,
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Referer": "https://claude.ai/settings",
-      "Origin": "https://claude.ai",
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-origin",
-    };
-
-    // Step 2: probe candidate endpoints until one returns 200
-    const candidates = [
-      `https://claude.ai/api/organizations/${_claudeOrgUuid}/limits`,
+    // Step 2: fetch plan usage
+    // Endpoint confirmed: GET /api/organizations/{uuid}/usage
+    // Response: { five_hour: { utilization: 0-100, resets_at: ISO8601 },
+    //             seven_day:  { utilization: 0-100, resets_at: ISO8601 } }
+    const r2 = await fetch(
       `https://claude.ai/api/organizations/${_claudeOrgUuid}/usage`,
-      `https://claude.ai/api/organizations/${_claudeOrgUuid}/usage_limits`,
-      `https://claude.ai/api/organizations/${_claudeOrgUuid}/rate_limits`,
-      `https://claude.ai/api/organizations/${_claudeOrgUuid}`,
-    ];
+      {
+        headers: {
+          "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}`,
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": "https://claude.ai/settings",
+          "Origin": "https://claude.ai",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+        },
+      }
+    );
 
-    let data = null;
-    let usedUrl = null;
-    for (const url of candidates) {
-      const r2 = await fetch(url, { headers: hdrs });
-      console.log("[claude-usage] probe", url.split("/").slice(-1)[0], "→", r2.status);
-      if (r2.ok) {
-        data = await r2.json();
-        usedUrl = url;
-        break;
-      }
-      if (r2.status === 401 || r2.status === 403) {
-        _claudeOrgUuid = "";
-        return res.status(502).json({ error: "auth failed", status: r2.status });
-      }
+    if (!r2.ok) {
+      const body = await r2.text();
+      console.error("[claude-usage] usage HTTP", r2.status, body.slice(0, 200));
+      if (r2.status === 401 || r2.status === 403) _claudeOrgUuid = "";
+      return res.status(502).json({ error: "usage fetch failed", status: r2.status });
     }
 
-    if (!data) {
-      return res.status(502).json({ error: "all usage endpoints returned non-200" });
-    }
+    const data = await r2.json();
+    console.log("[claude-usage] raw:", JSON.stringify(data).slice(0, 400));
 
-    console.log("[claude-usage] success via", usedUrl.split("/").slice(-1)[0]);
-    console.log("[claude-usage] raw:", JSON.stringify(data).slice(0, 800));
-
-    // Return raw + parsed in one response so ESP32 can log and parse
-    res.json({ ok: true, endpoint: usedUrl, raw: data });
+    res.json({ ok: true, raw: data });
   } catch (e) {
     console.error("[claude-usage] error:", e.message);
     res.status(500).json({ error: e.message });
