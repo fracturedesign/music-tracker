@@ -1469,9 +1469,13 @@ app.post("/api/esp32-timer/toggle", (req, res) => {
 
   if (t.phase === "running") {
     // Compute remaining using NAS-consistent elapsed time (avoids Mac↔NAS clock skew)
-    const rem = savedAt > 0
+    const computed = savedAt > 0
       ? Math.max(0, (t.remaining || 0) - (now - savedAt))
       : Math.max(0, Math.min(t.endsAt - now, t.target || 0));
+    // If ESP32 sent its displayed remainMs, prefer it (it reflects exactly what was shown),
+    // but only when within 30 s of server-computed (sanity gate against corrupt payloads).
+    const esp32Rem = typeof req.body?.remainMs === "number" ? req.body.remainMs : -1;
+    const rem = (esp32Rem >= 0 && Math.abs(esp32Rem - computed) < 30000) ? esp32Rem : computed;
     t.remaining = rem;
     t.endsAt = 0;
     t.phase = "paused";
