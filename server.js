@@ -1412,7 +1412,8 @@ app.get("/api/timer-phase", (req, res) => {
 // TimerState shape (from Orbit macOS / web): { phase, target, endsAt, remaining, project, note }
 app.get("/api/esp32-timer", (req, res) => {
   const data = readData();
-  const t = data.music_timer || null;
+  const raw = data.music_timer || null;
+  const t = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
   if (!t || t.phase === "idle") {
     return res.json({ phase: "idle", remainMs: 0, targetMs: 0, progress: 0.0, project: "" });
   }
@@ -1437,7 +1438,8 @@ app.get("/api/esp32-timer", (req, res) => {
 // Toggle running ↔ paused from the ESP32 touch button.
 app.post("/api/esp32-timer/toggle", (req, res) => {
   const data = readData();
-  const t = data.music_timer;
+  const raw = data.music_timer;
+  const t = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
   if (!t || t.phase === "idle" || t.phase === "done") {
     return res.json({ ok: false, phase: t?.phase ?? "idle" });
   }
