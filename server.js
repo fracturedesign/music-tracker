@@ -1566,10 +1566,12 @@ app.get("/api/claude-usage", async (req, res) => {
     const data = await r2.json();
     console.log("[claude-usage] raw:", JSON.stringify(data).slice(0, 400));
 
-    // Detect thinking: five_hour utilization increased since last poll
+    // Detect thinking: five_hour utilization increased since last poll.
+    // Extend the window by 3 minutes each time we see a new increase so
+    // long Claude sessions keep the animation alive throughout.
     const curUtil = data?.five_hour?.utilization ?? 0;
     if (_claudeUsageCache !== null && curUtil > _claudePrevUtil) {
-      _claudeThinkingUntil = Date.now() + 30000;
+      _claudeThinkingUntil = Date.now() + 180000;  // 3 min per tick
       console.log("[claude-usage] thinking detected — util", _claudePrevUtil, "→", curUtil);
     }
     _claudePrevUtil   = curUtil;
