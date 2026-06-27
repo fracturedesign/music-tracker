@@ -195,6 +195,9 @@ app.get("/api/data/:key", (req, res) => {
 app.post("/api/data/:key", (req, res) => {
   const data = readData();
   data[req.params.key] = req.body.value;
+  // Tag timer writes with NAS-side timestamp so esp32-timer can compute elapsed
+  // using a single clock, avoiding Mac↔NAS clock skew.
+  if (req.params.key === "music_timer") data._music_timer_saved_at = Date.now();
   writeData(data);
   broadcast(req.params.key);
   res.json({ ok: true });
@@ -1420,7 +1423,14 @@ app.get("/api/esp32-timer", (req, res) => {
   const now = Date.now();
   let remainMs;
   if (t.phase === "running") {
-    remainMs = Math.max(0, t.endsAt - now);
+    // Use NAS-side savedAt so both timestamps share the same clock,
+    // eliminating Mac↔NAS skew. Falls back to endsAt-based calc if no savedAt.
+    const savedAt = data._music_timer_saved_at || 0;
+    if (savedAt > 0) {
+      remainMs = Math.max(0, (t.remaining || 0) - (now - savedAt));
+    } else {
+      remainMs = Math.max(0, Math.min(t.endsAt - now, t.target || 0));
+    }
   } else {
     remainMs = t.remaining || 0;
   }
@@ -1453,7 +1463,8 @@ app.post("/api/esp32-timer/toggle", (req, res) => {
     t.phase = "running";
   }
   data.music_timer = t;
-  data.timer_phase = t.phase;   // keep focus-agent in sync
+  data._music_timer_saved_at = Date.now();
+  data.timer_phase = t.phase;
   writeData(data);
   broadcast("music_timer");
   broadcast("timer_phase");
