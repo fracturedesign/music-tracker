@@ -1407,6 +1407,57 @@ app.get("/api/timer-phase", (req, res) => {
   res.json({ phase: data.timer_phase || "idle" });
 });
 
+/* ── ESP32 timer endpoints ── */
+// Returns timer state optimised for the ESP32 display (pre-computes remainMs server-side).
+// TimerState shape (from Orbit macOS / web): { phase, target, endsAt, remaining, project, note }
+app.get("/api/esp32-timer", (req, res) => {
+  const data = readData();
+  const t = data.music_timer || null;
+  if (!t || t.phase === "idle") {
+    return res.json({ phase: "idle", remainMs: 0, targetMs: 0, progress: 0.0, project: "" });
+  }
+  const now = Date.now();
+  let remainMs;
+  if (t.phase === "running") {
+    remainMs = Math.max(0, t.endsAt - now);
+  } else {
+    remainMs = t.remaining || 0;
+  }
+  const targetMs = t.target || 0;
+  const progress = targetMs > 0 ? Math.min(1.0, (targetMs - remainMs) / targetMs) : 0.0;
+  res.json({
+    phase: t.phase,
+    remainMs: Math.round(remainMs),
+    targetMs: Math.round(targetMs),
+    progress: parseFloat(progress.toFixed(4)),
+    project: t.project || "",
+  });
+});
+
+// Toggle running ↔ paused from the ESP32 touch button.
+app.post("/api/esp32-timer/toggle", (req, res) => {
+  const data = readData();
+  const t = data.music_timer;
+  if (!t || t.phase === "idle" || t.phase === "done") {
+    return res.json({ ok: false, phase: t?.phase ?? "idle" });
+  }
+  const now = Date.now();
+  if (t.phase === "running") {
+    t.remaining = Math.max(0, t.endsAt - now);
+    t.endsAt = 0;
+    t.phase = "paused";
+  } else if (t.phase === "paused") {
+    t.endsAt = now + t.remaining;
+    t.phase = "running";
+  }
+  data.music_timer = t;
+  data.timer_phase = t.phase;   // keep focus-agent in sync
+  writeData(data);
+  broadcast("music_timer");
+  broadcast("timer_phase");
+  res.json({ ok: true, phase: t.phase });
+});
+
 /* ── Claude.ai plan usage proxy ── */
 // The ESP32 can't call claude.ai directly (Cloudflare bot-blocks it).
 // This endpoint proxies the request from Node.js and returns minimal JSON.
