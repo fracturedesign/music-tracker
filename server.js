@@ -1497,10 +1497,19 @@ app.post("/api/esp32-timer/toggle", (req, res) => {
 /* ── Claude.ai plan usage proxy ── */
 // The ESP32 can't call claude.ai directly (Cloudflare bot-blocks it).
 // This endpoint proxies the request from Node.js and returns minimal JSON.
+// A 10-second server-side cache prevents hammering Claude.ai when the ESP32
+// polls frequently (e.g. every 5 s while watching for "thinking" state).
 const CLAUDE_SESSION_KEY = process.env.CLAUDE_SESSION_KEY || "";
-let _claudeOrgUuid = "";
+let _claudeOrgUuid       = "";
+let _claudeUsageCache    = null;   // { ok, raw, thinking, cachedAt }
+let _claudePrevUtil      = 0;      // last known five_hour utilization
+let _claudeThinkingUntil = 0;      // epoch ms — thinking flag stays true until this
 
 app.get("/api/claude-usage", async (req, res) => {
+  // Return cached response if still fresh (10 s TTL)
+  if (_claudeUsageCache && Date.now() - _claudeUsageCache.cachedAt < 10000) {
+    return res.json({ ..._claudeUsageCache, thinking: Date.now() < _claudeThinkingUntil });
+  }
   try {
     // Step 1: discover org UUID (cached)
     if (!_claudeOrgUuid) {
@@ -1557,7 +1566,16 @@ app.get("/api/claude-usage", async (req, res) => {
     const data = await r2.json();
     console.log("[claude-usage] raw:", JSON.stringify(data).slice(0, 400));
 
-    res.json({ ok: true, raw: data });
+    // Detect thinking: five_hour utilization increased since last poll
+    const curUtil = data?.five_hour?.utilization ?? 0;
+    if (_claudeUsageCache !== null && curUtil > _claudePrevUtil) {
+      _claudeThinkingUntil = Date.now() + 30000;
+      console.log("[claude-usage] thinking detected — util", _claudePrevUtil, "→", curUtil);
+    }
+    _claudePrevUtil   = curUtil;
+    _claudeUsageCache = { ok: true, raw: data, cachedAt: Date.now() };
+
+    res.json({ ok: true, raw: data, thinking: Date.now() < _claudeThinkingUntil });
   } catch (e) {
     console.error("[claude-usage] error:", e.message);
     res.status(500).json({ error: e.message });
