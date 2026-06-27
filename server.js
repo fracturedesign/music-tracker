@@ -1506,8 +1506,8 @@ let _claudePrevUtil      = 0;      // last known five_hour utilization
 let _claudeThinkingUntil = 0;      // epoch ms — thinking flag stays true until this
 
 app.get("/api/claude-usage", async (req, res) => {
-  // Return cached response if still fresh (10 s TTL)
-  if (_claudeUsageCache && Date.now() - _claudeUsageCache.cachedAt < 10000) {
+  // Return cached response if still fresh (5 s TTL)
+  if (_claudeUsageCache && Date.now() - _claudeUsageCache.cachedAt < 5000) {
     return res.json({ ..._claudeUsageCache, thinking: Date.now() < _claudeThinkingUntil });
   }
   try {
@@ -1571,7 +1571,7 @@ app.get("/api/claude-usage", async (req, res) => {
     // long Claude sessions keep the animation alive throughout.
     const curUtil = data?.five_hour?.utilization ?? 0;
     if (_claudeUsageCache !== null && curUtil > _claudePrevUtil) {
-      _claudeThinkingUntil = Date.now() + 180000;  // 3 min per tick
+      _claudeThinkingUntil = Date.now() + 45000;   // 45 s per tick, resets each time util rises
       console.log("[claude-usage] thinking detected — util", _claudePrevUtil, "→", curUtil);
     }
     _claudePrevUtil   = curUtil;
