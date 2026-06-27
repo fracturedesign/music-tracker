@@ -195,9 +195,18 @@ app.get("/api/data/:key", (req, res) => {
 app.post("/api/data/:key", (req, res) => {
   const data = readData();
   data[req.params.key] = req.body.value;
-  // Tag timer writes with NAS-side timestamp so esp32-timer can compute elapsed
-  // using a single clock, avoiding Mac↔NAS clock skew.
-  if (req.params.key === "music_timer") data._music_timer_saved_at = Date.now();
+  if (req.params.key === "music_timer") {
+    const nas_now = Date.now();
+    data._music_timer_saved_at = nas_now;
+    // Derive Mac↔NAS clock offset from Orbit's data (endsAt is Mac time, remaining is
+    // computed from Mac clock). Stored so the toggle endpoint can produce a Mac-compatible
+    // endsAt when ESP32 resumes, keeping both displays in sync.
+    const tv = req.body.value;
+    const t2 = typeof tv === "string" ? JSON.parse(tv) : tv;
+    if (t2 && t2.endsAt && t2.remaining) {
+      data._mac_nas_offset = (t2.endsAt - t2.remaining) - nas_now; // mac_now - nas_now
+    }
+  }
   writeData(data);
   broadcast(req.params.key);
   res.json({ ok: true });
@@ -1454,12 +1463,22 @@ app.post("/api/esp32-timer/toggle", (req, res) => {
     return res.json({ ok: false, phase: t?.phase ?? "idle" });
   }
   const now = Date.now();
+  const savedAt = data._music_timer_saved_at || 0;
+  // clock offset = mac_now - nas_now, derived from last Orbit save
+  const clockOffset = data._mac_nas_offset || 0;
+
   if (t.phase === "running") {
-    t.remaining = Math.max(0, t.endsAt - now);
+    // Compute remaining using NAS-consistent elapsed time (avoids Mac↔NAS clock skew)
+    const rem = savedAt > 0
+      ? Math.max(0, (t.remaining || 0) - (now - savedAt))
+      : Math.max(0, Math.min(t.endsAt - now, t.target || 0));
+    t.remaining = rem;
     t.endsAt = 0;
     t.phase = "paused";
   } else if (t.phase === "paused") {
-    t.endsAt = now + t.remaining;
+    // Set endsAt in Mac time so Orbit displays the correct countdown.
+    // mac_now_estimate = NAS_now + clockOffset
+    t.endsAt = (now + clockOffset) + t.remaining;
     t.phase = "running";
   }
   data.music_timer = t;
