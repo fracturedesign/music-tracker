@@ -1497,13 +1497,44 @@ app.post("/api/esp32-timer/toggle", (req, res) => {
 /* ── Claude.ai plan usage proxy ── */
 // The ESP32 can't call claude.ai directly (Cloudflare bot-blocks it).
 // This endpoint proxies the request from Node.js and returns minimal JSON.
-// A 10-second server-side cache prevents hammering Claude.ai when the ESP32
+// A 5-second server-side cache prevents hammering Claude.ai when the ESP32
 // polls frequently (e.g. every 5 s while watching for "thinking" state).
 const CLAUDE_SESSION_KEY = process.env.CLAUDE_SESSION_KEY || "";
 let _claudeOrgUuid       = "";
 let _claudeUsageCache    = null;   // { ok, raw, thinking, cachedAt }
 let _claudePrevUtil      = 0;      // last known five_hour utilization
 let _claudeThinkingUntil = 0;      // epoch ms — thinking flag stays true until this
+let _claudeLastConvAt    = 0;      // epoch ms of newest conversation updated_at seen
+
+const CLAUDE_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "Accept": "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Referer": "https://claude.ai/",
+  "Origin": "https://claude.ai",
+  "sec-fetch-dest": "empty",
+  "sec-fetch-mode": "cors",
+  "sec-fetch-site": "same-origin",
+};
+
+// Returns epoch ms of the most recently-updated conversation, or 0 on error.
+async function _fetchLatestConvMs(orgUuid) {
+  try {
+    const r = await fetch(
+      `https://claude.ai/api/organizations/${orgUuid}/chat_conversations?limit=5`,
+      { headers: { ...CLAUDE_HEADERS, "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}` } }
+    );
+    if (!r.ok) return 0;
+    const body = await r.json();
+    const convs = Array.isArray(body) ? body : (body.conversations || []);
+    let newest = 0;
+    for (const c of convs) {
+      const t = c.updated_at ? new Date(c.updated_at).getTime() : 0;
+      if (t > newest) newest = t;
+    }
+    return newest;
+  } catch { return 0; }
+}
 
 app.get("/api/claude-usage", async (req, res) => {
   // Return cached response if still fresh (5 s TTL)
@@ -1514,17 +1545,7 @@ app.get("/api/claude-usage", async (req, res) => {
     // Step 1: discover org UUID (cached)
     if (!_claudeOrgUuid) {
       const r = await fetch("https://claude.ai/api/organizations", {
-        headers: {
-          "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}`,
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-          "Accept": "application/json, text/plain, */*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Referer": "https://claude.ai/settings",
-          "Origin": "https://claude.ai",
-          "sec-fetch-dest": "empty",
-          "sec-fetch-mode": "cors",
-          "sec-fetch-site": "same-origin",
-        },
+        headers: { ...CLAUDE_HEADERS, "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}` },
       });
       if (!r.ok) {
         console.error("[claude-usage] orgs HTTP", r.status);
@@ -1535,26 +1556,13 @@ app.get("/api/claude-usage", async (req, res) => {
       console.log("[claude-usage] org UUID:", _claudeOrgUuid);
     }
 
-    // Step 2: fetch plan usage
-    // Endpoint confirmed: GET /api/organizations/{uuid}/usage
-    // Response: { five_hour: { utilization: 0-100, resets_at: ISO8601 },
-    //             seven_day:  { utilization: 0-100, resets_at: ISO8601 } }
-    const r2 = await fetch(
-      `https://claude.ai/api/organizations/${_claudeOrgUuid}/usage`,
-      {
-        headers: {
-          "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}`,
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-          "Accept": "application/json, text/plain, */*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Referer": "https://claude.ai/settings",
-          "Origin": "https://claude.ai",
-          "sec-fetch-dest": "empty",
-          "sec-fetch-mode": "cors",
-          "sec-fetch-site": "same-origin",
-        },
-      }
-    );
+    // Step 2: fetch plan usage + recent conversations in parallel
+    const [r2, latestConvMs] = await Promise.all([
+      fetch(`https://claude.ai/api/organizations/${_claudeOrgUuid}/usage`, {
+        headers: { ...CLAUDE_HEADERS, "Cookie": `sessionKey=${CLAUDE_SESSION_KEY}` },
+      }),
+      _fetchLatestConvMs(_claudeOrgUuid),
+    ]);
 
     if (!r2.ok) {
       const body = await r2.text();
@@ -1566,17 +1574,24 @@ app.get("/api/claude-usage", async (req, res) => {
     const data = await r2.json();
     console.log("[claude-usage] raw:", JSON.stringify(data).slice(0, 400));
 
-    // Detect thinking: five_hour utilization increased since last poll.
-    // Extend the window by 3 minutes each time we see a new increase so
-    // long Claude sessions keep the animation alive throughout.
+    // Signal 1: utilization increased → tokens were consumed → Claude responded
     const curUtil = data?.five_hour?.utilization ?? 0;
     if (_claudeUsageCache !== null && curUtil > _claudePrevUtil) {
-      _claudeThinkingUntil = Date.now() + 45000;   // 45 s per tick, resets each time util rises
-      console.log("[claude-usage] thinking detected — util", _claudePrevUtil, "→", curUtil);
+      _claudeThinkingUntil = Math.max(_claudeThinkingUntil, Date.now() + 45000);
+      console.log("[claude-usage] thinking via util", _claudePrevUtil, "→", curUtil);
     }
-    _claudePrevUtil   = curUtil;
-    _claudeUsageCache = { ok: true, raw: data, cachedAt: Date.now() };
+    _claudePrevUtil = curUtil;
 
+    // Signal 2: most-recent conversation updated_at advanced → new message landed.
+    // Fires as soon as the user sends a message (before utilization ticks up).
+    // Skip on first poll (_claudeLastConvAt == 0) to avoid a false positive at startup.
+    if (_claudeLastConvAt > 0 && latestConvMs > _claudeLastConvAt) {
+      _claudeThinkingUntil = Math.max(_claudeThinkingUntil, Date.now() + 45000);
+      console.log("[claude-usage] thinking via conv update", new Date(latestConvMs).toISOString());
+    }
+    if (latestConvMs > 0) _claudeLastConvAt = latestConvMs;
+
+    _claudeUsageCache = { ok: true, raw: data, cachedAt: Date.now() };
     res.json({ ok: true, raw: data, thinking: Date.now() < _claudeThinkingUntil });
   } catch (e) {
     console.error("[claude-usage] error:", e.message);
