@@ -189,14 +189,20 @@ app.get("/api/events", (req, res) => {
 /* ── key-value data API ── */
 app.get("/api/data/:key", (req, res) => {
   const data = readData();
-  res.json({ value: data[req.params.key] ?? null });
+  const resp = { value: data[req.params.key] ?? null, server_time_ms: Date.now() };
+  if (req.params.key === "music_timer") resp.nas_resumed_at = data._nas_resumed_at || 0;
+  res.json(resp);
 });
 
 app.post("/api/data/:key", (req, res) => {
   const data = readData();
-  data[req.params.key] = req.body.value;
   if (req.params.key === "music_timer") {
     const nas_now = Date.now();
+    // Read previous phase before overwriting so we can detect transitions
+    const prevRaw = data.music_timer;
+    const prevT   = prevRaw ? (typeof prevRaw === "string" ? JSON.parse(prevRaw) : prevRaw) : null;
+    const prevPhase = prevT?.phase;
+    data[req.params.key] = req.body.value;
     data._music_timer_saved_at = nas_now;
     // Derive Mac↔NAS clock offset from Orbit's data (endsAt is Mac time, remaining is
     // computed from Mac clock). Stored so the toggle endpoint can produce a Mac-compatible
@@ -206,6 +212,15 @@ app.post("/api/data/:key", (req, res) => {
     if (t2 && t2.endsAt && t2.remaining) {
       data._mac_nas_offset = (t2.endsAt - t2.remaining) - nas_now; // mac_now - nas_now
     }
+    // Track NAS timestamp of each idle→running transition so Orbit can compute
+    // a clock-skew-free endsAt: endsAt = now + (remaining - (server_time - nas_resumed_at))
+    if (t2?.phase === "running" && prevPhase !== "running") {
+      data._nas_resumed_at = nas_now;
+    } else if (t2?.phase !== "running") {
+      data._nas_resumed_at = 0;
+    }
+  } else {
+    data[req.params.key] = req.body.value;
   }
   writeData(data);
   broadcast(req.params.key);
@@ -1484,6 +1499,9 @@ app.post("/api/esp32-timer/toggle", (req, res) => {
     // mac_now_estimate = NAS_now + clockOffset
     t.endsAt = (now + clockOffset) + t.remaining;
     t.phase = "running";
+    // Record NAS resume time so Orbit can recalibrate endsAt without relying on
+    // the potentially stale clockOffset (see GET /api/data/music_timer handler).
+    data._nas_resumed_at = now;
   }
   data.music_timer = t;
   data._music_timer_saved_at = Date.now();
