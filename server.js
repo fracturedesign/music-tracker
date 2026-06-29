@@ -212,12 +212,19 @@ app.post("/api/data/:key", (req, res) => {
     if (t2 && t2.endsAt && t2.remaining) {
       data._mac_nas_offset = (t2.endsAt - t2.remaining) - nas_now; // mac_now - nas_now
     }
-    // Track NAS timestamp of each idle→running transition so Orbit can compute
-    // a clock-skew-free endsAt: endsAt = now + (remaining - (server_time - nas_resumed_at))
+    // Track the exact NAS timestamp and remaining at each →running transition.
+    // GET /api/esp32-timer and the toggle pause use these instead of _music_timer_saved_at,
+    // because Orbit re-saves a running timer with remaining=target (not actual remaining),
+    // which would corrupt savedAt-based calculations.
     if (t2?.phase === "running" && prevPhase !== "running") {
       data._nas_resumed_at = nas_now;
+      data._run_nas       = nas_now;
+      data._run_remaining = t2.remaining || 0;
+      // Mac time at this resume = endsAt - remaining (both from Orbit, which uses Mac clock)
+      data._mac_at_resume = (t2.endsAt > 0 && t2.remaining > 0) ? (t2.endsAt - t2.remaining) : 0;
     } else if (t2?.phase !== "running") {
       data._nas_resumed_at = 0;
+      // Keep _run_* so toggle-resume can read them during a paused state
     }
   } else {
     data[req.params.key] = req.body.value;
@@ -1447,13 +1454,19 @@ app.get("/api/esp32-timer", (req, res) => {
   const now = Date.now();
   let remainMs;
   if (t.phase === "running") {
-    // Use NAS-side savedAt so both timestamps share the same clock,
-    // eliminating Mac↔NAS skew. Falls back to endsAt-based calc if no savedAt.
-    const savedAt = data._music_timer_saved_at || 0;
-    if (savedAt > 0) {
-      remainMs = Math.max(0, (t.remaining || 0) - (now - savedAt));
+    // Use _run_nas/_run_remaining, set precisely at each →running transition.
+    // These are immune to Orbit re-saving a running timer with remaining=target,
+    // which would corrupt a savedAt-based calculation.
+    const runNas = data._run_nas || 0;
+    const runRem = data._run_remaining || 0;
+    if (runNas > 0 && runRem > 0) {
+      remainMs = Math.max(0, runRem - (now - runNas));
     } else {
-      remainMs = Math.max(0, Math.min(t.endsAt - now, t.target || 0));
+      // Fallback for data written before this fix
+      const savedAt = data._music_timer_saved_at || 0;
+      remainMs = savedAt > 0
+        ? Math.max(0, (t.remaining || 0) - (now - savedAt))
+        : Math.max(0, Math.min(t.endsAt - now, t.target || 0));
     }
   } else {
     remainMs = t.remaining || 0;
@@ -1483,25 +1496,40 @@ app.post("/api/esp32-timer/toggle", (req, res) => {
   const clockOffset = data._mac_nas_offset || 0;
 
   if (t.phase === "running") {
-    // Compute remaining using NAS-consistent elapsed time (avoids Mac↔NAS clock skew)
-    const computed = savedAt > 0
-      ? Math.max(0, (t.remaining || 0) - (now - savedAt))
-      : Math.max(0, Math.min(t.endsAt - now, t.target || 0));
+    // Compute remaining using _run_nas/_run_remaining, which are set precisely at each
+    // →running transition and never corrupted by Orbit re-saves with remaining=target.
+    const runNas = data._run_nas || 0;
+    const runRem = data._run_remaining || 0;
+    const computed = (runNas > 0 && runRem > 0)
+      ? Math.max(0, runRem - (now - runNas))
+      : (savedAt > 0
+          ? Math.max(0, (t.remaining || 0) - (now - savedAt))
+          : Math.max(0, Math.min(t.endsAt - now, t.target || 0)));
     // If ESP32 sent its displayed remainMs, prefer it (it reflects exactly what was shown),
     // but only when within 30 s of server-computed (sanity gate against corrupt payloads).
     const esp32Rem = typeof req.body?.remainMs === "number" ? req.body.remainMs : -1;
     const rem = (esp32Rem >= 0 && Math.abs(esp32Rem - computed) < 30000) ? esp32Rem : computed;
+    // Capture Mac time at this pause so resume can produce an accurate endsAt for Orbit.
+    const macAtResume = data._mac_at_resume || 0;
+    data._mac_at_pause = macAtResume > 0 ? macAtResume + (now - runNas) : (now + clockOffset);
+    data._nas_at_pause = now;
     t.remaining = rem;
     t.endsAt = 0;
     t.phase = "paused";
   } else if (t.phase === "paused") {
-    // Set endsAt in Mac time so Orbit displays the correct countdown.
-    // mac_now_estimate = NAS_now + clockOffset
-    t.endsAt = (now + clockOffset) + t.remaining;
+    // Compute Mac time at resume from the stored Mac-at-pause + NAS elapsed since then.
+    // This avoids relying on a potentially stale clockOffset.
+    const macAtPause = data._mac_at_pause || 0;
+    const nasAtPause = data._nas_at_pause || 0;
+    const macNow = (macAtPause > 0 && nasAtPause > 0)
+      ? macAtPause + (now - nasAtPause)
+      : (now + clockOffset);
+    t.endsAt = macNow + t.remaining;
     t.phase = "running";
-    // Record NAS resume time so Orbit can recalibrate endsAt without relying on
-    // the potentially stale clockOffset (see GET /api/data/music_timer handler).
     data._nas_resumed_at = now;
+    data._run_nas       = now;
+    data._run_remaining = t.remaining;
+    data._mac_at_resume = macNow;
   }
   data.music_timer = t;
   data._music_timer_saved_at = Date.now();

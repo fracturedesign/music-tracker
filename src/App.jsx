@@ -3766,7 +3766,7 @@ export default function App() {
       }}catch{}
       try{const g=await storage.get("music_goal");if(g?.value)setGoalHours(JSON.parse(g.value));}catch{}
       try{const m=await storage.get("music_milestones");if(m?.value)setUnlockedMilestones(parseNasVal(m.value));}catch{}
-      try{const t=await storage.get("music_timer");if(t?.value){const saved=parseNasVal(t.value);const endsAtLoad=(saved.phase==="running"&&t.nas_resumed_at&&t.server_time_ms&&saved.remaining>0)?Date.now()+Math.max(0,saved.remaining-(t.server_time_ms-t.nas_resumed_at)):saved.endsAt;setTimer({phase:saved.phase,target:saved.target,endsAt:endsAtLoad,remaining:saved.remaining});if(saved.project)setTimerProject(saved.project);if(saved.note)setTimerNote(saved.note);}}catch{}
+      try{const t=await storage.get("music_timer");if(t?.value){const saved=parseNasVal(t.value);setTimer({phase:saved.phase,target:saved.target,endsAt:saved.endsAt,remaining:saved.remaining});if(saved.project)setTimerProject(saved.project);if(saved.note)setTimerNote(saved.note);}}catch{}
       try{const af=await storage.get("music_audio_files");if(af?.value&&typeof af.value==="object"){setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}}catch{}
       try{const gf=await storage.get("music_global_audio_folder");if(gf?.value)setGlobalAudioFolder(gf.value);}catch{}
       try{const ar=await storage.get("music_archived_projects");if(ar?.value)setArchivedProjects(parseNasVal(ar.value));}catch{}
@@ -4063,7 +4063,7 @@ export default function App() {
   useEffect(()=>{
     const iv=setInterval(async()=>{
       try{const r=await storage.get("music_timer");if(!r?.value)return;const remote=parseNasVal(r.value);
-        setTimer(local=>{if(remote.phase!==local.phase||remote.endsAt!==local.endsAt||remote.remaining!==local.remaining){const endsAtPoll=(remote.phase==="running"&&r.nas_resumed_at&&r.server_time_ms&&remote.remaining>0)?Date.now()+Math.max(0,remote.remaining-(r.server_time_ms-r.nas_resumed_at)):remote.endsAt;return{...remote,endsAt:endsAtPoll};}return local;});}catch{}
+        setTimer(local=>{if(remote.phase!==local.phase||remote.endsAt!==local.endsAt||remote.remaining!==local.remaining)return remote;return local;});}catch{}
     },3000);return()=>clearInterval(iv);
   },[]);
   useEffect(()=>{if(timer.phase!=="running")return;const iv=setInterval(()=>setTick(t=>t+1),250);return()=>clearInterval(iv);},[timer.phase]);
