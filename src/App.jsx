@@ -1173,85 +1173,7 @@ function CollapsibleVersionsSection({projectName,label,globalAudioFolder,onCount
   );
 }
 
-/* ── Ableton session view — populated by the OrbitSync Max for Live device ── */
-const AB_EVENT_META={
-  session_start:{label:"Session started",dot:"#34d399"},
-  tempo_changed:{label:"Tempo",dot:"#fbbf24"},
-  key_changed:{label:"Key",dot:"#c084fc"},
-  track_added:{label:"Track added",dot:"#34d399"},
-  track_removed:{label:"Track removed",dot:"#f87171"},
-  track_renamed:{label:"Track renamed",dot:"#60a5fa"},
-  device_added:{label:"Device added",dot:"#818cf8"},
-  device_removed:{label:"Device removed",dot:"#f87171"},
-  clip_added:{label:"Clip added",dot:"#34d399"},
-  clip_removed:{label:"Clip removed",dot:"#f87171"},
-  scene_added:{label:"Scene added",dot:"#34d399"},
-  scene_removed:{label:"Scene removed",dot:"#f87171"},
-};
-function abFmtDur(sec){sec=Math.round(sec||0);const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);if(h>0)return`${h}h ${m}m`;if(m>0)return`${m}m`;return`${sec}s`;}
-function abTimeAgo(ms){if(!ms)return"";const d=Date.now()-ms;if(d<45000)return"just now";const m=Math.round(d/60000);if(m<60)return`${m}m ago`;const h=Math.round(m/60);if(h<24)return`${h}h ago`;return`${Math.round(h/24)}d ago`;}
-function abDayLabel(ts){const d=new Date(ts),now=new Date();const same=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();const y=new Date(now);y.setDate(now.getDate()-1);if(same(d,now))return"Today";if(same(d,y))return"Yesterday";return d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});}
-function abClock(ts){return new Date(ts).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});}
-function AbletonTab({sessions,C}){
-  const latest=sessions[0];
-  const st=latest?.stats||{};
-  const totalSecs=sessions.reduce((a,s)=>a+(s?.stats?.activeSeconds||0),0);
-  const live=latest&&(Date.now()-(latest.updatedAt||0))<30000;
-  // Merge all events across sessions, newest first, grouped by day.
-  const events=[];
-  sessions.forEach(s=>(s.events||[]).forEach(e=>events.push(e)));
-  events.sort((a,b)=>(b.ts||0)-(a.ts||0));
-  const capped=events.slice(0,250);
-  const stat=(label,val)=>(
-    <div style={{background:C.surf2||C.surf,borderRadius:10,padding:"10px 12px",minWidth:0}}>
-      <div style={{fontSize:10,fontWeight:700,color:C.dim,letterSpacing:"0.05em",textTransform:"uppercase"}}>{label}</div>
-      <div style={{fontSize:16,fontWeight:700,color:C.text,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{val}</div>
-    </div>
-  );
-  let lastDay=null;
-  return(
-    <div style={{flex:1,overflowY:"auto",maxHeight:"58vh",padding:"14px 16px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-        <span style={{fontSize:12,fontWeight:700,color:C.dim,letterSpacing:"0.05em",textTransform:"uppercase"}}>From Ableton</span>
-        {live&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:"#34d399"}}>
-          <span style={{width:7,height:7,borderRadius:"50%",background:"#34d399",boxShadow:"0 0 6px #34d399"}}/>live</span>}
-        {latest&&!live&&<span style={{fontSize:11,color:C.dim}}>updated {abTimeAgo(latest.updatedAt)}</span>}
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(88px,1fr))",gap:8,marginBottom:16}}>
-        {stat("Work time",abFmtDur(totalSecs))}
-        {stat("Tempo",st.tempo?`${st.tempo} BPM`:"—")}
-        {stat("Key",st.key||"—")}
-        {stat("Tracks",st.trackCount??"—")}
-        {stat("Clips",st.clipCount??"—")}
-        {stat("Devices",st.deviceCount??"—")}
-        {stat("Scenes",st.sceneCount??"—")}
-        {stat("Sessions",sessions.length)}
-      </div>
-      <div style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:8}}>Timeline</div>
-      {capped.length===0
-        ?<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:"16px 0"}}>No changes recorded yet.</div>
-        :capped.map(e=>{
-          const meta=AB_EVENT_META[e.type]||{label:e.type,dot:C.indigo};
-          const day=abDayLabel(e.ts);const showDay=day!==lastDay;lastDay=day;
-          return(
-            <div key={e.id}>
-              {showDay&&<div style={{fontSize:11,fontWeight:700,color:C.dim,letterSpacing:"0.05em",textTransform:"uppercase",padding:"12px 0 4px"}}>{day}</div>}
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderTop:`1px solid ${C.line}`}}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:meta.dot,flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{meta.label}</span>
-                  {e.detail&&<span style={{fontSize:12.5,color:C.dim}}> · {e.detail}</span>}
-                </div>
-                <span style={{fontSize:11,color:C.dim,flexShrink:0}}>{abClock(e.ts)}</span>
-              </div>
-            </div>
-          );
-        })}
-    </div>
-  );
-}
-
-function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,onCreateTrack,audioFileCounts={},projectColorMap={},canGoBack=false,onAudioCountChange,abletonSessions=[]}) {
+function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plannedStart,plannedEnd,onSaveTimeline,sessions,initialTab,status,onStatusChange,type,childProjects=[],ungroupedProjects=[],onOpenProject,onAddToGroup,onRemoveFromGroup,onCreateTrack,audioFileCounts={},projectColorMap={},canGoBack=false,onAudioCountChange}) {
   const C=useTheme(); const {iconBtn}=getStyles(C);
   const isGroupType=!!GROUP_TYPE_CFG[type];
   const [tab,setTab]=useState(initialTab&&initialTab!=="open"?initialTab:isGroupType?"tracks":"open");
@@ -1405,7 +1327,6 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
             ...(isGroup?[["tracks",`Tracks · ${childProjects.length}`]]:[]),
             ["open","Notes"],
             ["versions",isGroup?(totalGroupVersions>0?`Versions · ${totalGroupVersions}`:"Versions"):(versionsCount!=null?`Versions · ${versionsCount}`:"Versions")],
-            ...(abletonSessions.length>0?[["ableton","Ableton"]]:[]),
           ].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{
               padding:"8px 18px",fontSize:13.5,fontWeight:600,border:"none",cursor:"pointer",
@@ -1466,9 +1387,6 @@ function ProjectPanel({name,notes,onSave,onClose,globalAudioFolder,onRename,plan
             </div>
           </>
         )}
-
-        {/* Ableton tab — data synced from the OrbitSync M4L device */}
-        {tab==="ableton"&&<AbletonTab sessions={abletonSessions} C={C}/>}
 
         {/* Tracks tab — group projects only */}
         {tab==="tracks"&&(
@@ -3825,7 +3743,6 @@ export default function App() {
   const [recordings,setRecordings]=useState([]);
   const [mixtapes,setMixtapes]=useState([]);
   const [questData,setQuestData]=useState(null);
-  const [abletonSessions,setAbletonSessions]=useState({});// {sessionId:{project,stats,events,...}}
   const [questHistoryOpen,setQuestHistoryOpen]=useState(false);
   const [weeklyReviewOpen,setWeeklyReviewOpen]=useState(false);
   const [weeklyReviewDismissed,setWeeklyReviewDismissed]=useState("");
@@ -3852,7 +3769,6 @@ export default function App() {
       try{const t=await storage.get("music_timer");if(t?.value){const saved=parseNasVal(t.value);setTimer({phase:saved.phase,target:saved.target,endsAt:saved.endsAt,remaining:saved.remaining});if(saved.project)setTimerProject(saved.project);if(saved.note)setTimerNote(saved.note);}}catch{}
       try{const af=await storage.get("music_audio_files");if(af?.value&&typeof af.value==="object"){setAudioFileCounts(Object.fromEntries(Object.entries(af.value).map(([k,v])=>[k,Array.isArray(v)?v.length:0])));}}catch{}
       try{const gf=await storage.get("music_global_audio_folder");if(gf?.value)setGlobalAudioFolder(gf.value);}catch{}
-      try{const ab=await storage.get("music_ableton_sessions");if(ab?.value){const v=parseNasVal(ab.value);if(v&&typeof v==="object")setAbletonSessions(v);}}catch{}
       try{const ar=await storage.get("music_archived_projects");if(ar?.value)setArchivedProjects(parseNasVal(ar.value));}catch{}
       try{
         const q=await storage.get("music_quests");
@@ -3971,9 +3887,6 @@ export default function App() {
         } else if(key==="music_mixtapes"){
           const r=await fetch("/api/data/music_mixtapes").then(x=>x.json());
           if(r?.value!=null)setMixtapes(parseNasVal(r.value));
-        } else if(key==="music_ableton_sessions"){
-          const r=await fetch("/api/data/music_ableton_sessions").then(x=>x.json());
-          if(r?.value&&typeof r.value==="object")setAbletonSessions(parseNasVal(r.value));
         }
       }catch{}
     };
@@ -4640,9 +4553,6 @@ export default function App() {
         const isGroup=!!GROUP_TYPE_CFG[proj.type];
         const children=isGroup?projects.filter(p=>p.parentGroup===pname):[];
         const ungrouped=projects.filter(p=>(!p.type||p.type==="track")&&!p.parentGroup&&p.name!==pname);
-        const abSessions=Object.values(abletonSessions||{})
-          .filter(s=>s&&s.project&&s.project.trim().toLowerCase()===pname.trim().toLowerCase())
-          .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
         return(
           <ProjectPanel key={pname+idx} name={pname} notes={proj.notes||""} onSave={n=>saveNotes(pname,n)}
             plannedStart={proj.plannedStart||""} plannedEnd={proj.plannedEnd||""}
@@ -4654,7 +4564,6 @@ export default function App() {
             onOpenProject={openProject} onAddToGroup={moveToGroup} onRemoveFromGroup={removeFromGroup} onCreateTrack={createTrackInGroup}
             audioFileCounts={audioFileCounts} projectColorMap={projectColorMap} canGoBack={idx>0}
             onAudioCountChange={(n,c)=>setAudioFileCounts(prev=>({...prev,[n]:c}))}
-            abletonSessions={abSessions}
           />
         );
       })}
