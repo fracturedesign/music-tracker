@@ -239,6 +239,49 @@ app.post("/api/data/:key", (req, res) => {
   }
 });
 
+/* ── Ableton (Max for Live) sync ── */
+// Receives session stats + milestone events from the OrbitSync M4L device.
+// Stored under `music_ableton_sessions` as { [sessionId]: {...} }.
+const ABLETON_EVENT_CAP   = 500;  // per session
+const ABLETON_SESSION_CAP = 200;  // total sessions kept
+app.post("/api/ableton/sync", (req, res) => {
+  const p = req.body || {};
+  if (!p.sessionId || !p.stats) return res.status(400).json({ error: "missing sessionId/stats" });
+
+  const data = readData();
+  let store = data.music_ableton_sessions;
+  if (typeof store === "string") { try { store = JSON.parse(store); } catch { store = {}; } }
+  if (!store || typeof store !== "object" || Array.isArray(store)) store = {};
+
+  const prev = store[p.sessionId] || { events: [] };
+  const seen = new Set((prev.events || []).map(e => e.id));
+  const incoming = Array.isArray(p.events) ? p.events.filter(e => e && !seen.has(e.id)) : [];
+  const events = (prev.events || []).concat(incoming).slice(-ABLETON_EVENT_CAP);
+
+  store[p.sessionId] = {
+    sessionId: p.sessionId,
+    project:   (p.project || prev.project || "Untitled").trim(),
+    host:      p.host || prev.host || "",
+    stats:     p.stats,                         // latest snapshot wins
+    startedAt: p.stats.startedAt || prev.startedAt,
+    updatedAt: p.stats.updatedAt || Date.now(),
+    events,
+  };
+
+  // Trim to the most-recently-updated sessions.
+  const ids = Object.keys(store);
+  if (ids.length > ABLETON_SESSION_CAP) {
+    ids.sort((a, b) => (store[b].updatedAt || 0) - (store[a].updatedAt || 0))
+       .slice(ABLETON_SESSION_CAP)
+       .forEach(id => { delete store[id]; });
+  }
+
+  data.music_ableton_sessions = store;
+  writeData(data);
+  broadcast("music_ableton_sessions");
+  res.json({ ok: true, events: events.length });
+});
+
 /* ── audio API ── */
 
 // List files for a project
