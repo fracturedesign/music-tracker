@@ -3868,7 +3868,12 @@ export default function App() {
         const{key}=JSON.parse(e.data);
         if(key==="music_projects"){
           const r=await fetch("/api/data/music_projects").then(x=>x.json());
-          if(r?.value!=null)setProjects(parseNasVal(r.value));
+          if(r?.value!=null){
+            // Guard against a stale in-flight fetch (e.g. echoed from our own earlier
+            // write) resurrecting a project we've since deleted locally this session.
+            const fresh=parseNasVal(r.value).filter(p=>!deletedNamesRef.current.has(p.name));
+            setProjects(fresh);
+          }
         } else if(key==="music_sessions"){
           const r=await fetch("/api/data/music_sessions").then(x=>x.json());
           if(r?.value!=null)setSessions(parseNasVal(r.value));
